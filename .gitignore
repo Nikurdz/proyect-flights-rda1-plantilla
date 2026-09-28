@@ -2,6 +2,9 @@
 /dist
 /node_modules
 
+# graphify tool output
+/graphify-out
+
 # Logs
 logs
 *.log
