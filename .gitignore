@@ -40,3 +40,6 @@ lerna-debug.log*
 
 # machine-local docker-compose port overrides (see docker-compose.override.yml)
 docker-compose.override.yml
+
+# graphify generated knowledge graph output
+/graphify-out
