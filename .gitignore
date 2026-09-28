@@ -37,3 +37,6 @@ lerna-debug.log*
 .env
 .env.test
 .env.production
+
+# machine-local docker-compose port overrides (see docker-compose.override.yml)
+docker-compose.override.yml
