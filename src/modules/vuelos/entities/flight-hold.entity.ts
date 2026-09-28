@@ -1,0 +1,41 @@
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+
+export type HoldStatus = 'HELD' | 'RELEASED' | 'EXPIRED' | 'CONSUMED';
+
+@Entity('vuelos_flight_holds')
+export class FlightHold {
+  @PrimaryGeneratedColumn('uuid')
+  holdId: string;
+
+  @Column({ type: 'uuid' })
+  offerId: string;
+
+  @Column({ type: 'varchar', length: 20, default: 'HELD' })
+  status: HoldStatus;
+
+  @Column({ type: 'varchar', length: 20 })
+  lockedPrice: string;
+
+  @Column({ type: 'varchar', length: 3 })
+  currency: string;
+
+  @Column({ type: 'int' })
+  ttlMinutes: number;
+
+  @Column({ type: 'jsonb' })
+  itinerarySelections: { itineraryId: string; cabinClass: string; fareBrand: string }[];
+
+  @Column({ type: 'jsonb' })
+  passengersBreakdown: {
+    adults: number;
+    youths: number;
+    children: number;
+    infants: number;
+  };
+
+  @CreateDateColumn({ type: 'timestamp' })
+  createdAt: Date;
+
+  @Column({ type: 'timestamp' })
+  expiresAt: Date;
+}

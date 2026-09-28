@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsString, IsArray, ValidateNested } from 'class-validator';
-import { PassengerBreakdownDto, MoneyAmountDto } from './search.dto';
+import { MoneyAmountDto, PassengerBreakdownDto } from './search.dto';
 
 export class ItinerarySelectionDto {
   @ApiProperty()
@@ -32,4 +32,28 @@ export class HoldRequestDto {
   @ValidateNested()
   @Type(() => PassengerBreakdownDto)
   passengersBreakdown: PassengerBreakdownDto;
+}
+
+export class HoldResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  holdId: string;
+  @ApiProperty({ enum: ['HELD'] })
+  status: string;
+  @ApiProperty()
+  expiresAt: string;
+  @ApiProperty()
+  ttlMinutes: number;
+  @ApiProperty()
+  lockedPrice: MoneyAmountDto;
+}
+
+export class HoldStatusResponseDto {
+  @ApiProperty({ enum: ['HELD', 'RELEASED', 'EXPIRED', 'CONSUMED'] })
+  status: string;
+  @ApiProperty()
+  expiresAt: string;
+  @ApiProperty()
+  remainingSeconds: number;
+  @ApiProperty()
+  lockedPrice: MoneyAmountDto;
 }

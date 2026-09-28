@@ -2,6 +2,32 @@
 
 Este microservicio centraliza la lógica de Búsqueda, Ofertas, Retención (Hold), Reservas, Emisión de Tickets, Postventa, Check-in y Estado de Vuelos.
 
+## Estado de la implementación
+
+El flujo principal (búsqueda → hold → reserva → emisión) está implementado con lógica de negocio real contra Postgres, no mocks. Postventa, check-in y webhooks siguen siendo stubs contract-shaped (alcance acordado para esta pasada).
+
+- **Real**: `POST /search`, `GET /offers/:offerId/seatmap`, `POST/GET/DELETE /offers/hold*`, `GET/POST /bookings`, `GET /bookings/:id`, `GET /bookings/:id/tickets*`, `GET /flights/:flightNumber/status`.
+- **Stub** (devuelven datos vacíos/simulados): equipaje, cambio de fecha, cancelación, check-in, boarding passes, webhooks.
+
+Simplificaciones deliberadas y documentadas (no omisiones silenciosas):
+1. **Solo vuelos directos** — sin modelado de conexiones/escalas.
+2. **Sin Redis** — Offer/Hold se modelan como tablas Postgres con `expiresAt`, no caché en memoria.
+3. **Sin IdP real** — `ownerId` se decodifica (sin verificar firma) del claim `sub` de un JWT Bearer si viene presente; si no, se usa un `dev-owner` fijo. Reemplazar cuando RDA2 integre autenticación real.
+4. **Idempotency-Key aplicado de verdad** (no solo validado en formato): una tabla registra `(key, ruta)` y reproduce la respuesta original ante un reintento.
+5. **Sin tarifa/impuestos reales** — `TAX_RATE` es un porcentaje plano configurable, no una tabla fiscal real.
+
+### Cómo correr y sembrar datos
+
+```bash
+docker-compose up -d              # o docker compose (ver docker-compose.override.yml si el puerto 5432 ya está en uso localmente)
+npm run start:dev                 # crea el esquema vía TypeORM synchronize
+npm run seed:vuelos               # siembra fare families + vuelos de ejemplo (BOG-SCL, etc.)
+```
+
+Variables de entorno relevantes (ver `.env.example` en la raíz): `DATABASE_URL`, `TAX_RATE` (default 0.15), `DEFAULT_CURRENCY` (default USD), `OFFER_TTL_MINUTES` / `HOLD_TTL_MINUTES` (default 15).
+
+Pruebas: `npm test` (Jest — no existía configuración de pruebas en la plantilla; se añadió para este módulo).
+
 ## Arquitectura y Límites de Dominio
 
 La API de Vuelos actúa como un orquestador dentro de su propio dominio, pero **delega responsabilidades fundamentales** a otros microservicios mediante integración. No almacena información de tarjetas de crédito, ni gestiona perfiles complejos de clientes, ni emite facturas fiscales.
@@ -59,8 +85,7 @@ graph TD
 
 > [!WARNING]
 > **Aviso para el Equipo de Desarrollo (E-commerce / Integradores):**
-> Todo el código actualmente implementado en el controlador (`vuelos.controller.ts`) y los DTOs sirve puramente como **ejemplo estructural y definición de contrato**. 
-> Los *endpoints* están configurados para devolver datos simulados (mocks) en blanco. Ustedes deben clonar esta plantilla y **adaptar/conectar la lógica de negocio real** en el `VuelosService` (conexión a bases de datos, integraciones con el GDS real, validaciones, etc.) para que su plataforma funcione correctamente.
+> El flujo principal (búsqueda, hold, reserva, emisión) ya tiene lógica de negocio real — ver "Estado de la implementación" arriba. Postventa, check-in y webhooks **siguen** devolviendo datos simulados (mocks) en blanco; esos endpoints todavía necesitan que alguien conecte la lógica real.
 
 > [!IMPORTANT]
 > **Recordatorio (Fase RDA1):**

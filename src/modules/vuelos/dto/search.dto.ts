@@ -68,4 +68,103 @@ export class MoneyAmountDto {
   total: string;
 }
 
-// ... other response DTOs for SearchResponse can be added here or mocked in controller directly using raw objects for brevity since they are output only for now.
+// --- Response shapes (output-only: no class-validator decorators needed) ---
+
+export class FlightEndpointDto {
+  @ApiProperty({ example: 'BOG' })
+  iataCode: string;
+  @ApiProperty({ example: '2026-10-15T08:00:00.000Z' })
+  at: string;
+  @ApiPropertyOptional({ nullable: true })
+  terminal: string | null;
+}
+
+export class FlightSegmentDto {
+  @ApiProperty()
+  segmentId: string;
+  @ApiProperty({ example: 'AV123' })
+  flightNumber: string;
+  @ApiProperty()
+  departure: FlightEndpointDto;
+  @ApiProperty()
+  arrival: FlightEndpointDto;
+  @ApiProperty()
+  marketingCarrier: string;
+  @ApiProperty()
+  operatingCarrier: string;
+  @ApiPropertyOptional({ nullable: true })
+  aircraft: string | null;
+  @ApiPropertyOptional({ nullable: true })
+  durationMinutes: number | null;
+  @ApiPropertyOptional({ nullable: true, enum: ['SCHEDULED', 'BOARDING', 'DEPARTED', 'DELAYED', 'ARRIVED', 'CANCELLED', 'DIVERTED'] })
+  status: string | null;
+}
+
+export class BaggageAllowanceDto {
+  @ApiProperty()
+  personalItemIncluded: boolean;
+  @ApiProperty()
+  carryOnIncluded: number;
+  @ApiProperty()
+  checkedBaggageIncluded: number;
+}
+
+export class FareRulesDto {
+  @ApiProperty()
+  isRefundable: boolean;
+  @ApiProperty()
+  isChangeable: boolean;
+}
+
+export class PricePerPassengerTypeDto {
+  @ApiProperty()
+  passengerType: string;
+  @ApiProperty()
+  price: MoneyAmountDto;
+}
+
+export class CabinPricingDto {
+  @ApiProperty({ enum: ['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'] })
+  cabinClass: string;
+  @ApiProperty({ example: 'BASIC' })
+  fareBrand: string;
+  @ApiProperty()
+  availableSeats: number;
+  @ApiProperty()
+  fareRules: FareRulesDto;
+  @ApiProperty()
+  baggageAllowance: BaggageAllowanceDto;
+  @ApiProperty({ type: [PricePerPassengerTypeDto] })
+  pricePerPassengerType: PricePerPassengerTypeDto[];
+}
+
+export class ItineraryOptionDto {
+  @ApiProperty()
+  itineraryId: string;
+  @ApiProperty()
+  totalDurationMinutes: number;
+  @ApiProperty({ description: 'Always 0 in this phase — direct flights only' })
+  stopsCount: number;
+  @ApiProperty({ type: [FlightSegmentDto] })
+  segments: FlightSegmentDto[];
+  @ApiProperty({ type: [CabinPricingDto] })
+  pricingOptions: CabinPricingDto[];
+}
+
+export class FlightOfferDto {
+  @ApiProperty({ format: 'uuid' })
+  offerId: string;
+  @ApiProperty()
+  airline: { code: string; name: string };
+  @ApiProperty({ type: [ItineraryOptionDto] })
+  itineraries: ItineraryOptionDto[];
+  @ApiProperty()
+  grandTotal: MoneyAmountDto;
+}
+
+export class SearchResponseDto {
+  @ApiProperty()
+  totalOffers: number;
+  @ApiProperty({ type: [FlightOfferDto] })
+  offers: FlightOfferDto[];
+}

@@ -9,6 +9,9 @@ export class Vuelo {
   @Column({ type: 'varchar', length: 150 })
   aerolinea: string;
 
+  @Column({ type: 'varchar', length: 2 })
+  codigoAerolinea: string;
+
   @Column({ type: 'varchar', length: 20 })
   codigoVuelo: string;
 
@@ -33,4 +36,7 @@ export class Vuelo {
 
   @Column({ type: 'int' })
   asientosDisponibles: number;
+
+  @Column({ type: 'int' })
+  durationMinutes: number;
 }

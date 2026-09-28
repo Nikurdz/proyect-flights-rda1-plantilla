@@ -1,0 +1,78 @@
+import {
+  assertChronology,
+  assertInfantRatio,
+  assertOriginDestinationDiffer,
+  assertPassengerTypeMatchesAge,
+} from './business-rules';
+
+describe('business-rules', () => {
+  describe('assertOriginDestinationDiffer (RN-01)', () => {
+    it('passes when origin and destination differ', () => {
+      expect(() =>
+        assertOriginDestinationDiffer({ origin: 'BOG', destination: 'SCL', departureDate: '2027-01-01' }),
+      ).not.toThrow();
+    });
+
+    it('throws when origin equals destination', () => {
+      expect(() =>
+        assertOriginDestinationDiffer({ origin: 'BOG', destination: 'BOG', departureDate: '2027-01-01' }),
+      ).toThrow();
+    });
+  });
+
+  describe('assertChronology (RN-02)', () => {
+    it('passes for a future, ordered round trip', () => {
+      expect(() =>
+        assertChronology([
+          { origin: 'BOG', destination: 'SCL', departureDate: '2027-01-01' },
+          { origin: 'SCL', destination: 'BOG', departureDate: '2027-01-10' },
+        ]),
+      ).not.toThrow();
+    });
+
+    it('throws when a leg departs in the past', () => {
+      expect(() =>
+        assertChronology([{ origin: 'BOG', destination: 'SCL', departureDate: '2000-01-01' }]),
+      ).toThrow();
+    });
+
+    it('throws when the return leg is before the outbound leg', () => {
+      expect(() =>
+        assertChronology([
+          { origin: 'BOG', destination: 'SCL', departureDate: '2027-01-10' },
+          { origin: 'SCL', destination: 'BOG', departureDate: '2027-01-01' },
+        ]),
+      ).toThrow();
+    });
+  });
+
+  describe('assertInfantRatio (RN-04)', () => {
+    it('passes when infants do not exceed adults', () => {
+      expect(() =>
+        assertInfantRatio({ adults: 2, youths: 0, children: 0, infants: 2 }),
+      ).not.toThrow();
+    });
+
+    it('throws when infants exceed adults', () => {
+      expect(() =>
+        assertInfantRatio({ adults: 1, youths: 0, children: 0, infants: 2 }),
+      ).toThrow();
+    });
+  });
+
+  describe('assertPassengerTypeMatchesAge (RN-06)', () => {
+    it('passes when the declared type matches the computed age band', () => {
+      expect(() => assertPassengerTypeMatchesAge('ADULT', '1990-01-01', '2027-01-01')).not.toThrow();
+      expect(() => assertPassengerTypeMatchesAge('INFANT', '2026-06-01', '2027-01-01')).not.toThrow();
+    });
+
+    it('throws when a minor is declared as an adult', () => {
+      expect(() => assertPassengerTypeMatchesAge('ADULT', '2020-01-01', '2027-01-01')).toThrow();
+    });
+
+    it('throws when someone who turns adult before the flight is still declared a child', () => {
+      // Born 2009-01-01: turns 18 on 2027-01-01, the flight date itself.
+      expect(() => assertPassengerTypeMatchesAge('CHILD', '2009-01-01', '2027-01-01')).toThrow();
+    });
+  });
+});

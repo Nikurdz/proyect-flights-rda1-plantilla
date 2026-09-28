@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsString, IsArray, ValidateNested, IsOptional, IsInt } from 'class-validator';
+import { MoneyAmountDto } from './search.dto';
 
 export class PaymentReferenceDto {
   @ApiProperty({ description: 'Referencia a un pago gestionado por la Payment API' })
@@ -120,4 +121,47 @@ export class BookingRequestDto {
   @ValidateNested()
   @Type(() => PaymentReferenceDto)
   payment: PaymentReferenceDto;
+}
+
+export class TicketResponseDto {
+  @ApiProperty()
+  ticketId: string;
+  @ApiProperty({ format: 'uuid' })
+  bookingId: string;
+  @ApiProperty()
+  passengerId: string;
+  @ApiPropertyOptional({ nullable: true })
+  eTicketNumber: string | null;
+  @ApiProperty({ enum: ['PENDING', 'ISSUING', 'ISSUED', 'FAILED', 'VOIDED', 'REFUNDED'] })
+  status: string;
+  @ApiPropertyOptional({ nullable: true })
+  issuedAt: string | null;
+}
+
+export class BookingDetailResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  bookingId: string;
+  @ApiProperty()
+  pnr: string;
+  @ApiProperty({
+    enum: [
+      'PENDING',
+      'PENDING_PAYMENT',
+      'TICKET_ISSUING',
+      'CONFIRMED',
+      'FAILED',
+      'CHANGE_PENDING',
+      'CANCELLATION_PENDING',
+      'CANCELLED',
+    ],
+  })
+  status: string;
+  @ApiProperty()
+  grandTotal: MoneyAmountDto;
+  @ApiProperty()
+  createdAt: string;
+  @ApiProperty()
+  updatedAt: string;
+  @ApiPropertyOptional({ type: [TicketResponseDto] })
+  tickets?: TicketResponseDto[];
 }
