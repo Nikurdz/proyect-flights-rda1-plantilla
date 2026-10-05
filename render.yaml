@@ -3,15 +3,26 @@ services:
     name: vuelos-api
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build
-    startCommand: npm run start:prod
+    # NODE_ENV=production would make `npm ci` skip devDependencies, and the Nest CLI that builds the
+    # app is one of them: install them for the build (the runtime image keeps whatever was installed).
+    buildCommand: npm ci --include=dev && npm run build
+    # Applies the schema migrations, seeds reference data (idempotent, never overwrites admin edits),
+    # then starts the API. The app does not `synchronize` in production, so migrations are the only
+    # way the schema reaches this database.
+    startCommand: npm run start:render
+    healthCheckPath: /api/v1/mercados/ec
     envVars:
       - key: NODE_ENV
         value: production
+      # One proxy hop (Render's load balancer): makes req.ip the real client for per-client rate limits.
+      - key: TRUST_PROXY
+        value: '1'
       - key: DATABASE_URL
         fromDatabase:
           name: booking-db
           property: connectionString
+
+      # --- flight inventory / pricing ---
       - key: TAX_RATE
         value: '0.15'
       - key: DEFAULT_CURRENCY
@@ -20,6 +31,31 @@ services:
         value: '15'
       - key: HOLD_TTL_MINUTES
         value: '15'
+      - key: OFFER_MAX_COMBINATIONS
+        value: '5'
+      - key: MAX_PASSENGERS_PER_ORDER
+        value: '9'
+
+      # --- secrets: generated once by Render and never committed ---
+      # JWT_SECRET signs the access tokens. DATA_ENCRYPTION_KEY encrypts passenger, contact and billing
+      # data at rest: do NOT regenerate it on a database that already holds orders, or that data
+      # becomes unreadable.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true
+      - key: JWT_TTL_SECONDS
+        value: '3600'
+
+      # --- optional, asked for in the dashboard (sync: false) ---
+      # Both or neither: creates the first back-office administrator when the account does not exist.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Base URL of the web front end, used to build e-mail verification links.
+      - key: PUBLIC_WEB_URL
+        sync: false
 
 databases:
   - name: booking-db

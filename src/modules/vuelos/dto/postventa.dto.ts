@@ -1,20 +1,23 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsString, IsArray, ValidateNested, IsInt, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsString, IsUUID, Length, Matches, Max, Min, ValidateNested } from 'class-validator';
 import { PaymentReferenceDto, SeatAssignmentDto } from './booking.dto';
+import { IsDateOnly } from './validators';
 
 export class AddBaggageRequestDto {
   @ApiProperty()
   @IsString()
+  @Matches(/^[A-Za-z0-9_-]{1,100}$/)
   passengerId: string;
 
-  @ApiProperty()
-  @IsString()
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
   itineraryId: string;
 
-  @ApiProperty({ minimum: 1 })
+  @ApiProperty({ minimum: 1, maximum: 5 })
   @IsInt()
   @Min(1)
+  @Max(5)
   quantity: number;
 
   @ApiProperty()
@@ -24,26 +27,28 @@ export class AddBaggageRequestDto {
 }
 
 export class DateChangeSearchItemDto {
-  @ApiProperty()
-  @IsString()
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
   itineraryId: string;
 
   @ApiProperty({ format: 'date' })
-  @IsString()
+  @IsDateOnly()
   newDepartureDate: string;
 }
 
 export class DateChangeSearchRequestDto {
   @ApiProperty({ type: [DateChangeSearchItemDto] })
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(6)
   @ValidateNested({ each: true })
   @Type(() => DateChangeSearchItemDto)
   changes: DateChangeSearchItemDto[];
 }
 
 export class DateChangeRequestDto {
-  @ApiProperty()
-  @IsString()
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
   changeOfferId: string;
 
   @ApiProperty()
@@ -53,17 +58,19 @@ export class DateChangeRequestDto {
 
   @ApiProperty({ type: [SeatAssignmentDto] })
   @IsArray()
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => SeatAssignmentDto)
   assignedSeats: SeatAssignmentDto[];
 }
 
 export class CancelBookingRequestDto {
-  @ApiProperty()
-  @IsString()
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
   quoteId: string;
 
   @ApiProperty()
   @IsString()
+  @Length(3, 500)
   reason: string;
 }

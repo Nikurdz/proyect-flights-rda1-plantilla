@@ -1,14 +1,19 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 export type HoldStatus = 'HELD' | 'RELEASED' | 'EXPIRED' | 'CONSUMED';
 
 @Entity('vuelos_flight_holds')
+@Index('IDX_vuelos_holds_status_expires', ['status', 'expiresAt'])
 export class FlightHold {
   @PrimaryGeneratedColumn('uuid')
   holdId: string;
 
   @Column({ type: 'uuid' })
   offerId: string;
+
+  // Verified `sub` of the caller that created the hold; only they may read or release it.
+  @Column({ type: 'varchar', length: 100 })
+  ownerId: string;
 
   @Column({ type: 'varchar', length: 20, default: 'HELD' })
   status: HoldStatus;
@@ -32,6 +37,11 @@ export class FlightHold {
     children: number;
     infants: number;
   };
+
+  // Exactly what was taken from each flight's inventory, so releasing/expiring the hold
+  // restores precisely that and never a recomputed figure.
+  @Column({ type: 'jsonb' })
+  inventory: { vueloId: string; seats: number }[];
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;

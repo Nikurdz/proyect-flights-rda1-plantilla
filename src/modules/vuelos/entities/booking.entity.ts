@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 export type BookingStatus =
   | 'PENDING'
@@ -10,7 +10,19 @@ export type BookingStatus =
   | 'CANCELLATION_PENDING'
   | 'CANCELLED';
 
+export const BOOKING_STATUSES: BookingStatus[] = [
+  'PENDING',
+  'PENDING_PAYMENT',
+  'TICKET_ISSUING',
+  'CONFIRMED',
+  'FAILED',
+  'CHANGE_PENDING',
+  'CANCELLATION_PENDING',
+  'CANCELLED',
+];
+
 @Entity('vuelos_bookings')
+@Index('IDX_vuelos_bookings_owner_created', ['ownerId', 'createdAt', 'bookingId'])
 export class Booking {
   @PrimaryGeneratedColumn('uuid')
   bookingId: string;
@@ -25,8 +37,7 @@ export class Booking {
   @Column({ type: 'varchar', length: 30, default: 'PENDING' })
   status: BookingStatus;
 
-  // Decoded (never verified) from the Authorization header — see common/owner.util.ts.
-  // No IdP exists in this phase; this is a documented placeholder.
+  // Verified `sub` of the authenticated caller (see auth/jwt-auth.guard.ts).
   @Column({ type: 'varchar', length: 100 })
   ownerId: string;
 
@@ -36,12 +47,24 @@ export class Booking {
   @Column({ type: 'varchar', length: 3 })
   currency: string;
 
-  @Column({ type: 'varchar', length: 100 })
+  // One payment can back at most one booking.
+  @Column({ type: 'varchar', length: 100, unique: true })
   paymentReference: string;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  // Denormalised from the first flight so listings need no joins.
+  @Column({ type: 'char', length: 3 })
+  origin: string;
+
+  @Column({ type: 'char', length: 3 })
+  destination: string;
+
+  @Column({ type: 'timestamptz' })
+  departureAt: Date;
+
+  // Millisecond precision so the (createdAt, bookingId) pagination cursor round-trips exactly.
+  @CreateDateColumn({ type: 'timestamp', precision: 3 })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({ type: 'timestamp', precision: 3 })
   updatedAt: Date;
 }

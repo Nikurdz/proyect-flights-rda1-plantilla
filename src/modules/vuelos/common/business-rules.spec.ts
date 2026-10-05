@@ -1,6 +1,9 @@
 import {
+  ageAt,
   assertChronology,
+  assertGroupSize,
   assertInfantRatio,
+  assertNoDuplicatePassengers,
   assertOriginDestinationDiffer,
   assertPassengerTypeMatchesAge,
 } from './business-rules';
@@ -30,9 +33,18 @@ describe('business-rules', () => {
       ).not.toThrow();
     });
 
+    it('accepts a flight today (compared as dates, not instants)', () => {
+      expect(() =>
+        assertChronology([{ origin: 'BOG', destination: 'SCL', departureDate: '2026-10-04' }], '2026-10-04'),
+      ).not.toThrow();
+    });
+
     it('throws when a leg departs in the past', () => {
       expect(() =>
         assertChronology([{ origin: 'BOG', destination: 'SCL', departureDate: '2000-01-01' }]),
+      ).toThrow();
+      expect(() =>
+        assertChronology([{ origin: 'BOG', destination: 'SCL', departureDate: '2026-10-03' }], '2026-10-04'),
       ).toThrow();
     });
 
@@ -48,15 +60,29 @@ describe('business-rules', () => {
 
   describe('assertInfantRatio (RN-04)', () => {
     it('passes when infants do not exceed adults', () => {
-      expect(() =>
-        assertInfantRatio({ adults: 2, youths: 0, children: 0, infants: 2 }),
-      ).not.toThrow();
+      expect(() => assertInfantRatio({ adults: 2, youths: 0, children: 0, infants: 2 })).not.toThrow();
     });
 
     it('throws when infants exceed adults', () => {
-      expect(() =>
-        assertInfantRatio({ adults: 1, youths: 0, children: 0, infants: 2 }),
-      ).toThrow();
+      expect(() => assertInfantRatio({ adults: 1, youths: 0, children: 0, infants: 2 })).toThrow();
+    });
+  });
+
+  describe('assertGroupSize (RN-05)', () => {
+    it('counts every passenger type against the cap', () => {
+      expect(() => assertGroupSize({ adults: 4, youths: 2, children: 2, infants: 1 }, 9)).not.toThrow();
+      expect(() => assertGroupSize({ adults: 4, youths: 2, children: 2, infants: 2 }, 9)).toThrow();
+    });
+
+    it('rejects an empty party', () => {
+      expect(() => assertGroupSize({ adults: 0, youths: 0, children: 0, infants: 0 }, 9)).toThrow();
+    });
+  });
+
+  describe('ageAt', () => {
+    it('is independent of the host timezone around a birthday', () => {
+      expect(ageAt('2009-01-01', '2027-01-01T00:00:00.000Z')).toBe(18);
+      expect(ageAt('2009-01-02', '2027-01-01T00:00:00.000Z')).toBe(17);
     });
   });
 
@@ -73,6 +99,27 @@ describe('business-rules', () => {
     it('throws when someone who turns adult before the flight is still declared a child', () => {
       // Born 2009-01-01: turns 18 on 2027-01-01, the flight date itself.
       expect(() => assertPassengerTypeMatchesAge('CHILD', '2009-01-01', '2027-01-01')).toThrow();
+    });
+  });
+
+  describe('assertNoDuplicatePassengers (RF-068)', () => {
+    const base = { passengerId: 'p1', firstName: 'David', lastName: 'Tapia', birthDate: '1995-01-01', documentNumber: 'A123456' };
+
+    it('accepts distinct passengers', () => {
+      expect(() =>
+        assertNoDuplicatePassengers([base, { ...base, passengerId: 'p2', firstName: 'Ana', documentNumber: 'B654321' }]),
+      ).not.toThrow();
+    });
+
+    it('rejects a repeated document, client id, or person (ignoring accents and case)', () => {
+      expect(() => assertNoDuplicatePassengers([base, { ...base, passengerId: 'p2', firstName: 'Ana' }])).toThrow();
+      expect(() => assertNoDuplicatePassengers([base, { ...base, documentNumber: 'B654321', firstName: 'Ana' }])).toThrow();
+      expect(() =>
+        assertNoDuplicatePassengers([
+          { ...base, firstName: 'José' },
+          { ...base, passengerId: 'p2', firstName: 'JOSE', documentNumber: 'B654321' },
+        ]),
+      ).toThrow();
     });
   });
 });

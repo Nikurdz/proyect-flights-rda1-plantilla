@@ -1,0 +1,818 @@
+import { randomUUID } from 'node:crypto';
+import { HttpStatus, INestApplication } from '@nestjs/common';
+import request = require('supertest');
+import { DataSource } from 'typeorm';
+import { Booking } from '../entities/booking.entity';
+import { FlightHold } from '../entities/flight-hold.entity';
+import { Vuelo } from '../entities/vuelo.entity';
+import { ProblemDetailsException } from '../common/problem-details.exception';
+import { OffersService } from '../services/offers.service';
+import { BookingsService } from '../services/bookings.service';
+import { Localidad } from '../ecommerce/catalogo/entities/localidad.entity';
+import { Cliente } from '../ecommerce/identidad/entities/cliente.entity';
+import { Mercado } from '../ecommerce/mercados/entities/mercado.entity';
+import { Oferta } from '../ecommerce/ofertas/entities/oferta.entity';
+import { Orden } from '../ecommerce/ordenes/entities/orden.entity';
+import { Pago } from '../ecommerce/pagos/entities/pago.entity';
+import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
+import { seedFlights } from '../seed/flights.seed';
+import { IntegrationApp, createIntegrationApp, describeIntegration } from './integration-app';
+
+jest.setTimeout(180_000);
+
+const ADMIN = { correo: 'admin@example.com', contrasena: 'AdminPass-12345' };
+const PASSWORD = 'Passw0rd-ok-123';
+
+const dayAhead = (days: number): string => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+const yearsBefore = (years: number, from: string): string => {
+  const d = new Date(`${from}T00:00:00.000Z`);
+  d.setUTCFullYear(d.getUTCFullYear() - years);
+  return d.toISOString().slice(0, 10);
+};
+
+describeIntegration('E-commerce R1 against a real Postgres', () => {
+  let ctx: IntegrationApp;
+  let app: INestApplication;
+  let ds: DataSource;
+  let adminToken: string;
+  let cursor = 12; // each purchase uses its own pair of days so seat counts never interfere
+
+  const api = () => request(app.getHttpServer());
+  const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
+  const q = (table: string) => `"${ctx.schema}"."${table}"`;
+
+  async function guest(): Promise<string> {
+    return (await api().post('/api/v1/auth/invitado').expect(201)).body.accessToken;
+  }
+
+  const register = (correo: string, extra: Record<string, unknown> = {}) =>
+    api()
+      .post('/api/v1/clientes')
+      .send({ correo, contrasena: PASSWORD, nombres: 'María José', apellidos: 'Pérez', fechaNacimiento: '1990-04-01', aceptaTerminos: true, ...extra });
+
+  async function customer(correo = `cliente-${randomUUID().slice(0, 8)}@example.com`) {
+    const created = await register(correo).expect(201);
+    const login = await api().post('/api/v1/auth/login').send({ correo, contrasena: PASSWORD }).expect(200);
+    return { token: login.body.accessToken as string, clienteId: created.body.clienteId as string, correo };
+  }
+
+  const money = (v: { monto: string }) => Number(v.monto);
+
+  type Itinerario = { itinerarioId: string; precioDesde: { moneda: string; monto: string }; distintivos: string[]; fechaSalidaIso?: string; salida: string };
+  const disponibilidad = (query: Record<string, string | number>) => api().get('/api/v1/disponibilidad').query(query);
+
+  /** A priced round trip BOG-SCL-BOG built as an offer; returns what the next steps need. */
+  async function nuevaOferta(token: string, opciones: { mercado?: string; familia?: string; pasajeros?: { adultos: number; ninos?: number; infantes?: number }; key?: string } = {}) {
+    const out = dayAhead(cursor);
+    const back = dayAhead(cursor + 7);
+    cursor += 1;
+    const pasajeros = opciones.pasajeros ?? { adultos: 1, ninos: 1 };
+    const mercado = opciones.mercado ?? 'ec';
+
+    const search = await disponibilidad({
+      origin: 'BOG',
+      destination: 'SCL',
+      outbound: out,
+      inbound: back,
+      adt: pasajeros.adultos,
+      chd: pasajeros.ninos ?? 0,
+      inf: pasajeros.infantes ?? 0,
+      sort: 'MAS_BARATOS',
+      mercado,
+    }).expect(200);
+    const ida: Itinerario = search.body.trayectos[0].itinerarios[0];
+    const vuelta: Itinerario = search.body.trayectos[1].itinerarios[0];
+
+    const res = await api()
+      .post('/api/v1/ofertas')
+      .set(bearer(token))
+      .set('Idempotency-Key', opciones.key ?? randomUUID())
+      .send({
+        mercado,
+        selecciones: [
+          { itinerarioId: ida.itinerarioId, familia: opciones.familia ?? 'LIGHT' },
+          { itinerarioId: vuelta.itinerarioId, familia: opciones.familia ?? 'LIGHT' },
+        ],
+        pasajeros: { adultos: pasajeros.adultos, ninos: pasajeros.ninos ?? 0, infantes: pasajeros.infantes ?? 0 },
+      });
+    return { res, out, back, ida, vuelta, pasajeros };
+  }
+
+  const pasajero = (id: string, tipo: string, nacimiento: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    tipo,
+    nombres: id === 'a1' ? 'María José' : `Niño${id}`,
+    apellidos: 'Peña Tapia',
+    fechaNacimiento: nacimiento,
+    genero: 'F',
+    nacionalidad: 'EC',
+    documento: { tipo: 'PASSPORT', numero: `AB${id.toUpperCase()}12345`, vencimiento: '2040-01-01' },
+    ...extra,
+  });
+
+  async function completarCheckout(token: string, ofertaId: string, salida: string, mercado = 'ec', composicion = { adultos: 1, ninos: 1 }) {
+    const pasajeros = [pasajero('a1', 'ADULT', yearsBefore(35, salida))];
+    if (composicion.ninos) pasajeros.push(pasajero('c1', 'CHILD', yearsBefore(8, salida)));
+    await api().put(`/api/v1/ofertas/${ofertaId}/pasajeros`).set(bearer(token)).send({ pasajeros, contacto: { correo: 'comprador@example.com', telefono: '+593999999999' } }).expect(200);
+
+    const facturacion = mercado === 'co'
+      ? { tipoIdentificacion: 'CC', numeroIdentificacion: '1020304050', razonSocial: 'María Pérez', direccion: 'Calle 1 # 2-3', pais: 'CO' }
+      : { tipoIdentificacion: 'CEDULA', numeroIdentificacion: '1712345678', razonSocial: 'María Peña', direccion: 'Av. Amazonas 123', pais: 'EC' };
+    await api().put(`/api/v1/ofertas/${ofertaId}/facturacion`).set(bearer(token)).send(facturacion).expect(200);
+    await api().post(`/api/v1/ofertas/${ofertaId}/condiciones`).set(bearer(token)).send({ versionTerminos: '2026-10', versionCondicionesTransporte: '2026-10' }).expect(200);
+  }
+
+  const comprar = (token: string, ofertaId: string, body: Record<string, unknown> = {}, key: string = randomUUID()) =>
+    api()
+      .post(`/api/v1/ofertas/${ofertaId}/compra`)
+      .set(bearer(token))
+      .set('Idempotency-Key', key)
+      .send({ medio: { tipo: 'TARJETA', token: 'tok_visa_ok', marca: 'VISA' }, ...body });
+
+  /** offer + complete checkout, ready to be paid. */
+  async function ofertaLista(token: string, opciones: Parameters<typeof nuevaOferta>[1] = {}) {
+    const { res, out, ...resto } = await nuevaOferta(token, opciones);
+    expect(res.status).toBe(201);
+    await completarCheckout(token, res.body.ofertaId, out, opciones.mercado ?? 'ec', opciones.pasajeros ? { adultos: opciones.pasajeros.adultos, ninos: opciones.pasajeros.ninos ?? 0 } : undefined);
+    return { ofertaId: res.body.ofertaId as string, oferta: res.body, out, ...resto };
+  }
+
+  const pagos = (ofertaId: string) => ds.getRepository(Pago).find({ where: { ofertaId }, order: { creadoEn: 'ASC' } });
+  const ordenes = (ofertaId: string) => ds.getRepository(Orden).find({ where: { ofertaId }, order: { creadaEn: 'ASC' } });
+  const ofertaRow = (ofertaId: string) => ds.getRepository(Oferta).findOneByOrFail({ ofertaId });
+
+  beforeAll(async () => {
+    ctx = await createIntegrationApp();
+    app = ctx.app;
+    ds = ctx.dataSource;
+    await seedFlights(ds);
+    await seedEcommerce(ds, ADMIN);
+    adminToken = (await api().post('/api/v1/auth/login').send(ADMIN).expect(200)).body.accessToken;
+  });
+
+  afterAll(async () => {
+    await ctx?.close();
+  });
+
+  // ------------------------------------------------------------------------------------------------
+  describe('D02 mercados y D19 configuración', () => {
+    it('publishes the market configuration and rejects unknown or malformed codes', async () => {
+      const ec = await api().get('/api/v1/mercados/ec').expect(200);
+      expect(ec.body).toMatchObject({ codigo: 'ec', moneda: 'USD', decimalesMoneda: 2 });
+      expect(ec.body.mediosPago[0].marcas).toEqual(expect.arrayContaining(['VISA', 'DINERS']));
+      expect(ec.body.tipoCambioDesdeUsd).toBeUndefined(); // the conversion rate stays server-side
+
+      const co = await api().get('/api/v1/mercados/co').expect(200);
+      expect(co.body).toMatchObject({ moneda: 'COP', decimalesMoneda: 0 });
+      expect(co.body.reglasRegulatorias.retracto).toEqual({ diasHabiles: 5 });
+
+      await api().get('/api/v1/mercados/xx').expect(404);
+      await api().get('/api/v1/mercados/NOT_A_MARKET!').expect(400);
+    });
+
+    it('lets only an administrator edit a market, with optimistic locking and an audit trail', async () => {
+      const { token } = await customer();
+      const edit = (headers: Record<string, string>, body: object) => api().put('/api/v1/admin/mercados/ec').set(headers).send(body);
+      const current = (await api().get('/api/v1/mercados/ec')).body.version as number;
+
+      await edit({}, { versionEsperada: current, activo: true }).expect(401);
+      await edit(bearer(token), { versionEsperada: current, activo: true }).expect(403);
+
+      const ok = await edit(bearer(adminToken), { versionEsperada: current, productosBuscador: ['VUELOS', 'ESIM'] }).expect(200);
+      expect(ok.body).toMatchObject({ version: current + 1, productosBuscador: ['VUELOS', 'ESIM'] });
+
+      const stale = await edit(bearer(adminToken), { versionEsperada: current, activo: true }).expect(409);
+      expect(stale.body.code).toBe('CONFLICT');
+      await edit(bearer(adminToken), { versionEsperada: current + 1 }).expect(400); // nothing to change
+      await edit(bearer(adminToken), { versionEsperada: current + 1, identificacionesFiscales: [{ tipo: 'RUC', etiqueta: 'RUC', patron: '(' }] }).expect(400);
+
+      const audit = await api().get('/api/v1/admin/auditoria').query({ entidad: 'mercado', id: 'ec' }).set(bearer(adminToken)).expect(200);
+      expect(audit.body[0]).toMatchObject({ entidad: 'mercado', entidadId: 'ec', accion: 'ACTUALIZAR', despues: { productosBuscador: ['VUELOS', 'ESIM'] } });
+      await api().get('/api/v1/admin/auditoria').query({ entidad: 'mercado', id: 'ec' }).set(bearer(token)).expect(403);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------
+  describe('D01 identidad', () => {
+    it('registers an account, links a LATAM Pass number, and verifies the e-mail with a one-time token', async () => {
+      const correo = `Ana.${randomUUID().slice(0, 6)}@Example.com`;
+      const res = await register(correo, { consentimientoMarketing: false }).expect(201);
+
+      expect(res.body).toMatchObject({ correo: correo.toLowerCase(), correoVerificado: false, consentimientoMarketing: false, mercado: 'ec' });
+      expect(res.body.numeroSocio).toMatch(/^LP\d{9}$/);
+      expect(JSON.stringify(res.body)).not.toContain(PASSWORD);
+
+      const mails = await api().get('/api/v1/admin/notificaciones').query({ referencia: res.body.clienteId }).set(bearer(adminToken)).expect(200);
+      expect(mails.body[0]).toMatchObject({ tipo: 'VERIFICACION_CORREO', destinatario: correo.toLowerCase(), estado: 'ENVIADO' });
+      const token = /token=([A-Za-z0-9_-]+)/.exec(mails.body[0].cuerpo)![1];
+
+      await api().post('/api/v1/auth/verificar-correo').send({ token }).expect(204);
+      await api().post('/api/v1/auth/verificar-correo').send({ token }).expect(400); // one-time
+      expect((await ds.getRepository(Cliente).findOneByOrFail({ clienteId: res.body.clienteId })).correoVerificado).toBe(true);
+    });
+
+    it('stores only a hash of the password and refuses duplicates case-insensitively, weak passwords and missing consent', async () => {
+      const correo = `dup-${randomUUID().slice(0, 6)}@example.com`;
+      const first = await register(correo).expect(201);
+      const stored = await ds.getRepository(Cliente).findOneByOrFail({ clienteId: first.body.clienteId });
+      expect(stored.hashContrasena).toMatch(/^scrypt\$/);
+      expect(stored.hashContrasena).not.toContain(PASSWORD);
+
+      const dup = await register(correo.toUpperCase()).expect(409);
+      expect(dup.body.code).toBe('EMAIL_ALREADY_REGISTERED');
+      await register(`x-${randomUUID().slice(0, 6)}@example.com`, { contrasena: 'short1' }).expect(400);
+      await register(`x-${randomUUID().slice(0, 6)}@example.com`, { contrasena: 'onlyletterspassword' }).expect(400);
+      await register(`x-${randomUUID().slice(0, 6)}@example.com`, { aceptaTerminos: false }).expect(400);
+      await register(`x-${randomUUID().slice(0, 6)}@example.com`, { mercado: 'xx' }).expect(404);
+    });
+
+    it('answers a wrong password and an unknown e-mail identically, then locks the account after repeated failures', async () => {
+      const { correo, clienteId } = await customer();
+      const wrong = await api().post('/api/v1/auth/login').send({ correo, contrasena: 'Wrong-pass-123' }).expect(401);
+      const unknown = await api().post('/api/v1/auth/login').send({ correo: 'nobody@example.com', contrasena: 'Wrong-pass-123' }).expect(401);
+      expect(wrong.body).toEqual(unknown.body);
+      expect(wrong.body.code).toBe('INVALID_CREDENTIALS');
+
+      for (let i = 0; i < 4; i++) await api().post('/api/v1/auth/login').send({ correo, contrasena: 'Wrong-pass-123' }).expect(401);
+      const locked = await api().post('/api/v1/auth/login').send({ correo, contrasena: PASSWORD }).expect(423);
+      expect(locked.body.code).toBe('ACCOUNT_LOCKED');
+
+      const mails = await api().get('/api/v1/admin/notificaciones').query({ referencia: clienteId }).set(bearer(adminToken)).expect(200);
+      expect(mails.body.map((m: { tipo: string }) => m.tipo)).toContain('CUENTA_BLOQUEADA');
+    });
+
+    it('issues guest sessions that cannot read a profile, and keeps profiles private', async () => {
+      const g = await guest();
+      await api().get('/api/v1/clientes/me').set(bearer(g)).expect(403);
+
+      const a = await customer();
+      const b = await customer();
+      const me = await api().get('/api/v1/clientes/me').set(bearer(a.token)).expect(200);
+      expect(me.body.clienteId).toBe(a.clienteId);
+      await api().get(`/api/v1/clientes/${b.clienteId}`).set(bearer(a.token)).expect(403);
+      await api().get('/api/v1/clientes/me').expect(401);
+    });
+
+    it('updates preferences, validating the language against the market, and records consent changes', async () => {
+      const { token } = await customer();
+      const ok = await api().put('/api/v1/clientes/me/preferencias').set(bearer(token)).send({ canalNotificacion: 'SMS', consentimientoMarketing: true }).expect(200);
+      expect(ok.body).toMatchObject({ canalNotificacion: 'SMS', consentimientoMarketing: true });
+      await api().put('/api/v1/clientes/me/preferencias').set(bearer(token)).send({ idioma: 'en' }).expect(422); // Ecuador offers Spanish only
+      await api().put('/api/v1/clientes/me/preferencias').set(bearer(token)).send({ canalNotificacion: 'FAX' }).expect(400);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------
+  describe('D04/D05 búsqueda y precios', () => {
+    it('suggests places by prefix, ignoring accents and case, treating wildcards literally', async () => {
+      const byCode = await api().get('/api/v1/localidades').query({ q: 'bog' }).expect(200);
+      expect(byCode.body[0]).toMatchObject({ iata: 'BOG', ciudad: 'Bogotá', zonaHoraria: 'America/Bogota' });
+
+      const accents = await api().get('/api/v1/localidades').query({ q: 'MEDELLIN' }).expect(200);
+      expect(accents.body.map((l: { iata: string }) => l.iata)).toContain('MDE');
+      const airport = await api().get('/api/v1/localidades').query({ q: 'jose joaquin' }).expect(200);
+      expect(airport.body[0].iata).toBe('GYE');
+
+      expect((await api().get('/api/v1/localidades').query({ q: '%' }).expect(200)).body).toEqual([]);
+      await api().get('/api/v1/localidades').expect(400);
+    });
+
+    it('lists availability with operators, badges, the lowest price and every sort order', async () => {
+      const date = dayAhead(40);
+      const base = { origin: 'BOG', destination: 'SCL', outbound: date, adt: 1 };
+
+      const res = await disponibilidad(base).expect(200);
+      expect(res.body).toMatchObject({ mercado: 'ec', moneda: 'USD', sinDisponibilidad: false });
+      const items: Itinerario[] = res.body.trayectos[0].itinerarios;
+      expect(items.length).toBeGreaterThanOrEqual(2);
+      expect(items[0]).toMatchObject({ escalas: 0, operador: { codigo: 'LA' }, origen: { iata: 'BOG', ciudad: 'Bogotá' } });
+      expect(items.flatMap((i) => i.distintivos)).toEqual(expect.arrayContaining(['RECOMENDADO', 'MAS_ECONOMICO', 'MAS_RAPIDO']));
+
+      const cheapest = (await disponibilidad({ ...base, sort: 'MAS_BARATOS' })).body.trayectos[0].itinerarios as Itinerario[];
+      expect(cheapest.map((i) => money(i.precioDesde))).toEqual([...cheapest.map((i) => money(i.precioDesde))].sort((a, b) => a - b));
+      const early = (await disponibilidad({ ...base, sort: 'SALIDA_TEMPRANO' })).body.trayectos[0].itinerarios as Itinerario[];
+      expect(early.map((i) => i.salida)).toEqual([...early.map((i) => i.salida)].sort());
+      const late = (await disponibilidad({ ...base, sort: 'SALIDA_TARDE' })).body.trayectos[0].itinerarios as Itinerario[];
+      expect(late.map((i) => i.salida)).toEqual([...late.map((i) => i.salida)].sort().reverse());
+      for (const sort of ['MAS_RAPIDOS', 'LLEGADA_TEMPRANO', 'LLEGADA_TARDE', 'RECOMENDADO']) await disponibilidad({ ...base, sort }).expect(200);
+      await disponibilidad({ ...base, sort: 'BOGUS' }).expect(400);
+    });
+
+    it('supports round trips and flags scarcity', async () => {
+      const out = dayAhead(41);
+      const rt = await disponibilidad({ origin: 'BOG', destination: 'SCL', outbound: out, inbound: dayAhead(48), adt: 1 }).expect(200);
+      expect(rt.body.trayectos.map((t: { sentido: string }) => t.sentido)).toEqual(['IDA', 'VUELTA']);
+      expect(rt.body.trayectos[1]).toMatchObject({ origen: 'SCL', destino: 'BOG' });
+
+      const items: (Itinerario & { numeroVuelo: string; ultimosAsientos: boolean })[] = rt.body.trayectos[0].itinerarios;
+      expect(items.find((i) => i.numeroVuelo === 'LA1500')!.ultimosAsientos).toBe(true); // 5 seats left
+      expect(items.find((i) => i.numeroVuelo === 'LA800')!.ultimosAsientos).toBe(false);
+    });
+
+    it('quotes in the market currency without decimals for COP, and differently per passenger type', async () => {
+      const date = dayAhead(42);
+      const usd = (await disponibilidad({ origin: 'BOG', destination: 'SCL', outbound: date, adt: 1, sort: 'MAS_BARATOS' })).body.trayectos[0].itinerarios[0];
+      const cop = (await disponibilidad({ origin: 'BOG', destination: 'SCL', outbound: date, adt: 1, sort: 'MAS_BARATOS', mercado: 'co' })).body.trayectos[0].itinerarios[0];
+
+      expect(usd.precioDesde.moneda).toBe('USD');
+      expect(cop.precioDesde).toEqual({ moneda: 'COP', monto: String(Math.round(money(usd.precioDesde) * 4000)) });
+      expect(cop.precioDesde.monto).not.toContain('.');
+    });
+
+    it('returns an empty result with nearby dates instead of an error when a day has no flights (RF-SHP-024)', async () => {
+      const date = dayAhead(35);
+      const start = new Date(`${date}T00:00:00.000Z`);
+      await ds.getRepository(Vuelo).createQueryBuilder().delete().where('"codigoVuelo" = :n AND "fechaSalida" >= :a AND "fechaSalida" < :b', { n: 'LA2402', a: start, b: new Date(start.getTime() + 86_400_000) }).execute();
+
+      const res = await disponibilidad({ origin: 'UIO', destination: 'GYE', outbound: date, adt: 1 }).expect(200);
+      expect(res.body.sinDisponibilidad).toBe(true);
+      expect(res.body.trayectos[0].itinerarios).toEqual([]);
+      const alternatives: { fecha: string }[] = res.body.trayectos[0].fechasAlternativas;
+      expect(alternatives.length).toBeGreaterThan(0);
+      expect(alternatives.map((a) => a.fecha)).not.toContain(date);
+
+      const none = await disponibilidad({ origin: 'BOG', destination: 'MIA', outbound: date, adt: 1 }).expect(200);
+      expect(none.body).toMatchObject({ sinDisponibilidad: true });
+      expect(none.body.trayectos[0].fechasAlternativas).toEqual([]);
+    });
+
+    it('validates the criteria: rules, cabin, trip type and deep-link parameters', async () => {
+      const base = { origin: 'BOG', destination: 'SCL', outbound: dayAhead(40), adt: 1 };
+      await disponibilidad({ ...base, destination: 'BOG' }).expect(400);
+      await disponibilidad({ ...base, outbound: '2020-01-01' }).expect(400);
+      await disponibilidad({ ...base, inf: 2 }).expect(422);
+      await disponibilidad({ ...base, adt: 9, chd: 1 }).expect(422);
+      await disponibilidad({ ...base, cabin: 'BUSINESS' }).expect(422);
+      await disponibilidad({ ...base, trip: 'RT' }).expect(400);
+      await disponibilidad({ ...base, trip: 'OW', inbound: dayAhead(45) }).expect(400);
+      await disponibilidad({ ...base, inbound: dayAhead(39) }).expect(400); // return before outbound
+      await disponibilidad({ ...base, mercado: 'xx' }).expect(404);
+      await disponibilidad({ ...base, unknownParam: 'x' }).expect(400);
+    });
+
+    it('compares every fare family of an itinerary with structured conditions and a validity (RF-PRC)', async () => {
+      const it0 = (await disponibilidad({ origin: 'BOG', destination: 'SCL', outbound: dayAhead(40), adt: 2, chd: 1 })).body.trayectos[0].itinerarios[0] as Itinerario;
+      const res = await api().get(`/api/v1/itinerarios/${it0.itinerarioId}/tarifas`).query({ adt: 2, chd: 1 }).expect(200);
+
+      expect(res.body.familias.map((f: { codigo: string }) => f.codigo).sort()).toEqual(['BASIC', 'FULL', 'LIGHT']);
+      const full = res.body.familias.find((f: { codigo: string }) => f.codigo === 'FULL');
+      expect(full.condiciones).toMatchObject({ equipajeBodega: { piezas: 1 }, cambio: { permitido: true }, devolucion: { permitida: true }, seleccionAsiento: { incluida: true } });
+      expect(full.precioPorPasajero.map((p: { tipo: string }) => p.tipo).sort()).toEqual(['ADULT', 'CHILD']);
+      const adult = full.precioPorPasajero.find((p: { tipo: string }) => p.tipo === 'ADULT');
+      expect(money(adult.total)).toBeCloseTo(money(adult.base) + money(adult.tasas), 2); // RN-07: taxes included, parts add up
+      expect(new Date(res.body.vigenteHasta).getTime()).toBeGreaterThan(Date.now());
+
+      await api().get(`/api/v1/itinerarios/${randomUUID()}/tarifas`).expect(404);
+      await api().get('/api/v1/itinerarios/not-a-uuid/tarifas').expect(400);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------
+  describe('D06/D07 ofertas y checkout', () => {
+    it('builds an offer that holds real inventory, in the market currency, and replays on a retried key', async () => {
+      const token = await guest();
+      const key = randomUUID();
+      const { res, ida } = await nuevaOferta(token, { key });
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({ estado: 'ABIERTA', mercado: 'ec', moneda: 'USD', pasajeros: { adultos: 1, ninos: 1 } });
+      expect(res.body.trayectos).toHaveLength(2);
+      expect(res.body.faltantes).toEqual(['PASAJEROS', 'FACTURACION', 'CONDICIONES']);
+      expect(res.body.segundosRestantes).toBeGreaterThan(800);
+
+      const row = await ofertaRow(res.body.ofertaId);
+      const hold = await ds.getRepository(FlightHold).findOneByOrFail({ holdId: row.holdId });
+      expect(hold.status).toBe('HELD');
+      expect(hold.inventory.reduce((s, i) => s + i.seats, 0)).toBe(4); // 2 seats x 2 legs (the infant-less party of 2)
+
+      const seatsAfter = (await ds.getRepository(Vuelo).findOneByOrFail({ id: ida.itinerarioId })).asientosDisponibles;
+      const replay = await api().post('/api/v1/ofertas').set(bearer(token)).set('Idempotency-Key', key).send({
+        mercado: 'ec',
+        selecciones: res.body.trayectos.map((t: { itinerarioId: string }) => ({ itinerarioId: t.itinerarioId, familia: 'LIGHT' })),
+        pasajeros: { adultos: 1, ninos: 1, infantes: 0 },
+      });
+      expect(replay.status).toBe(201);
+      expect(replay.body.ofertaId).toBe(res.body.ofertaId);
+      expect((await ds.getRepository(Vuelo).findOneByOrFail({ id: ida.itinerarioId })).asientosDisponibles).toBe(seatsAfter);
+    });
+
+    it('requires a session and an Idempotency-Key, and rejects bad round trips', async () => {
+      const token = await guest();
+      const { res, ida, vuelta } = await nuevaOferta(token);
+      expect(res.status).toBe(201);
+      const body = { mercado: 'ec', selecciones: [{ itinerarioId: ida.itinerarioId, familia: 'LIGHT' }], pasajeros: { adultos: 1 } };
+
+      await api().post('/api/v1/ofertas').set('Idempotency-Key', randomUUID()).send(body).expect(401);
+      await api().post('/api/v1/ofertas').set(bearer(token)).send(body).expect(400);
+      await api().post('/api/v1/ofertas').set(bearer(token)).set('Idempotency-Key', randomUUID()).send({ ...body, selecciones: [{ itinerarioId: ida.itinerarioId, familia: 'NOPE' }] }).expect(422);
+      await api().post('/api/v1/ofertas').set(bearer(token)).set('Idempotency-Key', randomUUID()).send({ ...body, selecciones: [{ itinerarioId: randomUUID(), familia: 'LIGHT' }] }).expect(404);
+      await api().post('/api/v1/ofertas').set(bearer(token)).set('Idempotency-Key', randomUUID()).send({ ...body, selecciones: [{ itinerarioId: vuelta.itinerarioId, familia: 'LIGHT' }, { itinerarioId: ida.itinerarioId, familia: 'LIGHT' }] }).expect(422); // return before outbound
+      await api().post('/api/v1/ofertas').set(bearer(token)).set('Idempotency-Key', randomUUID()).send({ ...body, pasajeros: { adultos: 1, infantes: 2 } }).expect(422);
+      await api().post('/api/v1/ofertas').set(bearer(token)).set('Idempotency-Key', randomUUID()).send({ ...body, mercado: 'xx' }).expect(404);
+    });
+
+    it('validates passengers: party, age vs type, duplicates, infants, names, international documents', async () => {
+      const token = await guest();
+      const { res, out } = await nuevaOferta(token, { pasajeros: { adultos: 1, infantes: 1 } });
+      const id = res.body.ofertaId as string;
+      const put = (pasajeros: object[], contacto: object = { correo: 'a@example.com', telefono: '+593999999999' }) =>
+        api().put(`/api/v1/ofertas/${id}/pasajeros`).set(bearer(token)).send({ pasajeros, contacto });
+      const adult = pasajero('a1', 'ADULT', yearsBefore(35, out));
+      const infant = pasajero('i1', 'INFANT', yearsBefore(0, out).replace(/-\d\d-\d\d$/, '-01-01'), { asociadoA: 'a1', documento: { tipo: 'PASSPORT', numero: 'INFANT0001', vencimiento: '2040-01-01' } });
+
+      await put([adult]).expect(422); // the held party includes an infant
+      await put([adult, { ...infant, asociadoA: undefined }]).expect(422); // infant without an adult
+      await put([{ ...adult, fechaNacimiento: yearsBefore(5, out) }, infant]).expect(422); // a 5-year-old declared adult
+      await put([adult, { ...infant, id: 'a1' }]).expect(422); // duplicate id
+      await put([adult, { ...infant, documento: { ...infant.documento, vencimiento: undefined } }]).expect(422); // international: expiry required
+      await put([adult, { ...infant, documento: { ...infant.documento, vencimiento: dayAhead(1) } }]).expect(422); // expires before the trip ends
+      await put([adult, infant], { correo: 'not-an-email', telefono: '12' }).expect(400);
+      await put([{ ...adult, nombres: '12345' }, infant]).expect(422); // no valid characters
+
+      const ok = await put([adult, infant]).expect(200);
+      expect(ok.body.advertencias[0]).toContain('MARIA JOSE'); // RF-CHK-003: accents stripped, upper-cased
+      expect(ok.body.pasajerosRegistrados[0]).toMatchObject({ id: 'a1', nombres: 'MARIA JOSE', apellidos: 'PENA TAPIA' });
+      expect(JSON.stringify(ok.body)).not.toContain('ABA112345'); // documents are never echoed back
+      expect(JSON.stringify(ok.body)).not.toContain('INFANT0001');
+      expect(ok.body.faltantes).toEqual(['FACTURACION', 'CONDICIONES']);
+    });
+
+    it('validates billing against the market configuration and the conditions against the version in force', async () => {
+      const token = await guest();
+      const { res } = await nuevaOferta(token);
+      const id = res.body.ofertaId as string;
+      const bill = (body: object) => api().put(`/api/v1/ofertas/${id}/facturacion`).set(bearer(token)).send(body);
+      const ok = { tipoIdentificacion: 'CEDULA', numeroIdentificacion: '1712345678', razonSocial: 'María Peña', direccion: 'Av. Amazonas 123', pais: 'EC' };
+
+      await bill({ ...ok, tipoIdentificacion: 'NIT' }).expect(422); // NIT is Colombian
+      await bill({ ...ok, numeroIdentificacion: '123' }).expect(422); // not 10 digits
+      await bill({ ...ok, numeroIdentificacion: '17123456789012' }).expect(422); // 14 digits is no Ecuadorian id
+      await bill({ ...ok, numeroIdentificacion: 'bad id!' }).expect(400);
+      await bill(ok).expect(200);
+
+      const cond = (versionTerminos: string) => api().post(`/api/v1/ofertas/${id}/condiciones`).set(bearer(token)).send({ versionTerminos, versionCondicionesTransporte: '2026-10' });
+      expect((await cond('1999-01')).status).toBe(409);
+      const accepted = await cond('2026-10').expect(200);
+      expect(accepted.body.condicionesAceptadas).toMatchObject({ terminos: '2026-10', condicionesTransporte: '2026-10' });
+    });
+
+    it('lists the payment methods of the market and restricts the offer to its owner', async () => {
+      const owner = await guest();
+      const other = await guest();
+      const { res } = await nuevaOferta(owner);
+      const id = res.body.ofertaId as string;
+
+      const medios = await api().get(`/api/v1/ofertas/${id}/medios-pago`).set(bearer(owner)).expect(200);
+      expect(medios.body[0]).toMatchObject({ tipo: 'TARJETA', cuotasPermitidas: [1, 3, 6, 12] });
+
+      await api().get(`/api/v1/ofertas/${id}`).set(bearer(other)).expect(403);
+      await api().delete(`/api/v1/ofertas/${id}`).set(bearer(other)).expect(403);
+      await api().put(`/api/v1/ofertas/${id}/facturacion`).set(bearer(other)).send({ tipoIdentificacion: 'CEDULA', numeroIdentificacion: '1712345678', razonSocial: 'x y', direccion: 'abc', pais: 'EC' }).expect(403);
+      await comprar(other, id).expect(403);
+      await api().get(`/api/v1/ofertas/${id}`).expect(401);
+      await api().get(`/api/v1/ofertas/${randomUUID()}`).set(bearer(owner)).expect(404);
+    });
+
+    it('releases the inventory when an offer is discarded', async () => {
+      const token = await guest();
+      const { res, ida } = await nuevaOferta(token);
+      const seats = () => ds.getRepository(Vuelo).findOneByOrFail({ id: ida.itinerarioId }).then((v) => v.asientosDisponibles);
+      const held = await seats();
+
+      await api().delete(`/api/v1/ofertas/${res.body.ofertaId}`).set(bearer(token)).expect(204);
+      expect(await seats()).toBe(held + 2);
+      expect((await ofertaRow(res.body.ofertaId)).estado).toBe('CANCELADA');
+      await api().delete(`/api/v1/ofertas/${res.body.ofertaId}`).set(bearer(token)).expect(409);
+    });
+
+    it('expires an overdue offer, returns its seats, and refuses to sell it (RF-CRT-005)', async () => {
+      const token = await guest();
+      const { res, ida } = await nuevaOferta(token);
+      const before = (await ds.getRepository(Vuelo).findOneByOrFail({ id: ida.itinerarioId })).asientosDisponibles;
+      const row = await ofertaRow(res.body.ofertaId);
+      const past = new Date(Date.now() - 60_000);
+      await ds.query(`UPDATE ${q('vuelos_flight_holds')} SET "expiresAt" = $1 WHERE "holdId" = $2`, [past, row.holdId]);
+      await ds.query(`UPDATE ${q('ecom_ofertas')} SET "venceEn" = $1 WHERE "ofertaId" = $2`, [past, row.ofertaId]);
+
+      const seen = await api().get(`/api/v1/ofertas/${row.ofertaId}`).set(bearer(token)).expect(200);
+      expect(seen.body).toMatchObject({ estado: 'VENCIDA', segundosRestantes: 0 });
+      expect((await ds.getRepository(Vuelo).findOneByOrFail({ id: ida.itinerarioId })).asientosDisponibles).toBe(before + 2);
+      const sale = await comprar(token, row.ofertaId).expect(410);
+      expect(sale.body.code).toBe('OFFER_EXPIRED');
+    });
+
+    it('marks the offer expired when the flight core sweeps its hold (event-driven)', async () => {
+      const token = await guest();
+      const { res } = await nuevaOferta(token);
+      const row = await ofertaRow(res.body.ofertaId);
+      await ds.query(`UPDATE ${q('vuelos_flight_holds')} SET "expiresAt" = $1 WHERE "holdId" = $2`, [new Date(Date.now() - 60_000), row.holdId]);
+
+      await app.get(OffersService).expireDueHolds();
+
+      expect((await ofertaRow(row.ofertaId)).estado).toBe('VENCIDA');
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------
+  describe('D08/D09 compra: pago, emisión y orden', () => {
+    it('buys as a guest: pays, issues the booking and e-tickets, captures, notifies, and the trip can be recovered', async () => {
+      const token = await guest();
+      const { ofertaId, oferta, out } = await ofertaLista(token);
+
+      const incomplete = await nuevaOferta(token);
+      const missing = await comprar(token, incomplete.res.body.ofertaId).expect(422); // nothing filled in yet
+      expect(missing.body.code).toBe('OFFER_INCOMPLETE');
+
+      const res = await comprar(token, ofertaId).expect(201);
+      expect(res.body).toMatchObject({ estado: 'EMITIDA', mercado: 'ec', total: oferta.total });
+      expect(res.body.numeroOrden).toMatch(/^ORD-[A-Z2-9]{10}$/);
+      expect(res.body.pnr).toMatch(/^[A-Z2-9]{6}$/);
+      expect(res.body.numeroOrden).not.toBe(res.body.pnr); // RF-ORD-001: two different identifiers
+      expect(res.body.pasajeros).toHaveLength(2);
+      expect(res.body.pasajeros.every((p: { eTicket: string }) => /^\d{13}$/.test(p.eTicket))).toBe(true);
+      expect(res.body.historial.map((h: { estado: string }) => h.estado)).toEqual(['PENDIENTE_PAGO', 'PAGADA', 'EMITIDA']);
+      expect(res.body.pago).toEqual({ marca: 'VISA', ultimos4: '4242', cuotas: 1 });
+
+      // Everything downstream agrees.
+      expect((await ofertaRow(ofertaId)).estado).toBe('PAGADA');
+      const [pago] = await pagos(ofertaId);
+      expect(pago).toMatchObject({ estado: 'CAPTURADO', montoMinor: oferta.total.monto.replace('.', '') * 1, moneda: 'USD' });
+      expect(pago.ordenId).toBe(res.body.ordenId);
+      const booking = await ds.getRepository(Booking).findOneByOrFail({ pnr: res.body.pnr });
+      expect(booking).toMatchObject({ ownerId: (await ofertaRow(ofertaId)).ownerId, paymentReference: pago.autorizacionRef });
+      expect((await ds.getRepository(FlightHold).findOneByOrFail({ holdId: (await ofertaRow(ofertaId)).holdId })).status).toBe('CONSUMED');
+
+      const mails = await api().get('/api/v1/admin/notificaciones').query({ referencia: res.body.numeroOrden }).set(bearer(adminToken)).expect(200);
+      expect(mails.body[0]).toMatchObject({ tipo: 'CONFIRMACION_COMPRA', destinatario: 'comprador@example.com', estado: 'ENVIADO' });
+      expect(mails.body[0].cuerpo).toContain(res.body.pnr);
+      expect(mails.body[0].cuerpo).toContain(res.body.pasajeros[0].eTicket);
+      expect(mails.body[0].cuerpo).toContain('Booking Hub Vuelos Ecuador'); // the market's legal entity
+
+      // The owner and the public recovery both see it; wrong data answers like a missing order.
+      await api().get(`/api/v1/ordenes/${res.body.numeroOrden}`).set(bearer(token)).expect(200);
+      await api().get(`/api/v1/ordenes/${res.body.numeroOrden}`).set(bearer(await guest())).expect(404);
+      const byNumber = await api().get('/api/v1/ordenes').query({ numero: res.body.numeroOrden, apellido: 'peña' }).expect(200);
+      expect(byNumber.body.numeroOrden).toBe(res.body.numeroOrden);
+      expect(byNumber.body.contacto).toBeUndefined();
+      await api().get('/api/v1/ordenes').query({ pnr: res.body.pnr.toLowerCase(), apellido: 'PENA TAPIA' }).expect(200);
+      await api().get('/api/v1/ordenes').query({ numero: res.body.numeroOrden, apellido: 'Gomez' }).expect(404);
+      await api().get('/api/v1/ordenes').query({ numero: res.body.numeroOrden, pnr: res.body.pnr, apellido: 'peña' }).expect(400);
+      await api().get('/api/v1/ordenes').query({ apellido: 'peña' }).expect(400);
+      expect(out).toBeDefined();
+    });
+
+    it('never charges twice: a retried key replays the result, and a new key resumes the existing order', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const key = randomUUID();
+
+      const first = await comprar(token, ofertaId, {}, key).expect(201);
+      const replay = await comprar(token, ofertaId, {}, key).expect(201);
+      expect(replay.body).toEqual(first.body);
+
+      const fresh = await comprar(token, ofertaId, {}, randomUUID()).expect(201); // a new key after success
+      expect(fresh.body.numeroOrden).toBe(first.body.numeroOrden);
+
+      expect(await pagos(ofertaId)).toHaveLength(1);
+      expect(await ordenes(ofertaId)).toHaveLength(1);
+      expect(await ds.getRepository(Booking).count({ where: { pnr: first.body.pnr } })).toBe(1);
+    });
+
+    it('answers a different body on the same key with 422 instead of replaying the first purchase', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const key = randomUUID();
+      await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_declined', marca: 'VISA' } }, key).expect(402);
+
+      await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_visa_ok', marca: 'VISA' } }, key).expect(422);
+    });
+
+    it('keeps the offer payable after a declined card and replays the decline without calling the gateway again', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const declined = { medio: { tipo: 'TARJETA', token: 'tok_declined', marca: 'VISA' } };
+      const key = randomUUID();
+
+      const first = await comprar(token, ofertaId, declined, key).expect(402);
+      expect(first.headers['content-type']).toContain('application/problem+json');
+      expect(first.body).toMatchObject({ code: 'PAYMENT_DECLINED', status: 402 });
+      expect((await ofertaRow(ofertaId)).estado).toBe('ABIERTA'); // RF-PAY-009
+
+      const replay = await comprar(token, ofertaId, declined, key).expect(402);
+      expect(replay.body).toEqual(first.body);
+      expect(await pagos(ofertaId)).toHaveLength(1); // the replay did not reach the gateway
+
+      const insufficient = await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_insufficient', marca: 'VISA' } }).expect(402);
+      expect(insufficient.body.code).toBe('PAYMENT_DECLINED');
+
+      const paid = await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_mastercard_ok', marca: 'MASTERCARD' } }).expect(201);
+      expect(paid.body.pago).toMatchObject({ marca: 'MASTERCARD', ultimos4: '5454' });
+      expect((await pagos(ofertaId)).map((p) => p.estado)).toEqual(['RECHAZADO', 'RECHAZADO', 'CAPTURADO']);
+    });
+
+    it('rejects risky payments through the fraud port, and refuses brands and instalments the market does not offer', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+
+      const fraud = await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_fraud', marca: 'VISA' } }).expect(402);
+      expect(fraud.body.code).toBe('PAYMENT_REJECTED_BY_FRAUD');
+      await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_review', marca: 'VISA' } }).expect(402);
+      const rows = await pagos(ofertaId);
+      expect(rows.map((p) => p.estado)).toEqual(['RECHAZADO_ANTIFRAUDE', 'RECHAZADO_ANTIFRAUDE']);
+      expect(rows[0].antifraude).toMatchObject({ veredicto: 'RECHAZAR', motivos: ['blocked_token'] });
+
+      const brand = await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_visa_ok', marca: 'HIPERCARD' } }).expect(422);
+      expect(brand.body.code).toBe('PAYMENT_METHOD_NOT_ALLOWED');
+      await comprar(token, ofertaId, { cuotas: 24 }).expect(422);
+      await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: '4111111111111111', marca: 'VISA' } }).expect(400); // a card number is not a token (RN-18)
+      await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_visa_ok', marca: 'MASTERCARD' } }).expect(402); // brand mismatch at the gateway
+      expect((await ofertaRow(ofertaId)).estado).toBe('ABIERTA');
+    });
+
+    it('blocks the card after repeated failures on the same offer (velocity rule)', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      for (let i = 0; i < 3; i++) await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_declined', marca: 'VISA' } }).expect(402);
+
+      const fourth = await comprar(token, ofertaId).expect(402);
+      expect(fourth.body.code).toBe('PAYMENT_REJECTED_BY_FRAUD'); // even a good card is refused now
+    });
+
+    it('COMPENSATES when issuance fails after the payment was authorised: voids it, records the failure, keeps the offer retryable', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const spy = jest.spyOn(app.get(BookingsService), 'createBookingWithin').mockRejectedValueOnce(new Error('PSS unavailable'));
+
+      const res = await comprar(token, ofertaId).expect(502);
+      spy.mockRestore();
+
+      expect(res.body).toMatchObject({ code: 'ISSUANCE_FAILED_COMPENSATED', status: 502 });
+      const [failed] = await ordenes(ofertaId);
+      expect(failed).toMatchObject({ estado: 'FALLIDA_COMPENSADA', pnr: null });
+      expect(res.body.detail).toContain(failed.numeroOrden);
+      expect(failed.historial.map((h) => h.estado)).toEqual(['PENDIENTE_PAGO', 'PAGADA', 'FALLIDA_COMPENSADA']);
+      expect((await pagos(ofertaId)).map((p) => p.estado)).toEqual(['ANULADO']); // the authorisation was released
+      expect(await ds.getRepository(Booking).count({ where: { ownerId: (await ofertaRow(ofertaId)).ownerId } })).toBe(0); // atomic: nothing leaked
+      expect((await ofertaRow(ofertaId)).estado).toBe('ABIERTA'); // the hold survived, so the customer can try again
+      expect((await ds.getRepository(FlightHold).findOneByOrFail({ holdId: (await ofertaRow(ofertaId)).holdId })).status).toBe('HELD');
+
+      const mails = await api().get('/api/v1/admin/notificaciones').query({ referencia: failed.numeroOrden }).set(bearer(adminToken)).expect(200);
+      expect(mails.body[0]).toMatchObject({ tipo: 'EMISION_FALLIDA', estado: 'ENVIADO' });
+
+      // The customer retries and this time it works; the failed attempt stays as history.
+      const retry = await comprar(token, ofertaId).expect(201);
+      expect(retry.body.estado).toBe('EMITIDA');
+      expect((await ordenes(ofertaId)).map((o) => o.estado)).toEqual(['FALLIDA_COMPENSADA', 'EMITIDA']);
+      expect((await pagos(ofertaId)).map((p) => p.estado)).toEqual(['ANULADO', 'CAPTURADO']);
+    });
+
+    it('passes a known issuance problem through (409) while still compensating', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const spy = jest
+        .spyOn(app.get(BookingsService), 'createBookingWithin')
+        .mockRejectedValueOnce(new ProblemDetailsException(HttpStatus.CONFLICT, 'SEAT_TAKEN', 'Seat already taken', 'x'));
+
+      const res = await comprar(token, ofertaId).expect(409);
+      spy.mockRestore();
+
+      expect(res.body.code).toBe('ISSUANCE_FAILED_COMPENSATED');
+      expect(res.body.detail).toContain('SEAT_TAKEN');
+      expect((await pagos(ofertaId)).map((p) => p.estado)).toEqual(['ANULADO']);
+    });
+
+    it('records an issued order whose capture failed as CAPTURA_PENDIENTE for reconciliation, without failing the sale', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+
+      const res = await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_visa_capture_fail', marca: 'VISA' } }).expect(201);
+
+      expect(res.body.estado).toBe('EMITIDA');
+      expect((await pagos(ofertaId))[0].estado).toBe('CAPTURA_PENDIENTE');
+    });
+
+    it('lets two parallel purchases of one offer produce exactly one order and one charge', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+
+      const [a, b] = await Promise.all([comprar(token, ofertaId), comprar(token, ofertaId)]);
+
+      expect([a.status, b.status].filter((s) => s === 201).length).toBeGreaterThanOrEqual(1);
+      expect([a.status, b.status].every((s) => s === 201 || s === 409)).toBe(true);
+      expect((await ordenes(ofertaId)).filter((o) => o.estado === 'EMITIDA')).toHaveLength(1);
+      expect((await pagos(ofertaId)).filter((p) => ['AUTORIZADO', 'CAPTURADO'].includes(p.estado))).toHaveLength(1);
+    });
+
+    it('stops at a price change: the customer must accept the new total, in COP, before paying (RN-12)', async () => {
+      const { token } = await customer();
+      const { ofertaId, oferta } = await ofertaLista(token, { mercado: 'co' });
+      expect(oferta.moneda).toBe('COP');
+      expect(oferta.total.monto).not.toContain('.');
+
+      const reval = await api().post(`/api/v1/ofertas/${ofertaId}/revalidacion`).set(bearer(token)).expect(200);
+      expect(reval.body).toMatchObject({ vigente: true, cambioDePrecio: false });
+
+      // The market's exchange rate moves: every quote changes.
+      const version = (await api().get('/api/v1/mercados/co')).body.version as number;
+      await api().put('/api/v1/admin/mercados/co').set(bearer(adminToken)).send({ versionEsperada: version, tipoCambioDesdeUsd: 4400 }).expect(200);
+
+      const changed = await api().post(`/api/v1/ofertas/${ofertaId}/revalidacion`).set(bearer(token)).expect(200);
+      expect(changed.body.cambioDePrecio).toBe(true);
+      expect(Number(changed.body.precioNuevo.monto)).toBeGreaterThan(Number(changed.body.precioAnterior.monto));
+
+      const blocked = await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_visa_ok', marca: 'VISA' } }).expect(409);
+      expect(blocked.body.code).toBe('PRICE_CHANGED');
+      expect((await ofertaRow(ofertaId)).estado).toBe('EN_REVISION_PRECIO');
+      expect((await api().get(`/api/v1/ofertas/${ofertaId}`).set(bearer(token))).body.faltantes).toContain('ACEPTAR_PRECIO');
+      expect(await pagos(ofertaId)).toHaveLength(0); // nothing was charged
+
+      await api().post(`/api/v1/ofertas/${ofertaId}/aceptacion-precio`).set(bearer(token)).send({ totalAceptado: '1' }).expect(409);
+      const accepted = await api().post(`/api/v1/ofertas/${ofertaId}/aceptacion-precio`).set(bearer(token)).send({ totalAceptado: changed.body.precioNuevo.monto }).expect(200);
+      expect(accepted.body).toMatchObject({ estado: 'ABIERTA', total: changed.body.precioNuevo });
+
+      const paid = await comprar(token, ofertaId).expect(201);
+      expect(paid.body.total).toEqual(changed.body.precioNuevo);
+      expect((await pagos(ofertaId))[0]).toMatchObject({ moneda: 'COP', montoMinor: Number(changed.body.precioNuevo.monto) });
+
+      await api().put('/api/v1/admin/mercados/co').set(bearer(adminToken)).send({ versionEsperada: version + 1, tipoCambioDesdeUsd: 4000 }).expect(200);
+    });
+
+    it('refuses to sell into a market that was closed after the offer was built', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const version = (await api().get('/api/v1/mercados/ec')).body.version as number;
+      await api().put('/api/v1/admin/mercados/ec').set(bearer(adminToken)).send({ versionEsperada: version, activo: false }).expect(200);
+
+      const res = await comprar(token, ofertaId).expect(422);
+      expect(res.body.code).toBe('MARKET_NOT_AVAILABLE');
+      await disponibilidad({ origin: 'BOG', destination: 'SCL', outbound: dayAhead(40), adt: 1 }).expect(422);
+
+      await api().put('/api/v1/admin/mercados/ec').set(bearer(adminToken)).send({ versionEsperada: version + 1, activo: true }).expect(200);
+      await comprar(token, ofertaId).expect(201);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------
+  describe('historial, privacidad y abuso', () => {
+    it('lists a customer’s orders newest first with a stable cursor, and keeps them private', async () => {
+      const mine = await customer();
+      const numeros: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const { ofertaId } = await ofertaLista(mine.token);
+        numeros.push((await comprar(mine.token, ofertaId).expect(201)).body.numeroOrden);
+      }
+
+      const page1 = await api().get('/api/v1/clientes/me/ordenes').query({ limit: 2 }).set(bearer(mine.token)).expect(200);
+      expect(page1.body.items).toHaveLength(2);
+      expect(page1.body.items[0].numeroOrden).toBe(numeros[2]); // newest first
+      const page2 = await api().get('/api/v1/clientes/me/ordenes').query({ limit: 2, cursor: page1.body.nextCursor }).set(bearer(mine.token)).expect(200);
+      expect(page2.body.items.map((o: { numeroOrden: string }) => o.numeroOrden)).toEqual([numeros[0]]);
+      expect(page2.body.nextCursor).toBeUndefined();
+      expect(page1.body.items[0].contacto).toBeDefined(); // the owner's own view keeps the contact data
+
+      const other = await customer();
+      expect((await api().get('/api/v1/clientes/me/ordenes').set(bearer(other.token)).expect(200)).body.items).toEqual([]);
+      await api().get(`/api/v1/clientes/${mine.clienteId}/ordenes`).set(bearer(other.token)).expect(403);
+      await api().get('/api/v1/clientes/me/ordenes').set(bearer(await guest())).expect(403);
+      await api().get('/api/v1/clientes/me/ordenes').query({ cursor: 'garbage' }).set(bearer(mine.token)).expect(400);
+      await api().get('/api/v1/ordenes/ORD-AAAAAAAAAA').set(bearer(mine.token)).expect(404);
+    });
+
+    it('stores personal data encrypted: no passenger name, document or e-mail appears in clear in the database', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const order = (await comprar(token, ofertaId).expect(201)).body;
+
+      const rows = {
+        oferta: (await ds.query(`SELECT "datosPasajeros", "facturacion" FROM ${q('ecom_ofertas')} WHERE "ofertaId" = $1`, [ofertaId]))[0],
+        orden: (await ds.query(`SELECT "pasajeros", "contacto", "facturacion" FROM ${q('ecom_ordenes')} WHERE "ordenId" = $1`, [order.ordenId]))[0],
+        mail: (await ds.query(`SELECT "cuerpo" FROM ${q('ecom_notificaciones')} WHERE "referencia" = $1`, [order.numeroOrden]))[0],
+      };
+      const raw = JSON.stringify(rows);
+      for (const secret of ['PENA', 'MARIA', 'ABA1', 'comprador@example.com', '1712345678', order.pasajeros[0].eTicket]) {
+        expect(raw).not.toContain(secret);
+      }
+      expect(rows.orden.pasajeros).toMatch(/^v1:/);
+      // ...and the application still reads it back.
+      expect((await api().get(`/api/v1/ordenes/${order.numeroOrden}`).set(bearer(token)).expect(200)).body.contacto.correo).toBe('comprador@example.com');
+      expect((await ds.getRepository(Orden).findOneByOrFail({ ordenId: order.ordenId })).pasajeros[0].nombres).toBe('MARIA JOSE');
+    });
+
+    it('rate-limits the public order lookup per client (RNF-19)', async () => {
+      let limited = 0;
+      for (let i = 0; i < 14; i++) {
+        const res = await api().get('/api/v1/ordenes').query({ numero: 'ORD-AAAAAAAAAA', apellido: 'nadie' });
+        if (res.status === 429) limited += 1;
+        else expect(res.status).toBe(404);
+      }
+      expect(limited).toBeGreaterThan(0);
+    });
+  });
+
+  it('seeded reference data is complete and the seed is idempotent', async () => {
+    const before = await ds.getRepository(Localidad).count();
+    const second = await seedEcommerce(ds, ADMIN);
+    expect(second).toEqual({ mercados: 0, localidades: 0, plantillas: 0, administradores: 0 });
+    expect(await ds.getRepository(Localidad).count()).toBe(before);
+    expect(await ds.getRepository(Mercado).count()).toBe(2);
+  });
+});
