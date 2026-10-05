@@ -13,6 +13,25 @@ async function bootstrap() {
     app.getHttpAdapter().getInstance().set('trust proxy', Number.isInteger(hops) ? hops : process.env.TRUST_PROXY);
   }
 
+  // Browser front ends on another origin need CORS. Production allows only the origins listed in
+  // CORS_ORIGINS (comma-separated, no trailing slash); unset there means no cross-origin access.
+  // Outside production, any localhost port is allowed so a dev server works without configuration.
+  // Auth is a Bearer header, never a cookie, so credentials stay off.
+  const corsOrigins = (process.env.CORS_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean);
+  const allowLocalhost = process.env.NODE_ENV !== 'production';
+  if (corsOrigins.length > 0 || allowLocalhost) {
+    app.enableCors({
+      origin: (origin, callback) => {
+        const allowed = !origin || corsOrigins.includes(origin) || (allowLocalhost && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
+        callback(null, allowed);
+      },
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Authorization', 'Content-Type', 'Accept', 'Accept-Language', 'Idempotency-Key', 'X-Device-Fingerprint', 'X-Correlation-Id'],
+      exposedHeaders: ['X-Correlation-Id', 'Retry-After'],
+      maxAge: 600,
+    });
+  }
+
   app.setGlobalPrefix('api/v1');
 
   app.useGlobalPipes(

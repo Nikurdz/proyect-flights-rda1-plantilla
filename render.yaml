@@ -57,6 +57,9 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
+      # Origin(s) of the web front end allowed by CORS (comma-separated, e.g. https://mi-front.vercel.app).
+      - key: CORS_ORIGINS
+        sync: false
       # Base URL of the web front end, used to build e-mail verification links.
       - key: PUBLIC_WEB_URL
         sync: false
