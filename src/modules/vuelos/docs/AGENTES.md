@@ -10,6 +10,8 @@ Reparto de responsabilidades entre los agentes que trabajan en este repositorio 
 | Sistema de información, backend y base de datos | **Claude Code Desktop** | Servicios, entidades, migraciones, seeds, contrato OpenAPI y pruebas del módulo Vuelos. |
 | UI/UX | **Antigravity** | Frontend completo, conectado directamente al backend (API `api/v1`, contrato `contracts/vuelos-openapi.yaml`) sin generar errores de integración. |
 
+Antigravity (UI/UX) está definido además como subagente de Claude Code en `.claude/agents/antigravity.md`, para que Claude Code Desktop le delegue las tareas de frontend.
+
 ## Regla: todo desarrollo requiere un plan de implementación
 
 Cuando un agente vaya a **realizar desarrollo** (código nuevo o cambios de comportamiento), debe generar **antes de escribir código** un plan de implementación y adjuntarlo al proyecto:
