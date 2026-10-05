@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { toIso, utcDayRange } from '../common/date.util';
+import { toIso, todayUtc, utcDayRange } from '../common/date.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { Vuelo } from '../entities/vuelo.entity';
 
@@ -12,13 +12,17 @@ export class FlightStatusService {
   constructor(@InjectRepository(Vuelo) private readonly vuelos: Repository<Vuelo>) {}
 
   /** Status of the flight that departs on `date` (a UTC calendar day), derived from its schedule. */
-  async getStatus(flightNumber: string, date: string) {
-    const { start, end } = utcDayRange(date);
-    const vuelo = await this.vuelos
-      .createQueryBuilder('v')
-      .where('v."codigoVuelo" = :flightNumber', { flightNumber })
-      .andWhere('v."fechaSalida" >= :start AND v."fechaSalida" < :end', { start, end })
-      .getOne();
+  async getStatus(flightNumber: string, requestedDate?: string) {
+    const qb = this.vuelos.createQueryBuilder('v').where('v."codigoVuelo" = :flightNumber', { flightNumber });
+    if (requestedDate) {
+      const { start, end } = utcDayRange(requestedDate);
+      qb.andWhere('v."fechaSalida" >= :start AND v."fechaSalida" < :end', { start, end });
+    } else {
+      // No date given: today's flight, or else the next one that operates.
+      qb.andWhere('v."fechaSalida" >= :today', { today: utcDayRange(todayUtc()).start }).orderBy('v."fechaSalida"', 'ASC');
+    }
+    const vuelo = await qb.getOne();
+    const date = requestedDate ?? (vuelo ? toIso(vuelo.fechaSalida).slice(0, 10) : todayUtc());
 
     if (!vuelo) {
       throw new ProblemDetailsException(

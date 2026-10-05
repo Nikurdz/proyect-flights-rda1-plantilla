@@ -37,8 +37,9 @@ export class OffersService {
     private readonly events: DomainEventBus,
   ) {}
 
-  async getSeatmap(offerId: string, segmentId: string) {
+  async getSeatmap(offerId: string, requestedSegmentId?: string) {
     const offer = await this.requireLiveOffer(this.offers.manager, offerId);
+    const segmentId = requestedSegmentId ?? offer.itineraries[0].vueloId;
 
     const reference = offer.itineraries.find((i) => i.vueloId === segmentId);
     if (!reference) {

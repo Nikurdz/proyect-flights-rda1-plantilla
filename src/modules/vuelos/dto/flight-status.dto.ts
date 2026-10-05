@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Matches } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, Matches } from 'class-validator';
 import { IsDateOnly, ToUpperTrimmed } from './validators';
 
 export class FlightStatusParamDto {
@@ -10,7 +10,8 @@ export class FlightStatusParamDto {
 }
 
 export class FlightStatusQueryDto {
-  @ApiProperty({ format: 'date', description: 'Departure day (required).' })
+  @ApiPropertyOptional({ format: 'date', description: 'Departure day. If omitted: today, or the next departure of that flight.' })
   @IsDateOnly()
-  date: string;
+  @IsOptional()
+  date?: string;
 }

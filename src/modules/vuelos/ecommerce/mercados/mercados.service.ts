@@ -116,7 +116,7 @@ export class MercadosService {
     return this.vista(updated);
   }
 
-  async listarAuditoria(entidad: string, entidadId: string) {
-    return this.auditoria.find({ where: { entidad, entidadId }, order: { creadoEn: 'DESC' }, take: 100 });
+  async listarAuditoria(entidad = 'mercado', entidadId?: string) {
+    return this.auditoria.find({ where: { entidad, ...(entidadId ? { entidadId } : {}) }, order: { creadoEn: 'DESC' }, take: 100 });
   }
 }

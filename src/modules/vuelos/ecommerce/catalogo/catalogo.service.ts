@@ -58,7 +58,8 @@ export class CatalogoService {
   ) {}
 
   /** RF-SHP-002: prefix match on code, city and airport, ignoring accents and case. */
-  async sugerirLocalidades(q: string): Promise<LocalidadViewDto[]> {
+  async sugerirLocalidades(q: string = ''): Promise<LocalidadViewDto[]> {
+    // No text typed yet: offer the whole (short) list instead of demanding a search term.
     const prefix = `${escapeLike(normalizarTexto(q))}%`;
     const rows = await this.localidades
       .createQueryBuilder('l')
@@ -92,14 +93,26 @@ export class CatalogoService {
       throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Unexpected return date', 'trip=OW is a one-way search; omit inbound.', [{ name: 'inbound', reason: 'not allowed for trip=OW' }]);
     }
 
-    const legs = [{ origin: query.origin, destination: query.destination, departureDate: query.outbound, sentido: 'IDA' }];
+    if (roundTrip && (!query.origin || !query.destination)) {
+      throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Origin and destination required', 'A round trip needs origin and destination.', [
+        { name: 'origin', reason: 'required for trip=RT' },
+      ]);
+    }
+
+    // Everything but a round trip's own legs is optional: no date = tomorrow, no origin/destination = any.
+    const outbound = query.outbound ?? new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const legs: { origin?: string; destination?: string; departureDate: string; sentido: string }[] = [
+      { origin: query.origin, destination: query.destination, departureDate: outbound, sentido: 'IDA' },
+    ];
     if (roundTrip) {
       legs.push({ origin: query.destination, destination: query.origin, departureDate: query.inbound!, sentido: 'VUELTA' });
     }
 
     const composicion = this.composicion(query);
-    for (const leg of legs) assertOriginDestinationDiffer(leg);
-    assertChronology(legs);
+    for (const leg of legs) {
+      if (leg.origin && leg.destination) assertOriginDestinationDiffer({ origin: leg.origin, destination: leg.destination, departureDate: leg.departureDate });
+    }
+    assertChronology(legs.map((l) => ({ origin: l.origin ?? '', destination: l.destination ?? '', departureDate: l.departureDate })));
     assertInfantRatio(composicion);
     assertGroupSize(composicion, this.config.maxPassengersPerOrder);
 
@@ -112,12 +125,12 @@ export class CatalogoService {
       const itinerarios = await this.construirItinerarios(flights, familias, mercado, query.sort ?? 'RECOMENDADO');
       trayectos.push({
         sentido: leg.sentido,
-        origen: leg.origin,
-        destino: leg.destination,
+        origen: leg.origin ?? null,
+        destino: leg.destination ?? null,
         fecha: leg.departureDate,
         itinerarios,
-        ...(itinerarios.length === 0
-          ? { fechasAlternativas: await this.fechasAlternativas(leg.origin, leg.destination, leg.departureDate, seats, familias, mercado) }
+        ...(itinerarios.length === 0 && leg.origin && leg.destination
+          ? { fechasAlternativas: await this.fechasAlternativas(leg.origin!, leg.destination!, leg.departureDate, seats, familias, mercado) }
           : {}),
       });
     }

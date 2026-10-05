@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 import { CABIN_CLASSES } from '../../../dto/enums';
 import { IsDateOnly, ToLowerTrimmed, ToUpperTrimmed } from '../../../dto/validators';
 
@@ -16,11 +16,11 @@ export const ORDENAMIENTOS = [
 export type Ordenamiento = (typeof ORDENAMIENTOS)[number];
 
 export class LocalidadesQueryDto {
-  @ApiProperty({ example: 'bog', description: 'Prefijo del código IATA, la ciudad o el aeropuerto (sin distinguir acentos ni mayúsculas).' })
+  @ApiPropertyOptional({ example: 'bog', description: 'Prefijo del código IATA, la ciudad o el aeropuerto (sin distinguir acentos ni mayúsculas). Si se omite, lista todas.' })
   @IsString()
-  @MinLength(1)
   @MaxLength(60)
-  q: string;
+  @IsOptional()
+  q?: string;
 
   @ApiPropertyOptional({ example: 'ec' })
   @ToLowerTrimmed()
@@ -40,19 +40,22 @@ export class LocalidadViewDto {
 
 /** Deep-link criteria (RF-SHP-011): the same names the portal puts in the URL. */
 export class DisponibilidadQueryDto {
-  @ApiProperty({ example: 'BOG' })
+  @ApiPropertyOptional({ example: 'BOG', description: 'Origen. Si se omite, cualquier origen.' })
   @ToUpperTrimmed()
   @Matches(/^[A-Z]{3}$/)
-  origin: string;
+  @IsOptional()
+  origin?: string;
 
-  @ApiProperty({ example: 'SCL' })
+  @ApiPropertyOptional({ example: 'SCL', description: 'Destino. Si se omite, cualquier destino.' })
   @ToUpperTrimmed()
   @Matches(/^[A-Z]{3}$/)
-  destination: string;
+  @IsOptional()
+  destination?: string;
 
-  @ApiProperty({ format: 'date', description: 'Fecha de ida' })
+  @ApiPropertyOptional({ format: 'date', description: 'Fecha de ida. Si se omite, mañana.' })
   @IsDateOnly()
-  outbound: string;
+  @IsOptional()
+  outbound?: string;
 
   @ApiPropertyOptional({ format: 'date', description: 'Fecha de vuelta (ida y vuelta)' })
   @IsDateOnly()
@@ -172,8 +175,8 @@ export class FechaAlternativaDto {
 
 export class TrayectoDisponibleDto {
   @ApiProperty({ enum: ['IDA', 'VUELTA'] }) sentido: string;
-  @ApiProperty() origen: string;
-  @ApiProperty() destino: string;
+  @ApiPropertyOptional({ nullable: true, description: 'null si la búsqueda no fijó origen.' }) origen: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'null si la búsqueda no fijó destino.' }) destino: string | null;
   @ApiProperty({ format: 'date' }) fecha: string;
   @ApiProperty({ type: [ItinerarioDto] }) itinerarios: ItinerarioDto[];
   @ApiPropertyOptional({ type: [FechaAlternativaDto], description: 'RF-SHP-024: fechas cercanas con vuelos cuando este trayecto no tiene disponibilidad.' }) fechasAlternativas?: FechaAlternativaDto[];

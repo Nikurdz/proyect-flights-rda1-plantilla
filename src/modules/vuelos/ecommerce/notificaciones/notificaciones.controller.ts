@@ -5,7 +5,6 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
-import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { NotificacionesService } from './notificaciones.service';
 
 class NotificacionesQueryDto {
@@ -29,12 +28,9 @@ export class AdminNotificacionesController {
   constructor(private readonly notificaciones: NotificacionesService) {}
 
   @Get('notificaciones')
-  @ApiOperation({ summary: 'Mensajes enviados (ADMIN)', description: 'Filtre por referencia o destinatario. El cuerpo se descifra solo para este rol.' })
+  @ApiOperation({ summary: 'Mensajes enviados (ADMIN)', description: 'Sin filtros devuelve los 50 más recientes; filtre por referencia o destinatario. El cuerpo se descifra solo para este rol.' })
   @ApiProblemResponses(HttpStatus.BAD_REQUEST, HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN)
   async listar(@Query() query: NotificacionesQueryDto) {
-    if (!query.referencia && !query.destinatario) {
-      throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'A filter is required', 'Send referencia or destinatario.', [{ name: 'referencia', reason: 'send referencia or destinatario' }]);
-    }
     const filas = await this.notificaciones.listar(query);
     return filas.map(({ notificacionId, tipo, canal, destinatario, asunto, cuerpo, estado, intentos, plantillaVersion, creadoEn }) => ({
       notificacionId,

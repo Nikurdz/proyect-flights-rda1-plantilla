@@ -207,7 +207,8 @@ describeIntegration('Vuelos core against a real Postgres', () => {
       const segmentId = offer.itineraries[0].segments[0].segmentId;
 
       await api().get(`/api/v1/offers/${randomUUID()}/seatmap`).query({ segmentId }).expect(404);
-      await api().get(`/api/v1/offers/${offer.offerId}/seatmap`).expect(400);
+      const defaulted = await api().get(`/api/v1/offers/${offer.offerId}/seatmap`).expect(200); // segmentId optional: first segment
+      expect(defaulted.body.segmentId).toBe(segmentId);
       await api().get(`/api/v1/offers/${offer.offerId}/seatmap`).query({ segmentId: randomUUID() }).expect(400);
     });
 
@@ -501,7 +502,8 @@ describeIntegration('Vuelos core against a real Postgres', () => {
 
       const none = await api().get('/api/v1/flights/LA800/status').query({ date: '2020-01-01' }).expect(404);
       expect(none.body.code).toBe('FLIGHT_STATUS_NOT_AVAILABLE');
-      await api().get('/api/v1/flights/LA800/status').expect(400);
+      const noDate = await api().get('/api/v1/flights/LA800/status').expect(200); // date optional: next departure
+      expect(noDate.body.flightNumber).toBe('LA800');
       await api().get('/api/v1/flights/LA800/status').query({ date: 'tomorrow' }).expect(400);
       await api().get('/api/v1/flights/NOT-A-FLIGHT/status').query({ date: d1 }).expect(400);
     });

@@ -197,9 +197,10 @@ export class ListBookingsQueryDto {
 }
 
 export class SeatmapQueryDto {
-  @ApiProperty({ description: 'segmentId of one of the offer itineraries (required).' })
+  @ApiPropertyOptional({ description: 'segmentId of one of the offer itineraries. If omitted: the first one.' })
   @IsUUID()
-  segmentId: string;
+  @IsOptional()
+  segmentId?: string;
 }
 
 export class TicketResponseDto {

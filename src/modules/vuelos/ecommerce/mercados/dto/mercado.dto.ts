@@ -225,13 +225,15 @@ export class ActualizarMercadoDto {
 }
 
 export class AuditoriaQueryDto {
-  @ApiProperty({ example: 'mercado' })
+  @ApiPropertyOptional({ example: 'mercado', default: 'mercado' })
   @Matches(/^[a-z_]{2,50}$/)
-  entidad: string;
+  @IsOptional()
+  entidad?: string;
 
-  @ApiProperty({ example: 'ec' })
+  @ApiPropertyOptional({ example: 'ec', description: 'Si se omite, todos.' })
   @Matches(/^[\w-]{1,100}$/)
-  id: string;
+  @IsOptional()
+  id?: string;
 }
 
 export class MercadoViewDto {

@@ -123,11 +123,13 @@ export class SearchService {
   }
 
   /** Direct flights on one calendar day (UTC) that have not departed and can seat the whole party. */
-  async findDirectFlights(origin: string, destination: string, departureDate: string, seatsNeeded: number): Promise<Vuelo[]> {
+  async findDirectFlights(origin: string | undefined, destination: string | undefined, departureDate: string, seatsNeeded: number): Promise<Vuelo[]> {
     const { start, end } = utcDayRange(departureDate);
-    return this.vuelos
-      .createQueryBuilder('v')
-      .where('v."origenIATA" = :origin AND v."destinoIATA" = :destination', { origin, destination })
+    const qb = this.vuelos.createQueryBuilder('v').where('1 = 1');
+    // Omitted origin/destination mean "any": lets a visitor browse without knowing codes.
+    if (origin) qb.andWhere('v."origenIATA" = :origin', { origin });
+    if (destination) qb.andWhere('v."destinoIATA" = :destination', { destination });
+    return qb
       .andWhere('v."fechaSalida" >= :start AND v."fechaSalida" < :end', { start, end })
       .andWhere('v."fechaSalida" > :now', { now: new Date() })
       .andWhere('v."asientosDisponibles" >= :seatsNeeded', { seatsNeeded })

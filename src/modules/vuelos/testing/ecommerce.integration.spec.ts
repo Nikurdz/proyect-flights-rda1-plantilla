@@ -274,7 +274,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(airport.body[0].iata).toBe('GYE');
 
       expect((await api().get('/api/v1/localidades').query({ q: '%' }).expect(200)).body).toEqual([]);
-      await api().get('/api/v1/localidades').expect(400);
+      expect((await api().get('/api/v1/localidades').expect(200)).body.length).toBeGreaterThan(5); // q optional: whole list
     });
 
     it('lists availability with operators, badges, the lowest price and every sort order', async () => {
@@ -334,6 +334,16 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       const none = await disponibilidad({ origin: 'BOG', destination: 'MIA', outbound: date, adt: 1 }).expect(200);
       expect(none.body).toMatchObject({ sinDisponibilidad: true });
       expect(none.body.trayectos[0].fechasAlternativas).toEqual([]);
+    });
+
+    it('needs no criteria to browse: omitted date, origin and destination fall back to sensible defaults', async () => {
+      const all = await disponibilidad({}).expect(200);
+      expect(all.body.trayectos[0]).toMatchObject({ sentido: 'IDA', origen: null, destino: null });
+      expect(all.body.trayectos[0].itinerarios.length).toBeGreaterThan(3);
+      const fromBog = await disponibilidad({ origin: 'BOG' }).expect(200);
+      expect(fromBog.body.trayectos[0].itinerarios.every((i: { origen: { iata: string } }) => i.origen.iata === 'BOG')).toBe(true);
+      await api().get('/api/v1/admin/auditoria').set(bearer(adminToken)).expect(200);
+      await api().get('/api/v1/admin/notificaciones').set(bearer(adminToken)).expect(200);
     });
 
     it('validates the criteria: rules, cabin, trip type and deep-link parameters', async () => {
