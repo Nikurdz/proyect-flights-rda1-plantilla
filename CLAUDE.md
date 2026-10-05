@@ -13,6 +13,10 @@ The Vuelos module has two layers (details and route tables in `src/modules/vuelo
 1. **Flight core (GDS)** — implements `contracts/vuelos-openapi.yaml`: search, seatmap, hold, booking, tickets, flight status. Post-sale, check-in and webhooks are in the contract but answer **`501 NOT_IMPLEMENTED`** (never an empty 200).
 2. **E-commerce R1** (`src/modules/vuelos/ecommerce/`, from `docs/SRS_Plataforma_Ecommerce_LATAM.md`, release "Compra de vuelo"): identity, markets/config, search & pricing, offers/checkout, payments, orders, notifications. It lives *inside* the Vuelos module so the "enable only your module" rule holds, and sells from the core's inventory in-process.
 
+## Agents and implementation plans
+
+Roles are defined in `src/modules/vuelos/docs/AGENTES.md`: OpenCode/Antigravity audit and document, **Claude Code Desktop owns backend, information system and database**, Antigravity owns the full UI/UX frontend connected to the backend. Before any development work, write an implementation plan in `src/modules/vuelos/docs/planes/AAAA-MM-DD-<tema>.md` using `PLANTILLA.md` there.
+
 ## Commands
 
 ```bash
