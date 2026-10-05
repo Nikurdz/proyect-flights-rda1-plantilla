@@ -7,7 +7,9 @@ export type EstadoPago =
   | 'CAPTURA_PENDIENTE'
   | 'RECHAZADO'
   | 'RECHAZADO_ANTIFRAUDE'
-  | 'ANULADO';
+  | 'ANULADO'
+  // The ticket was not issued but the gateway would not release the authorisation yet: retried by the reconciler.
+  | 'ANULACION_PENDIENTE';
 
 export interface MedioPagoUsado {
   tipo: 'TARJETA';

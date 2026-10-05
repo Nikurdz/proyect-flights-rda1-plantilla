@@ -14,6 +14,8 @@ import { Mercado } from '../ecommerce/mercados/entities/mercado.entity';
 import { Oferta } from '../ecommerce/ofertas/entities/oferta.entity';
 import { Orden } from '../ecommerce/ordenes/entities/orden.entity';
 import { Pago } from '../ecommerce/pagos/entities/pago.entity';
+import { PASARELA_PAGO, PasarelaPago } from '../ecommerce/pagos/ports/pagos.ports';
+import { ReconciliacionService } from '../ecommerce/ordenes/reconciliacion.service';
 import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
 import { seedFlights } from '../seed/flights.seed';
 import { IntegrationApp, createIntegrationApp, describeIntegration } from './integration-app';
@@ -35,7 +37,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
   let app: INestApplication;
   let ds: DataSource;
   let adminToken: string;
-  let cursor = 12; // each purchase uses its own pair of days so seat counts never interfere
+  let cursor = 2; // each purchase uses its own pair of days (cursor, cursor + 7) so seat counts never interfere; the seed covers 45 days
 
   const api = () => request(app.getHttpServer());
   const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -698,6 +700,67 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
 
       expect(res.body.estado).toBe('EMITIDA');
       expect((await pagos(ofertaId))[0].estado).toBe('CAPTURA_PENDIENTE');
+    });
+
+    it('records the compensated order even when the gateway cannot void, and the reconciler releases it later (C2)', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const gateway = app.get<PasarelaPago>(PASARELA_PAGO);
+      const issuance = jest.spyOn(app.get(BookingsService), 'createBookingWithin').mockRejectedValueOnce(new Error('PSS unavailable'));
+      const voiding = jest.spyOn(gateway, 'anular').mockRejectedValue(new Error('gateway timeout'));
+
+      const res = await comprar(token, ofertaId).expect(502);
+      issuance.mockRestore();
+      voiding.mockRestore();
+
+      expect(res.body.code).toBe('ISSUANCE_FAILED_COMPENSATED');
+      expect(res.body.detail).toContain('being released');
+      expect((await ordenes(ofertaId)).map((o) => o.estado)).toEqual(['FALLIDA_COMPENSADA']); // recorded despite the failed void
+      expect((await pagos(ofertaId)).map((p) => p.estado)).toEqual(['ANULACION_PENDIENTE']);
+      expect((await ofertaRow(ofertaId)).estado).not.toBe('EN_PAGO'); // the offer is not left locked
+
+      await app.get(ReconciliacionService).reconciliar();
+      expect((await pagos(ofertaId)).map((p) => p.estado)).toEqual(['ANULADO']);
+    });
+
+    it('captures a payment left pending by a gateway outage once the reconciler runs (C4)', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const capture = jest.spyOn(app.get<PasarelaPago>(PASARELA_PAGO), 'capturar').mockRejectedValue(new Error('gateway down'));
+
+      await comprar(token, ofertaId).expect(201);
+      capture.mockRestore();
+      expect((await pagos(ofertaId))[0].estado).toBe('CAPTURA_PENDIENTE');
+
+      await app.get(ReconciliacionService).reconciliar();
+      expect((await pagos(ofertaId))[0].estado).toBe('CAPTURADO');
+    });
+
+    it('announces an issued order again when its confirmation e-mail never happened (C5)', async () => {
+      const token = await guest();
+      const { ofertaId } = await ofertaLista(token);
+      const res = await comprar(token, ofertaId).expect(201);
+      const numeroOrden = res.body.numeroOrden as string;
+      const mails = () => ds.query(`SELECT 1 FROM ${q('ecom_notificaciones')} WHERE "referencia" = $1 AND "tipo" = 'CONFIRMACION_COMPRA'`, [numeroOrden]);
+      expect(await mails()).toHaveLength(1);
+
+      // Simulate a crash between commit and publish: the order is old enough and has no notification.
+      await ds.query(`DELETE FROM ${q('ecom_notificaciones')} WHERE "referencia" = $1`, [numeroOrden]);
+      await ds.getRepository(Orden).update({ ofertaId }, { creadaEn: new Date(Date.now() - 5 * 60_000) });
+
+      const reconciler = app.get(ReconciliacionService);
+      expect(await reconciler.reanunciarEmisiones()).toBeGreaterThanOrEqual(1);
+      expect(await mails()).toHaveLength(1);
+      await reconciler.reanunciarEmisiones(); // idempotent: nothing more to announce for this order
+      expect(await mails()).toHaveLength(1);
+    });
+
+    it('limits purchase attempts per customer (A10)', async () => {
+      const token = await guest();
+      const attempt = () => comprar(token, randomUUID());
+      for (let i = 0; i < 10; i++) await attempt().expect(404);
+      const limited = await attempt().expect(429);
+      expect(limited.body.code).toBe('RATE_LIMIT_EXCEEDED');
     });
 
     it('lets two parallel purchases of one offer produce exactly one order and one charge', async () => {

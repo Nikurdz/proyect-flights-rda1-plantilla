@@ -129,6 +129,16 @@ export class OffersService {
           [{ name: 'itinerarySelections.itineraryId', reason: 'duplicated or not part of the offer' }],
         );
       }
+      // Only the economy cabin is sold and priced in this phase: do not quote a premium cabin at economy fares.
+      if (selection.cabinClass !== 'ECONOMY') {
+        throw new ProblemDetailsException(
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          'VALIDATION_FAILED',
+          'Cabin not available',
+          `Only ECONOMY is available in this phase, not ${selection.cabinClass}.`,
+          [{ name: 'itinerarySelections.cabinClass', reason: 'only ECONOMY is available' }],
+        );
+      }
       selected.add(selection.itineraryId);
     }
     if (selected.size !== offer.itineraries.length) {

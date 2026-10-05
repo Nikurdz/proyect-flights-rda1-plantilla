@@ -1,7 +1,13 @@
 import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { encryptedJson } from '../common/cifrado';
 
 export type PassengerType = 'ADULT' | 'YOUTH' | 'CHILD' | 'INFANT';
 
+/**
+ * Identity and contact data of a passenger is encrypted at rest (RNF-18), like the e-commerce
+ * order snapshot. It is never queried in SQL: bookings are found by id/PNR, and the duplicate
+ * check runs on the request before anything is stored.
+ */
 @Entity('vuelos_passengers')
 @Index('IDX_vuelos_passengers_booking', ['bookingId'])
 export class Passenger {
@@ -22,30 +28,30 @@ export class Passenger {
   @Column({ type: 'varchar', length: 10 })
   passengerType: PassengerType;
 
-  @Column({ type: 'varchar', length: 100 })
+  @Column({ type: 'text', transformer: encryptedJson<string>() })
   firstName: string;
 
-  @Column({ type: 'varchar', length: 100 })
+  @Column({ type: 'text', transformer: encryptedJson<string>() })
   lastName: string;
 
   @Column({ type: 'varchar', length: 20 })
   documentType: string;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: 'text', transformer: encryptedJson<string>() })
   documentNumber: string;
 
   @Column({ type: 'varchar', length: 2 })
   nationality: string;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'text', transformer: encryptedJson<string>() })
   birthDate: string;
 
   @Column({ type: 'varchar', length: 1 })
   gender: string;
 
-  @Column({ type: 'varchar', length: 150 })
+  @Column({ type: 'text', transformer: encryptedJson<string>() })
   contactEmail: string;
 
-  @Column({ type: 'varchar', length: 30 })
+  @Column({ type: 'text', transformer: encryptedJson<string>() })
   contactPhone: string;
 }

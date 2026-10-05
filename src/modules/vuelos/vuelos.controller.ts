@@ -224,11 +224,10 @@ export class VuelosController {
   }
 
   @Post('bookings/:bookingId/baggage')
-  @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
+  @UseGuards(JwtAuthGuard)
   @ApiTags('Postventa (Maletas, Fechas y Cancelaciones)')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Agregar maleta extra post-emisión (no implementado)' })
-  @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
   addBaggage(@Param('bookingId', ParseUUIDPipe) _bookingId: string, @Body() _addBaggageRequestDto: AddBaggageRequestDto) {
@@ -247,11 +246,10 @@ export class VuelosController {
   }
 
   @Post('bookings/:bookingId/date-change')
-  @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
+  @UseGuards(JwtAuthGuard)
   @ApiTags('Postventa (Maletas, Fechas y Cancelaciones)')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Confirmar cambio de fecha (no implementado)' })
-  @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
   confirmDateChange(@Param('bookingId', ParseUUIDPipe) _bookingId: string, @Body() _dateChangeRequestDto: DateChangeRequestDto) {
@@ -270,11 +268,10 @@ export class VuelosController {
   }
 
   @Post('bookings/:bookingId/cancel')
-  @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
+  @UseGuards(JwtAuthGuard)
   @ApiTags('Postventa (Maletas, Fechas y Cancelaciones)')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cancelar reserva (no implementado)' })
-  @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
   cancelBooking(@Param('bookingId', ParseUUIDPipe) _bookingId: string, @Body() _cancelBookingRequestDto: CancelBookingRequestDto) {

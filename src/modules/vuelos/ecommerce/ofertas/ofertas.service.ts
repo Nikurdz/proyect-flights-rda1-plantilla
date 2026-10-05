@@ -21,9 +21,10 @@ import { OffersService } from '../../services/offers.service';
 import { SearchService } from '../../services/search.service';
 import { Localidad } from '../catalogo/entities/localidad.entity';
 import { PreciosService } from '../catalogo/precios.service';
-import { formatAmount, money } from '../common/moneda.util';
+import { formatAmount, minorDigits, money, parseAmountMinor } from '../common/moneda.util';
 import { normalizarNombrePasajero } from '../common/texto.util';
 import { Mercado } from '../mercados/entities/mercado.entity';
+import { SlidingWindowLimiter, assertWithinLimit } from '../common/rate-limiter';
 import { MercadosService } from '../mercados/mercados.service';
 import {
   AceptarCondicionesDto,
@@ -59,6 +60,9 @@ const notFound = (id: string) =>
  */
 @Injectable()
 export class OfertasService implements OnModuleInit {
+  // Each offer holds inventory, so building offers is limited per customer, not only per address.
+  private readonly buildLimiter = new SlidingWindowLimiter(30, 60_000);
+
   constructor(
     @InjectRepository(Oferta) private readonly ofertas: Repository<Oferta>,
     @InjectRepository(Vuelo) private readonly vuelos: Repository<Vuelo>,
@@ -94,6 +98,7 @@ export class OfertasService implements OnModuleInit {
   // ---------------------------------------------------------------- build / read / cancel
 
   async armar(auth: AuthClaims, key: string, dto: ArmarOfertaDto): Promise<OfertaViewDto> {
+    assertWithinLimit(this.buildLimiter, `offer:${auth.ownerId}`, 'Too many offers requested');
     const mercado = await this.mercados.requerirActivo(dto.mercado);
     const composicion = toGds({ adultos: dto.pasajeros.adultos, jovenes: dto.pasajeros.jovenes ?? 0, ninos: dto.pasajeros.ninos ?? 0, infantes: dto.pasajeros.infantes ?? 0 });
     assertInfantRatio(composicion);
@@ -250,7 +255,14 @@ export class OfertasService implements OnModuleInit {
       throw this.vencida(oferta);
     }
     const total = nuevos.reduce((sum, t) => sum + t.totalMinor, 0);
-    if (formatAmount(total, oferta.moneda) !== dto.totalAceptado) {
+    const aceptado = parseAmountMinor(dto.totalAceptado, oferta.moneda);
+    if (aceptado === null) {
+      throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', 'Invalid amount', `${oferta.moneda} amounts have at most ${minorDigits(oferta.moneda)} decimals.`, [
+        { name: 'totalAceptado', reason: `must be an amount in ${oferta.moneda}` },
+      ]);
+    }
+    // Amounts are compared in minor units, so "1234.5" and "1234.50" are the same figure.
+    if (aceptado !== total) {
       await this.ofertas.update(oferta.ofertaId, { totalPropuestoMinor: total });
       throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PRICE_CHANGED', 'The price changed again', `The current total is ${formatAmount(total, oferta.moneda)} ${oferta.moneda}, not ${dto.totalAceptado}.`);
     }

@@ -32,6 +32,19 @@ export function formatAmount(minor: number, currency: string): string {
   return `${sign}${Math.floor(abs / factor)}.${String(abs % factor).padStart(digits, '0')}`;
 }
 
+/**
+ * "1234.5" / "1234.50" -> minor units, or null when the text is not an amount this currency can
+ * express (more decimals than it has, e.g. "10.5" for COP). Compares amounts, not spellings.
+ */
+export function parseAmountMinor(text: string, currency: string): number | null {
+  const match = /^(\d{1,12})(?:\.(\d+))?$/.exec(text.trim());
+  if (!match) return null;
+  const digits = minorDigits(currency);
+  const fraction = match[2] ?? '';
+  if (fraction.length > digits && /[1-9]/.test(fraction.slice(digits))) return null;
+  return Number(match[1]) * 10 ** digits + (digits > 0 ? Number(fraction.slice(0, digits).padEnd(digits, '0')) : 0);
+}
+
 export interface MoneyView {
   moneda: string;
   monto: string;

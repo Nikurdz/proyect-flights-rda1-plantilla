@@ -18,7 +18,7 @@ import {
 } from './dto/ofertas.dto';
 import { OfertasService } from './ofertas.service';
 
-const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, SERVICE_UNAVAILABLE } = HttpStatus;
+const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, TOO_MANY_REQUESTS, SERVICE_UNAVAILABLE } = HttpStatus;
 
 @ProblemController('ofertas', 'E-commerce · Ofertas y checkout')
 @UseGuards(JwtAuthGuard)
@@ -37,7 +37,7 @@ export class OfertasController {
       'Requiere sesión: de cliente o de invitado (POST /auth/invitado).',
   })
   @ApiResponse({ status: 201, type: OfertaViewDto })
-  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_FOUND, CONFLICT, UNPROCESSABLE_ENTITY, SERVICE_UNAVAILABLE)
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_FOUND, CONFLICT, UNPROCESSABLE_ENTITY, TOO_MANY_REQUESTS, SERVICE_UNAVAILABLE)
   armar(@CurrentAuth() auth: AuthClaims, @Headers('idempotency-key') key: string, @Body() dto: ArmarOfertaDto) {
     return this.ofertas.armar(auth, key, dto);
   }

@@ -3,7 +3,7 @@ import { hashPassword, verifyPassword } from '../identidad/password.util';
 import { Orden, TRANSICIONES } from '../ordenes/entities/orden.entity';
 import { OrdenesService } from '../ordenes/ordenes.service';
 import { NotificacionesService } from '../notificaciones/notificaciones.service';
-import { convertFromUsd, formatAmount, minorDigits } from './moneda.util';
+import { convertFromUsd, formatAmount, minorDigits, parseAmountMinor } from './moneda.util';
 import { SlidingWindowLimiter } from './rate-limiter';
 import { escapeLike, normalizarNombrePasajero, normalizarTexto } from './texto.util';
 
@@ -20,6 +20,26 @@ describe('moneda.util', () => {
     expect(formatAmount(1_370_800, 'COP')).toBe('1370800');
     expect(formatAmount(-250, 'USD')).toBe('-2.50');
     expect(minorDigits('XXX')).toBe(2); // unknown currencies default to cents
+  });
+});
+
+describe('parseAmountMinor (A6)', () => {
+  it('compares amounts, not spellings', () => {
+    expect(parseAmountMinor('1234.5', 'USD')).toBe(123450);
+    expect(parseAmountMinor('1234.50', 'USD')).toBe(123450);
+    expect(parseAmountMinor('1234.500', 'USD')).toBe(123450);
+    expect(parseAmountMinor('1234', 'USD')).toBe(123400);
+  });
+
+  it('rejects decimals a zero-decimal currency cannot express', () => {
+    expect(parseAmountMinor('1371000', 'COP')).toBe(1371000);
+    expect(parseAmountMinor('1371000.00', 'COP')).toBe(1371000);
+    expect(parseAmountMinor('1371000.5', 'COP')).toBeNull();
+    expect(parseAmountMinor('12.345', 'USD')).toBeNull();
+  });
+
+  it('rejects text that is not an amount', () => {
+    for (const bad of ['', 'abc', '-5', '1,5', '1.', '.5']) expect(parseAmountMinor(bad, 'USD')).toBeNull();
   });
 });
 

@@ -9,6 +9,7 @@ import { BookingsService } from '../../services/bookings.service';
 import { IdempotencyService, SagaOutcome } from '../../services/idempotency.service';
 import { OffersService } from '../../services/offers.service';
 import { formatAmount } from '../common/moneda.util';
+import { SlidingWindowLimiter, assertWithinLimit } from '../common/rate-limiter';
 import { Mercado } from '../mercados/entities/mercado.entity';
 import { MercadosService } from '../mercados/mercados.service';
 import { Oferta } from '../ofertas/entities/oferta.entity';
@@ -44,6 +45,8 @@ const problem = (status: HttpStatus, code: ProblemDetailsBody['code'], title: st
 @Injectable()
 export class ComprasService {
   private readonly logger = new Logger(ComprasService.name);
+  // Card testing: a customer has no reason to attempt more than a handful of payments a minute.
+  private readonly purchaseLimiter = new SlidingWindowLimiter(10, 60_000);
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
@@ -64,6 +67,7 @@ export class ComprasService {
    * it and retry with the same key.
    */
   async comprar(auth: AuthClaims, ofertaId: string, dto: CompraDto, key: string): Promise<SagaOutcome & { replayed: boolean }> {
+    assertWithinLimit(this.purchaseLimiter, `buy:${auth.ownerId}`, 'Too many purchase attempts');
     const { outcome, replayed } = await this.idempotency.executeSaga(
       { key, route: ROUTE_COMPRA, ownerId: auth.ownerId, body: { ofertaId, ...dto } },
       () => this.saga(auth, ofertaId, dto, key),
@@ -163,24 +167,33 @@ export class ComprasService {
     pago.ordenId = emision.orden.ordenId;
     await this.bookings.announceConfirmed(oferta.ownerId, emision.outcome);
     await this.pagos.capturar(pago);
+    await this.publicarEmision(emision.orden, mercado);
+
+    return { status: HttpStatus.CREATED, body: this.ordenes.vista(emision.orden) };
+  }
+
+  /**
+   * Announces an issued order (the confirmation e-mail hangs off it). Public because there is no
+   * outbox: ReconciliacionService calls it again for an order whose announcement never produced a
+   * notification (a crash between commit and publish), and the notification consumer is idempotent.
+   */
+  async publicarEmision(orden: Orden, mercado: Mercado): Promise<void> {
     await this.events.publish(
       'OrdenEmitida',
-      emision.orden.ordenId,
+      orden.ordenId,
       {
-        ordenId: emision.orden.ordenId,
-        numeroOrden: emision.orden.numeroOrden,
-        pnr: emision.orden.pnr,
-        clienteId: emision.orden.clienteId,
-        correo: emision.orden.contacto.correo,
+        ordenId: orden.ordenId,
+        numeroOrden: orden.numeroOrden,
+        pnr: orden.pnr,
+        clienteId: orden.clienteId,
+        correo: orden.contacto.correo,
         idioma: mercado.idiomaPorDefecto,
-        total: `${formatAmount(emision.orden.totalMinor, emision.orden.moneda)} ${emision.orden.moneda}`,
-        itinerarios: emision.orden.trayectos.map((t) => ({ numeroVuelo: t.numeroVuelo, origen: t.origen, destino: t.destino, salida: t.salida, llegada: t.llegada, familia: t.familia })),
-        pasajeros: emision.orden.pasajeros.map((p) => ({ nombres: p.nombres, apellidos: p.apellidos, tipo: p.tipo, eTicket: p.eTicket })),
+        total: `${formatAmount(orden.totalMinor, orden.moneda)} ${orden.moneda}`,
+        itinerarios: orden.trayectos.map((t) => ({ numeroVuelo: t.numeroVuelo, origen: t.origen, destino: t.destino, salida: t.salida, llegada: t.llegada, familia: t.familia })),
+        pasajeros: orden.pasajeros.map((p) => ({ nombres: p.nombres, apellidos: p.apellidos, tipo: p.tipo, eTicket: p.eTicket })),
       },
       { market: mercado.codigo },
     );
-
-    return { status: HttpStatus.CREATED, body: this.ordenes.vista(emision.orden) };
   }
 
   /**
@@ -194,7 +207,7 @@ export class ComprasService {
       this.logger.error(`Issuance failed for offer ${oferta.ofertaId}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
     }
 
-    await this.pagos.anular(pago);
+    const anulado = await this.pagos.anular(pago);
     const fallida = await this.ordenes.registrarFallida(oferta, pago, motivo);
 
     // If the inventory hold survived the failure the customer can simply try again.
@@ -215,7 +228,9 @@ export class ComprasService {
         status,
         'ISSUANCE_FAILED_COMPENSATED',
         'Ticket issuance failed; payment released',
-        `Order ${fallida.numeroOrden} could not be issued (${motivo}). The payment authorisation was released and you were not charged.`,
+        anulado
+          ? `Order ${fallida.numeroOrden} could not be issued (${motivo}). The payment authorisation was released and you were not charged.`
+          : `Order ${fallida.numeroOrden} could not be issued (${motivo}). You will not be charged: the payment authorisation is being released and will disappear shortly.`,
       ),
     };
   }

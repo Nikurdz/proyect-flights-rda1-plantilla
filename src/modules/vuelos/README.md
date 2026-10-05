@@ -49,7 +49,11 @@ La compra **revalida el precio** (si cambió → `409 PRICE_CHANGED` hasta que e
 
 **Simulado en RDA1** (sin servicio real detrás, claramente marcado en los logs): la **pasarela de pago**, el **antifraude** y el **canal de correo**. Están detrás de puertos (`pagos/ports`, `notificaciones/ports`), de modo que un adaptador real los reemplaza sin tocar el dominio. Tokens de prueba de la pasarela: `tok_<visa|mastercard|amex|diners>_ok` aprueba; `tok_declined`, `tok_insufficient`, `tok_expired`, `tok_3ds` la rechazan; `tok_fraud` y `tok_review` los rechaza el antifraude; `tok_<marca>_capture_fail` aprueba pero falla la captura. Nunca se recibe ni guarda un número de tarjeta (RN-18).
 
-**Datos sensibles**: pasajeros, contacto y facturación se guardan **cifrados en reposo** (AES-256-GCM, `DATA_ENCRYPTION_KEY`); las contraseñas con scrypt; los tokens de verificación solo como hash. La recuperación pública de una orden exige número o PNR **más** apellido, no devuelve datos de contacto y limita los intentos por IP.
+**Datos sensibles**: pasajeros (también los de la reserva GDS, `vuelos_passengers`), contacto y facturación se guardan **cifrados en reposo** (AES-256-GCM, `DATA_ENCRYPTION_KEY`); las contraseñas con scrypt; los tokens de verificación solo como hash. La recuperación pública de una orden exige número o PNR **más** apellido, no devuelve datos de contacto y limita los intentos por IP. También tienen límite (en memoria, por instancia): el login, la sesión de invitado y la verificación de correo por IP, y armar ofertas y pagar por cliente.
+
+**Reconciliación** (`ordenes/reconciliacion.service.ts`, cada 60 s): como no hay broker ni outbox en esta fase, cierra lo que un corte o una caída de la pasarela deja a medias: captura los pagos `CAPTURA_PENDIENTE`, anula las autorizaciones `ANULACION_PENDIENTE` (la saga registra la orden `FALLIDA_COMPENSADA` aunque la pasarela no pueda anular al instante) y vuelve a anunciar las órdenes emitidas cuya confirmación nunca se envió. Cada paso es idempotente.
+
+**Fase actual**: solo se vende cabina `ECONOMY` y no se admite equipaje extra (se rechazan con 422 en vez de aceptarse en silencio); una reserva no se confirma si el vuelo ya despegó.
 
 **Fuera de R1** (siguientes liberaciones del SRS): post-venta (cambios, devoluciones, retracto), check-in, adicionales, millas y Wallet, socios, atención y analítica; medios de pago locales y 3-D Secure; verificación en dos pasos; GraphQL BFF.
 

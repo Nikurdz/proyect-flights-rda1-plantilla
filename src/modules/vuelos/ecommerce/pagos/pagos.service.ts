@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, In, Repository } from 'typeorm';
+import { EntityManager, In, IsNull, LessThan, Not, Repository } from 'typeorm';
 import { DomainEventBus } from '../../common/domain-event-bus';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { minorDigits } from '../common/moneda.util';
@@ -23,6 +23,7 @@ export type ResultadoAutorizacion =
   | { ok: false; pago: Pago; codigo: 'PAYMENT_DECLINED' | 'PAYMENT_REJECTED_BY_FRAUD'; detalle: string };
 
 const CAPTURE_ATTEMPTS = 3;
+const VOID_ATTEMPTS = 3;
 
 /** D08. Authorises, captures and voids card payments through the gateway and fraud ports. */
 @Injectable()
@@ -139,12 +140,51 @@ export class PagosService {
     return pago;
   }
 
-  /** Compensation (RN-19): releases the authorisation when the ticket could not be issued. Repeatable. */
-  async anular(pago: Pago): Promise<Pago> {
-    if (pago.autorizacionRef) await this.pasarela.anular(pago.autorizacionRef);
-    await this.pagos.update(pago.pagoId, { estado: 'ANULADO' });
-    pago.estado = 'ANULADO';
-    await this.events.publish('PagoAnulado', pago.pagoId, { pagoId: pago.pagoId, ofertaId: pago.ofertaId }, { market: pago.mercado });
-    return pago;
+  /**
+   * Compensation (RN-19): releases the authorisation when the ticket could not be issued. Repeatable,
+   * and it never throws: if the gateway keeps failing the payment is parked as ANULACION_PENDIENTE
+   * for the reconciler, so the caller can still record the failed order. Returns whether it was voided.
+   */
+  async anular(pago: Pago): Promise<boolean> {
+    for (let attempt = 1; attempt <= VOID_ATTEMPTS; attempt++) {
+      try {
+        if (pago.autorizacionRef) await this.pasarela.anular(pago.autorizacionRef);
+        await this.pagos.update(pago.pagoId, { estado: 'ANULADO' });
+        pago.estado = 'ANULADO';
+        await this.events.publish('PagoAnulado', pago.pagoId, { pagoId: pago.pagoId, ofertaId: pago.ofertaId }, { market: pago.mercado });
+        return true;
+      } catch (error) {
+        this.logger.warn(`Void attempt ${attempt}/${VOID_ATTEMPTS} failed for payment ${pago.pagoId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    await this.pagos.update(pago.pagoId, { estado: 'ANULACION_PENDIENTE' });
+    pago.estado = 'ANULACION_PENDIENTE';
+    this.logger.error(`Payment ${pago.pagoId} could not be voided: left as ANULACION_PENDIENTE for reconciliation`);
+    return false;
+  }
+
+  /**
+   * Finishes what a crash or a gateway outage left half-done: captures payments of issued orders
+   * (CAPTURA_PENDIENTE, or AUTORIZADO with an order older than the grace period) and voids the
+   * authorisations of failed issuances (ANULACION_PENDIENTE). Returns how many were settled.
+   */
+  async reconciliarPendientes(graceMs = 60_000): Promise<number> {
+    const before = new Date(Date.now() - graceMs);
+    const pendientes = await this.pagos.find({
+      where: [
+        { estado: 'CAPTURA_PENDIENTE' },
+        { estado: 'AUTORIZADO', ordenId: Not(IsNull()), actualizadoEn: LessThan(before) },
+        { estado: 'ANULACION_PENDIENTE' },
+      ],
+      order: { actualizadoEn: 'ASC' },
+      take: 50,
+    });
+
+    let settled = 0;
+    for (const pago of pendientes) {
+      const resuelto = pago.estado === 'ANULACION_PENDIENTE' ? await this.anular(pago) : (await this.capturar(pago)).estado === 'CAPTURADO';
+      if (resuelto) settled++;
+    }
+    return settled;
   }
 }

@@ -8,7 +8,7 @@ import { todayUtc } from '../../common/date.util';
 import { uniqueViolationColumns } from '../../common/db-errors';
 import { DomainEventBus } from '../../common/domain-event-bus';
 import { HTTP_LOCKED, ProblemDetailsException } from '../../common/problem-details.exception';
-import { SlidingWindowLimiter } from '../common/rate-limiter';
+import { SlidingWindowLimiter, assertWithinLimit } from '../common/rate-limiter';
 import { MercadosService } from '../mercados/mercados.service';
 import { ClienteViewDto, LoginDto, PreferenciasDto, RegistroClienteDto } from './dto/identidad.dto';
 import { Cliente } from './entities/cliente.entity';
@@ -27,6 +27,8 @@ const invalidCredentials = () =>
 @Injectable()
 export class IdentidadService {
   private readonly loginLimiter = new SlidingWindowLimiter(20, 15 * 60_000);
+  private readonly guestLimiter = new SlidingWindowLimiter(120, 60 * 60_000);
+  private readonly verifyLimiter = new SlidingWindowLimiter(10, 15 * 60_000);
   private dummyHash?: Promise<string>;
 
   constructor(
@@ -91,7 +93,8 @@ export class IdentidadService {
     return this.vista(cliente);
   }
 
-  async verificarCorreo(token: string): Promise<void> {
+  async verificarCorreo(token: string, ip: string): Promise<void> {
+    assertWithinLimit(this.verifyLimiter, `verify:${ip}`, 'Too many verification attempts');
     const cliente = await this.clientes.findOne({ where: { tokenVerificacionHash: sha256(token) } });
     if (!cliente || !cliente.tokenVerificacionVenceEn || cliente.tokenVerificacionVenceEn.getTime() < Date.now()) {
       throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Invalid or expired token', 'The verification link is invalid or has expired.', [
@@ -130,7 +133,8 @@ export class IdentidadService {
   }
 
   /** RF-CHK-001: buying without an account uses a short-lived guest identity. */
-  invitado(): SignedToken {
+  invitado(ip: string): SignedToken {
+    assertWithinLimit(this.guestLimiter, `guest:${ip}`, 'Too many guest sessions');
     return this.tokens.sign({ ownerId: `guest:${randomBytes(16).toString('hex')}`, kind: 'guest', roles: [] });
   }
 

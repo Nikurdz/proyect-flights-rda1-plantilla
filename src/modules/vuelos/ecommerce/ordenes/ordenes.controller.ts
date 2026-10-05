@@ -32,7 +32,7 @@ export class ComprasController {
       'Un pago rechazado devuelve 402 y la oferta sigue vigente para probar otro medio (RF-PAY-009).',
   })
   @ApiResponse({ status: 201, type: OrdenViewDto })
-  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, PAYMENT_REQUIRED, BAD_GATEWAY, SERVICE_UNAVAILABLE)
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, PAYMENT_REQUIRED, TOO_MANY_REQUESTS, BAD_GATEWAY, SERVICE_UNAVAILABLE)
   async comprar(
     @CurrentAuth() auth: AuthClaims,
     @Param() params: OfertaParamDto,

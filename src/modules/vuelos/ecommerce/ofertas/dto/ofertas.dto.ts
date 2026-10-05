@@ -220,7 +220,7 @@ export class AceptarCondicionesDto {
 
 export class AceptarPrecioDto {
   @ApiProperty({ example: '1371000', description: 'El nuevo total, tal como lo devolvió la revalidación.' })
-  @Matches(/^\d+(\.\d{1,2})?$/)
+  @Matches(/^\d{1,12}(\.\d{1,6})?$/)
   totalAceptado: string;
 }
 

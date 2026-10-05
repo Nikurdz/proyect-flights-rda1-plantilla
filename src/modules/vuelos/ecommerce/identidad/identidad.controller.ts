@@ -28,16 +28,17 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Sesión de invitado', description: 'RF-CHK-001: comprar sin cuenta. El viaje se recupera luego con número de orden y apellido.' })
   @ApiResponse({ status: 201, type: TokenViewDto })
-  invitado() {
-    return this.identidad.invitado();
+  @ApiProblemResponses(TOO_MANY_REQUESTS)
+  invitado(@Ip() ip: string) {
+    return this.identidad.invitado(ip);
   }
 
   @Post('verificar-correo')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Confirmar el correo con el token recibido', description: 'RF-IAM-001.' })
-  @ApiProblemResponses(BAD_REQUEST)
-  verificarCorreo(@Body() dto: VerificarCorreoDto) {
-    return this.identidad.verificarCorreo(dto.token);
+  @ApiProblemResponses(BAD_REQUEST, TOO_MANY_REQUESTS)
+  verificarCorreo(@Body() dto: VerificarCorreoDto, @Ip() ip: string) {
+    return this.identidad.verificarCorreo(dto.token, ip);
   }
 }
 

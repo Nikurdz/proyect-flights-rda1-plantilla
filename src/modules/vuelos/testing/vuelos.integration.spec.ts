@@ -456,6 +456,55 @@ describeIntegration('Vuelos core against a real Postgres', () => {
     });
   });
 
+  describe('second audit fixes', () => {
+    it('refuses a premium cabin instead of selling it at economy fares (A1)', async () => {
+      const offer = await searchOffer(dayAhead(31));
+      const body = holdBody(offer);
+      body.itinerarySelections = body.itinerarySelections.map((s) => ({ ...s, cabinClass: 'BUSINESS' }));
+      const res = await createHold('owner-a1', body).expect(422);
+      expect(res.body.invalidParams[0].name).toBe('itinerarySelections.cabinClass');
+    });
+
+    it('refuses extra baggage it would neither store nor charge (A2)', async () => {
+      const offer = await searchOffer(dayAhead(32));
+      const hold = await createHold('owner-a2', holdBody(offer)).expect(201);
+      const withBag = pax('a1', { extraBaggage: [{ itineraryId: offer.itineraries[0].itineraryId, quantity: 1 }] });
+      const res = await createBooking('owner-a2', hold.body.holdId, [withBag], 'pay_bag_000001').expect(422);
+      expect(res.body.invalidParams[0].name).toBe('passengers.extraBaggage');
+      expect((await holdRow(hold.body.holdId)).status).toBe('HELD'); // nothing was consumed
+    });
+
+    it('does not confirm a hold whose flight has already departed (A8)', async () => {
+      const offer = await searchOffer(dayAhead(33));
+      const hold = await createHold('owner-a8', holdBody(offer)).expect(201);
+      const { vueloId } = (await holdRow(hold.body.holdId)).inventory[0];
+      await ds.getRepository(Vuelo).update({ id: vueloId }, { fechaSalida: new Date(Date.now() - 3_600_000), fechaLlegada: new Date(Date.now() + 3_600_000) });
+
+      const res = await createBooking('owner-a8', hold.body.holdId, [pax('a1')], 'pay_late_000001').expect(410);
+      expect(res.body.code).toBe('OFFER_NO_LONGER_AVAILABLE');
+      expect(await ds.getRepository(Booking).count({ where: { ownerId: 'owner-a8' } })).toBe(0);
+    });
+
+    it('answers 501 for write stubs even without an Idempotency-Key (A9)', async () => {
+      const res = await api().post(`/api/v1/bookings/${randomUUID()}/cancel`).set(auth('u1')).send({ quoteId: randomUUID(), reason: 'Change of plans' });
+      expect(res.status).toBe(501);
+    });
+
+    it('stores passenger identity and contact data encrypted (C1)', async () => {
+      await bookOne('owner-c1', dayAhead(34), 'pay_pii_0000001');
+      const rows: Record<string, string>[] = await ds.query(
+        `SELECT "firstName", "lastName", "documentNumber", "birthDate", "contactEmail", "contactPhone" FROM "${ctx.schema}"."vuelos_passengers"`,
+      );
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        for (const value of Object.values(row)) expect(value.startsWith('v1:')).toBe(true);
+      }
+      const dump = JSON.stringify(rows);
+      expect(dump).not.toContain('Tapia');
+      expect(dump).not.toContain('example.com');
+    });
+  });
+
   describe('listing (A4/M3)', () => {
     it('paginates by cursor, filters, and validates its query', async () => {
       const owner = 'owner-list';

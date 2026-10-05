@@ -115,6 +115,11 @@ export class BookingsService {
     const firstFlight = ordered[0];
     const lastFlight = ordered[ordered.length - 1];
 
+    // A hold taken before departure must not turn into a booking once the flight has left.
+    if (new Date(firstFlight.fechaSalida).getTime() <= Date.now()) {
+      throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight already departed', `Flight ${firstFlight.codigoVuelo} has already departed.`);
+    }
+
     this.validatePassengers(request, hold.passengersBreakdown, firstFlight, lastFlight, vuelos);
 
     if (await manager.exists(Booking, { where: { paymentReference: request.payment.paymentReference } })) {
@@ -227,6 +232,18 @@ export class BookingsService {
           { name: 'passengers', reason: `expected ${countFor(breakdown, type)} ${type}` },
         );
       }
+    }
+
+    // Extra baggage is neither stored nor charged yet: refuse it rather than let the customer believe it was bought.
+    const withBaggage = request.passengers.find((p) => (p.extraBaggage ?? []).length > 0);
+    if (withBaggage) {
+      throw new ProblemDetailsException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'VALIDATION_FAILED',
+        'Extra baggage not available',
+        `Extra baggage cannot be purchased in this phase (passenger ${withBaggage.passengerId}).`,
+        [{ name: 'passengers.extraBaggage', reason: 'not supported in this phase' }],
+      );
     }
 
     assertNoDuplicatePassengers(request.passengers);

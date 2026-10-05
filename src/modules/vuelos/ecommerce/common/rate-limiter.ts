@@ -1,3 +1,6 @@
+import { HttpStatus } from '@nestjs/common';
+import { ProblemDetailsException } from '../../common/problem-details.exception';
+
 /**
  * Small in-memory sliding-window limiter for abuse-prone public endpoints (login, order
  * recovery: RNF-19). It is per process, so it slows brute force on one instance; a shared
@@ -30,5 +33,13 @@ export class SlidingWindowLimiter {
     for (const [key, times] of this.hits) {
       if (times.every((at) => now - at >= this.windowMs)) this.hits.delete(key);
     }
+  }
+}
+
+/** Consumes one hit of `limiter` for `key`; answers 429 RATE_LIMIT_EXCEEDED once the window is full. */
+export function assertWithinLimit(limiter: SlidingWindowLimiter, key: string, title: string): void {
+  const limit = limiter.consume(key);
+  if (!limit.allowed) {
+    throw new ProblemDetailsException(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMIT_EXCEEDED', title, `Try again in ${limit.retryAfterSeconds} seconds.`);
   }
 }
