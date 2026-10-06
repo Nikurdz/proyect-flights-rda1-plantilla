@@ -117,9 +117,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     if (composicion.ninos) pasajeros.push(pasajero('c1', 'CHILD', yearsBefore(8, salida)));
     await api().put(`/api/v1/ofertas/${ofertaId}/pasajeros`).set(bearer(token)).send({ pasajeros, contacto: { correo: 'comprador@example.com', telefono: '+593999999999' } }).expect(200);
 
-    const facturacion = mercado === 'co'
-      ? { tipoIdentificacion: 'CC', numeroIdentificacion: '1020304050', razonSocial: 'María Pérez', direccion: 'Calle 1 # 2-3', pais: 'CO' }
-      : { tipoIdentificacion: 'CEDULA', numeroIdentificacion: '1712345678', razonSocial: 'María Peña', direccion: 'Av. Amazonas 123', pais: 'EC' };
+    const facturacion = { tipoIdentificacion: 'CEDULA', numeroIdentificacion: '1712345678', razonSocial: 'María Peña', direccion: 'Av. Amazonas 123', pais: 'EC' };
     await api().put(`/api/v1/ofertas/${ofertaId}/facturacion`).set(bearer(token)).send(facturacion).expect(200);
     await api().post(`/api/v1/ofertas/${ofertaId}/condiciones`).set(bearer(token)).send({ versionTerminos: '2026-10', versionCondicionesTransporte: '2026-10' }).expect(200);
   }
@@ -164,9 +162,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(ec.body.mediosPago[0].marcas).toEqual(expect.arrayContaining(['VISA', 'DINERS']));
       expect(ec.body.tipoCambioDesdeUsd).toBeUndefined(); // the conversion rate stays server-side
 
-      const co = await api().get('/api/v1/mercados/co').expect(200);
-      expect(co.body).toMatchObject({ moneda: 'COP', decimalesMoneda: 0 });
-      expect(co.body.reglasRegulatorias.retracto).toEqual({ diasHabiles: 5 });
+      await api().get('/api/v1/mercados/co').expect(404); // USD only: there is no second market
 
       await api().get('/api/v1/mercados/xx').expect(404);
       await api().get('/api/v1/mercados/NOT_A_MARKET!').expect(400);
@@ -311,14 +307,12 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(items.find((i) => i.numeroVuelo === 'LA800')!.ultimosAsientos).toBe(false);
     });
 
-    it('quotes in the market currency without decimals for COP, and differently per passenger type', async () => {
+    it('quotes in USD with two decimals', async () => {
       const date = dayAhead(42);
-      const usd = (await disponibilidad({ origin: 'BOG', destination: 'SCL', outbound: date, adt: 1, sort: 'MAS_BARATOS' })).body.trayectos[0].itinerarios[0];
-      const cop = (await disponibilidad({ origin: 'BOG', destination: 'SCL', outbound: date, adt: 1, sort: 'MAS_BARATOS', mercado: 'co' })).body.trayectos[0].itinerarios[0];
+      const one = (await disponibilidad({ origin: 'BOG', destination: 'SCL', outbound: date, adt: 1, sort: 'MAS_BARATOS' })).body.trayectos[0].itinerarios[0];
 
-      expect(usd.precioDesde.moneda).toBe('USD');
-      expect(cop.precioDesde).toEqual({ moneda: 'COP', monto: String(Math.round(money(usd.precioDesde) * 4000)) });
-      expect(cop.precioDesde.monto).not.toContain('.');
+      expect(one.precioDesde.moneda).toBe('USD');
+      expect(one.precioDesde.monto).toMatch(/^\d+\.\d{2}$/);
     });
 
     it('returns an empty result with nearby dates instead of an error when a day has no flights (RF-SHP-024)', async () => {
@@ -333,7 +327,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(alternatives.length).toBeGreaterThan(0);
       expect(alternatives.map((a) => a.fecha)).not.toContain(date);
 
-      const none = await disponibilidad({ origin: 'BOG', destination: 'MIA', outbound: date, adt: 1 }).expect(200);
+      const none = await disponibilidad({ origin: 'CUZ', destination: 'MAD', outbound: date, adt: 1 }).expect(200); // a route nobody flies
       expect(none.body).toMatchObject({ sinDisponibilidad: true });
       expect(none.body.trayectos[0].fechasAlternativas).toEqual([]);
     });
@@ -557,7 +551,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(mails.body[0]).toMatchObject({ tipo: 'CONFIRMACION_COMPRA', destinatario: 'comprador@example.com', estado: 'ENVIADO' });
       expect(mails.body[0].cuerpo).toContain(res.body.pnr);
       expect(mails.body[0].cuerpo).toContain(res.body.pasajeros[0].eTicket);
-      expect(mails.body[0].cuerpo).toContain('Booking Hub Vuelos Ecuador'); // the market's legal entity
+      expect(mails.body[0].cuerpo).toContain('RAM Alliance'); // the market's legal entity
 
       // The owner and the public recovery both see it; wrong data answers like a missing order.
       await api().get(`/api/v1/ordenes/${res.body.numeroOrden}`).set(bearer(token)).expect(200);
@@ -775,18 +769,17 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect((await pagos(ofertaId)).filter((p) => ['AUTORIZADO', 'CAPTURADO'].includes(p.estado))).toHaveLength(1);
     });
 
-    it('stops at a price change: the customer must accept the new total, in COP, before paying (RN-12)', async () => {
+    it('stops at a price change: the customer must accept the new total before paying (RN-12)', async () => {
       const { token } = await customer();
-      const { ofertaId, oferta } = await ofertaLista(token, { mercado: 'co' });
-      expect(oferta.moneda).toBe('COP');
-      expect(oferta.total.monto).not.toContain('.');
+      const { ofertaId, oferta } = await ofertaLista(token);
+      expect(oferta.moneda).toBe('USD');
 
       const reval = await api().post(`/api/v1/ofertas/${ofertaId}/revalidacion`).set(bearer(token)).expect(200);
       expect(reval.body).toMatchObject({ vigente: true, cambioDePrecio: false });
 
       // The market's exchange rate moves: every quote changes.
-      const version = (await api().get('/api/v1/mercados/co')).body.version as number;
-      await api().put('/api/v1/admin/mercados/co').set(bearer(adminToken)).send({ versionEsperada: version, tipoCambioDesdeUsd: 4400 }).expect(200);
+      const version = (await api().get('/api/v1/mercados/ec')).body.version as number;
+      await api().put('/api/v1/admin/mercados/ec').set(bearer(adminToken)).send({ versionEsperada: version, tipoCambioDesdeUsd: 1.1 }).expect(200);
 
       const changed = await api().post(`/api/v1/ofertas/${ofertaId}/revalidacion`).set(bearer(token)).expect(200);
       expect(changed.body.cambioDePrecio).toBe(true);
@@ -804,9 +797,9 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
 
       const paid = await comprar(token, ofertaId).expect(201);
       expect(paid.body.total).toEqual(changed.body.precioNuevo);
-      expect((await pagos(ofertaId))[0]).toMatchObject({ moneda: 'COP', montoMinor: Number(changed.body.precioNuevo.monto) });
+      expect((await pagos(ofertaId))[0]).toMatchObject({ moneda: 'USD', montoMinor: Math.round(Number(changed.body.precioNuevo.monto) * 100) });
 
-      await api().put('/api/v1/admin/mercados/co').set(bearer(adminToken)).send({ versionEsperada: version + 1, tipoCambioDesdeUsd: 4000 }).expect(200);
+      await api().put('/api/v1/admin/mercados/ec').set(bearer(adminToken)).send({ versionEsperada: version + 1, tipoCambioDesdeUsd: 1 }).expect(200);
     });
 
     it('refuses to sell into a market that was closed after the offer was built', async () => {
@@ -821,6 +814,63 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
 
       await api().put('/api/v1/admin/mercados/ec').set(bearer(adminToken)).send({ versionEsperada: version + 1, activo: true }).expect(200);
       await comprar(token, ofertaId).expect(201);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------
+  describe('back-office: only an ADMIN reads across customers', () => {
+    it('refuses everyone but an ADMIN (401 anonymous, 403 guest and customer) on every admin read', async () => {
+      const mine = await customer();
+      const guestToken = await guest();
+      for (const path of ['/api/v1/admin/ordenes', '/api/v1/admin/ordenes/ORD-AAAAAAAAAA', '/api/v1/admin/vuelos']) {
+        await api().get(path).expect(401);
+        await api().get(path).set(bearer(guestToken)).expect(403);
+        await api().get(path).set(bearer(mine.token)).expect(403);
+      }
+    });
+
+    it('lists and filters orders of all customers for an ADMIN, and shows the full detail', async () => {
+      const buyer = await customer();
+      const { ofertaId } = await ofertaLista(buyer.token);
+      const bought = (await comprar(buyer.token, ofertaId).expect(201)).body;
+
+      const list = await api().get('/api/v1/admin/ordenes').query({ estado: 'EMITIDA', limit: 100 }).set(bearer(adminToken)).expect(200);
+      const found = list.body.items.find((o: { numeroOrden: string }) => o.numeroOrden === bought.numeroOrden);
+      expect(found).toMatchObject({ comprador: 'cliente', clienteId: buyer.clienteId, estado: 'EMITIDA' });
+      expect(found.contacto).toBeDefined(); // the back office sees the contact
+
+      const byPnr = await api().get('/api/v1/admin/ordenes').query({ pnr: bought.pnr }).set(bearer(adminToken)).expect(200);
+      expect(byPnr.body.items.map((o: { numeroOrden: string }) => o.numeroOrden)).toEqual([bought.numeroOrden]);
+
+      const detail = await api().get(`/api/v1/admin/ordenes/${bought.numeroOrden}`).set(bearer(adminToken)).expect(200);
+      expect(detail.body.numeroOrden).toBe(bought.numeroOrden);
+      await api().get('/api/v1/admin/ordenes/ORD-AAAAAAAAAA').set(bearer(adminToken)).expect(404);
+
+      // The customer API stays owner-only: another customer cannot read it.
+      const other = await customer();
+      await api().get(`/api/v1/ordenes/${bought.numeroOrden}`).set(bearer(other.token)).expect(404);
+    });
+
+    it('pages orders by cursor and validates the filters', async () => {
+      const page1 = await api().get('/api/v1/admin/ordenes').query({ limit: 1 }).set(bearer(adminToken)).expect(200);
+      expect(page1.body.items).toHaveLength(1);
+      expect(page1.body.nextCursor).toBeDefined();
+      const page2 = await api().get('/api/v1/admin/ordenes').query({ limit: 1, cursor: page1.body.nextCursor }).set(bearer(adminToken)).expect(200);
+      expect(page2.body.items[0].numeroOrden).not.toBe(page1.body.items[0].numeroOrden);
+
+      await api().get('/api/v1/admin/ordenes').query({ estado: 'NOPE' }).set(bearer(adminToken)).expect(400);
+      await api().get('/api/v1/admin/ordenes').query({ cursor: 'garbage' }).set(bearer(adminToken)).expect(400);
+    });
+
+    it('lists flights with their inventory, filtered by route and flight number', async () => {
+      const route = await api().get('/api/v1/admin/vuelos').query({ origen: 'BOG', destino: 'SCL', limit: 5 }).set(bearer(adminToken)).expect(200);
+      expect(route.body.items.length).toBeGreaterThan(0);
+      for (const v of route.body.items) expect(v).toMatchObject({ origen: 'BOG', destino: 'SCL' });
+      expect(route.body.items[0]).toEqual(expect.objectContaining({ asientosDisponibles: expect.any(Number), capacidadTotal: expect.any(Number), precioBaseUsd: expect.any(Number) }));
+
+      const one = await api().get('/api/v1/admin/vuelos').query({ vuelo: 'LA1500', fecha: dayAhead(20) }).set(bearer(adminToken)).expect(200);
+      expect(one.body.items).toHaveLength(1);
+      expect(one.body.items[0].codigoVuelo).toBe('LA1500');
     });
   });
 
@@ -886,6 +936,6 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     const second = await seedEcommerce(ds, ADMIN);
     expect(second).toEqual({ mercados: 0, localidades: 0, plantillas: 0, administradores: 0 });
     expect(await ds.getRepository(Localidad).count()).toBe(before);
-    expect(await ds.getRepository(Mercado).count()).toBe(2);
+    expect(await ds.getRepository(Mercado).count()).toBe(1);
   });
 });

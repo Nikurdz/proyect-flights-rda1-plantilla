@@ -36,6 +36,7 @@ Simplificaciones deliberadas y documentadas (no omisiones silenciosas):
 | D06/D07 Oferta y checkout | `POST /ofertas` · `GET/DELETE /ofertas/{id}` · `POST …/revalidacion` · `POST …/aceptacion-precio` · `PUT …/pasajeros` · `PUT …/facturacion` · `POST …/condiciones` · `GET …/medios-pago` |
 | D08/D09 Pago y órdenes | `POST /ofertas/{id}/compra` (saga) · `GET /ordenes/{numero}` · `GET /ordenes?numero=` o `?pnr=` más `apellido=` (recuperación pública) · `GET /clientes/{id o me}/ordenes` |
 | D16 Notificaciones | automático por eventos de dominio · `GET /admin/notificaciones` (ADMIN) |
+| Back-office | `GET /admin/ordenes` (filtros y cursor) · `GET /admin/ordenes/:numero` · `GET /admin/vuelos` (inventario), solo ADMIN: es lo único que lee datos de otros clientes |
 
 Flujo de compra (SRS §8.4), con `Idempotency-Key` en `POST /ofertas` y `POST /ofertas/{id}/compra`:
 

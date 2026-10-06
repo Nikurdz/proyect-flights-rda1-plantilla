@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, Not } from 'typeorm';
 import { Localidad } from '../catalogo/entities/localidad.entity';
 import { Cliente } from '../identidad/entities/cliente.entity';
 import { hashPassword } from '../identidad/password.util';
@@ -7,8 +7,8 @@ import { Mercado } from '../mercados/entities/mercado.entity';
 import { PlantillaNotificacion } from '../notificaciones/entities/plantilla.entity';
 import { normalizarTexto } from '../common/texto.util';
 
-// All values below are EXAMPLE data for the prototype (legal entities, URLs, instalment plans,
-// exchange rate). Real values come from the business through the admin API (RF-ADM-001).
+// Single market, USD only. All values below are EXAMPLE data for the prototype (legal entity, URLs,
+// instalment plans). Real values come from the business through the admin API (RF-ADM-001).
 const MERCADOS: Partial<Mercado>[] = [
   {
     codigo: 'ec',
@@ -24,43 +24,14 @@ const MERCADOS: Partial<Mercado>[] = [
     // A-13 (arrepentimiento in Ecuador) is an open legal question: nothing configured yet.
     reglasRegulatorias: {},
     textosLegales: {
-      razonSocial: 'Booking Hub Vuelos Ecuador S.A. (dato de ejemplo)',
-      terminos: { version: '2026-10', url: 'https://www.example.com/ec/es/terminos' },
-      privacidad: { version: '2026-10', url: 'https://www.example.com/ec/es/privacidad' },
-      condicionesTransporte: { version: '2026-10', url: 'https://www.example.com/ec/es/condiciones-de-transporte' },
+      razonSocial: 'RAM Alliance (proyecto académico, sin venta real)',
+      terminos: { version: '2026-10', url: '/terminos' },
+      privacidad: { version: '2026-10', url: '/privacidad' },
+      condicionesTransporte: { version: '2026-10', url: '/condiciones-transporte' },
     },
     identificacionesFiscales: [
       { tipo: 'CEDULA', etiqueta: 'Cédula (10 dígitos)', patron: '\\d{10}' },
       { tipo: 'RUC', etiqueta: 'RUC (13 dígitos)', patron: '\\d{13}' },
-      { tipo: 'PASAPORTE', etiqueta: 'Pasaporte', patron: '[A-Za-z0-9]{5,20}' },
-    ],
-    activo: true,
-  },
-  {
-    codigo: 'co',
-    pais: 'CO',
-    nombre: 'Colombia',
-    idiomas: ['es'],
-    idiomaPorDefecto: 'es',
-    moneda: 'COP',
-    tipoCambioDesdeUsd: 4000,
-    productosBuscador: ['VUELOS', 'PAQUETES', 'ALOJAMIENTOS', 'CARROS', 'ASISTENCIA', 'UPGRADE', 'ESIM'],
-    mediosPago: [{ tipo: 'TARJETA', marcas: ['VISA', 'MASTERCARD', 'AMEX', 'DINERS'], cuotasPermitidas: [1, 3, 6, 12, 24, 36], productos: ['PASAJE', 'ADICIONAL'] }],
-    // RF-MKT-007 / RN-23 / RN-24: stored for the post-sale release; not consumed in R1.
-    reglasRegulatorias: {
-      retracto: { diasHabiles: 5 },
-      desistimiento: { retencionPorcentaje: 10, horasAntesDelVuelo: 24, familias: ['FULL', 'STANDARD'] },
-    },
-    textosLegales: {
-      razonSocial: 'Booking Hub Vuelos Colombia S.A.S. (dato de ejemplo)',
-      terminos: { version: '2026-10', url: 'https://www.example.com/co/es/terminos' },
-      privacidad: { version: '2026-10', url: 'https://www.example.com/co/es/privacidad' },
-      condicionesTransporte: { version: '2026-10', url: 'https://www.example.com/co/es/condiciones-de-transporte' },
-    },
-    identificacionesFiscales: [
-      { tipo: 'CC', etiqueta: 'Cédula de ciudadanía', patron: '\\d{6,10}' },
-      { tipo: 'NIT', etiqueta: 'NIT (sin dígito de verificación)', patron: '\\d{9,10}' },
-      { tipo: 'CE', etiqueta: 'Cédula de extranjería', patron: '\\d{6,7}' },
       { tipo: 'PASAPORTE', etiqueta: 'Pasaporte', patron: '[A-Za-z0-9]{5,20}' },
     ],
     activo: true,
@@ -149,6 +120,10 @@ const PLANTILLAS: Partial<PlantillaNotificacion>[] = [
  */
 export async function seedEcommerce(dataSource: DataSource, admin?: { correo: string; contrasena: string }): Promise<Record<string, number>> {
   const mercados = await dataSource.createQueryBuilder().insert().into(Mercado).values(MERCADOS as Mercado[]).orIgnore().returning('"codigo"').execute();
+
+  // The platform sells in USD only: a market with another currency (an earlier seed had COP) stays
+  // on record for old orders but can no longer be sold from.
+  await dataSource.getRepository(Mercado).update({ moneda: Not('USD') }, { activo: false });
 
   const localidades = await dataSource
     .createQueryBuilder()
