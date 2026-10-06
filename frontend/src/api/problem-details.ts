@@ -133,7 +133,7 @@ export function getFriendlyErrorMessage(code: string | undefined, status: number
     case 'PAYMENT_DECLINED':
       return 'El banco rechazó el pago. Tu reserva sigue vigente: prueba con otra tarjeta.';
     case 'PAYMENT_REJECTED_BY_FRAUD':
-      return 'No pudimos aprobar el pago por seguridad. Prueba con otra tarjeta.';
+      return 'No pudimos aprobar el pago por seguridad. Prueba con otra tarjeta; si ya lo intentaste varias veces, empieza con una búsqueda nueva.';
     case 'PAYMENT_METHOD_NOT_ALLOWED':
       return 'Este medio de pago no está disponible para tu compra.';
     case 'ISSUANCE_FAILED_COMPENSATED':

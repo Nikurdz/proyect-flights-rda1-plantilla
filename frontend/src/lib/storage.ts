@@ -67,3 +67,13 @@ export function clearLastOrder(): void {
     // ignore
   }
 }
+
+/** The last order kept for this tab, whichever it is (used to offer adding it to a new account). */
+export function peekLastOrder<T>(): T | null {
+  try {
+    const raw = sessionStorage.getItem(ORDER_KEY);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}

@@ -10,6 +10,8 @@ import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { timeZoneOf } from '../../lib/airports';
 import { fareFamilyLabel, formatDateTime, orderStatusLabel, orderStatusTone, passengerTypeLabel } from '../../lib/labels';
 import { saveLastOrder } from '../../lib/storage';
+import { useSession } from '../../lib/session';
+import { vincularOrden } from '../../api/endpoints/orders';
 
 export const RetrieveOrderPage: React.FC = () => {
   const [identifier, setIdentifier] = useState('');
@@ -22,6 +24,23 @@ export const RetrieveOrderPage: React.FC = () => {
     document.title = 'Gestionar viaje | RAM Alliance';
   }, []);
 
+  const session = useSession();
+  const [linkState, setLinkState] = useState<'idle' | 'busy' | 'done'>('idle');
+  const [linkError, setLinkError] = useState<unknown>(null);
+
+  const addToAccount = async () => {
+    if (!orden) return;
+    setLinkState('busy');
+    setLinkError(null);
+    try {
+      await vincularOrden({ numero: orden.numeroOrden, apellido: apellido.trim() });
+      setLinkState('done');
+    } catch (err) {
+      setLinkError(err);
+      setLinkState('idle');
+    }
+  };
+
   const handleRetrieve = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifier || !apellido) return;
@@ -29,6 +48,8 @@ export const RetrieveOrderPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setOrden(null);
+    setLinkState('idle');
+    setLinkError(null);
 
     const isOrderNumber = identifier.trim().toUpperCase().startsWith('ORD-');
 
@@ -175,6 +196,24 @@ export const RetrieveOrderPage: React.FC = () => {
                 ))}
               </div>
             </div>
+
+            {session?.kind === 'customer' && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">
+                {linkState === 'done' ? (
+                  <p className="font-semibold text-emerald-700" role="status">
+                    Agregado a tu cuenta. Lo verás en <Link to="/mis-ordenes" className="underline">Mis viajes</Link>.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-slate-600">¿Es tu viaje? Guárdalo en tu cuenta.</span>
+                    <Button type="button" variant="outline" size="sm" onClick={addToAccount} isLoading={linkState === 'busy'}>
+                      Agregar a mis viajes
+                    </Button>
+                  </div>
+                )}
+                {linkError != null && <ProblemAlert error={linkError} className="mt-3" />}
+              </div>
+            )}
 
             {/* Total & Action */}
             <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

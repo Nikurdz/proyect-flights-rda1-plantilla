@@ -6,6 +6,7 @@ import { MoneyText } from '../../components/common/MoneyText';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { AddTripForm } from './AddTripForm';
 import { formatDay, orderStatusLabel, orderStatusTone } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 
@@ -80,6 +81,10 @@ export const OrderHistoryPage: React.FC = () => {
               </div>
             ))}
 
+            <div className="pt-4">
+              <AddTripForm />
+            </div>
+
             {hasNextPage && (
               <div className="pt-4 text-center">
                 <Button variant="outline" onClick={() => fetchNextPage()} isLoading={isFetchingNextPage}>
@@ -97,6 +102,9 @@ export const OrderHistoryPage: React.FC = () => {
               <Link to="/">
                 <Button variant="primary">Buscar un vuelo</Button>
               </Link>
+              <div className="mx-auto mt-8 max-w-xl border-t border-slate-100 pt-6">
+                <AddTripForm />
+              </div>
             </div>
           )
         )}

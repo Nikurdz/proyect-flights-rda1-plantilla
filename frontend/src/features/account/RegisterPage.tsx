@@ -4,6 +4,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CheckCircle2, Eye, EyeOff, Lock, Mail, Phone, User } from 'lucide-react';
 import { login, registrarCliente } from '../../api/endpoints/auth';
+import { vincularOrden } from '../../api/endpoints/orders';
+import { peekLastOrder } from '../../lib/storage';
+import type { OrdenViewDto } from '../../api/types';
 import { ProblemDetailsError } from '../../api/problem-details';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
@@ -21,7 +24,7 @@ export const RegisterPage: React.FC = () => {
 
   const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState<unknown>(null);
-  const [created, setCreated] = useState<{ nombres: string; signedIn: boolean } | null>(null);
+  const [created, setCreated] = useState<{ nombres: string; signedIn: boolean; linked: boolean } | null>(null);
 
   const {
     register,
@@ -56,6 +59,9 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
+    // The trip just bought as a guest (if any) is read before signing in, because a new session wipes it.
+    const pendingOrder = peekLastOrder<OrdenViewDto>();
+
     // The account exists; signing in right away is a convenience, so a failure here is not an error.
     let signedIn = false;
     try {
@@ -64,7 +70,19 @@ export const RegisterPage: React.FC = () => {
     } catch (error) {
       if (!(error instanceof ProblemDetailsError)) throw error;
     }
-    setCreated({ nombres: form.nombres, signedIn });
+
+    // Keep that trip: add it to the new account so it shows up in "Mis viajes".
+    let linked = false;
+    const surname = pendingOrder?.pasajeros?.[0]?.apellidos;
+    if (signedIn && pendingOrder && surname) {
+      try {
+        await vincularOrden({ numero: pendingOrder.numeroOrden, apellido: surname });
+        linked = true;
+      } catch {
+        // Not blocking: the trip can be added later from "Mis viajes".
+      }
+    }
+    setCreated({ nombres: form.nombres, signedIn, linked });
   };
 
   if (created) {
@@ -75,6 +93,9 @@ export const RegisterPage: React.FC = () => {
           <p className="mt-4 text-sm leading-relaxed text-slate-700">
             Hola, <strong>{created.nombres}</strong>. Creamos tu cuenta{created.signedIn ? ' y ya iniciaste sesión' : ''}.
           </p>
+          {created.linked && (
+            <p className="mt-2 text-sm font-semibold text-emerald-700">Agregamos tu viaje reciente a tu cuenta.</p>
+          )}
           <p className="mt-2 text-xs leading-relaxed text-slate-500">
             Enviamos un mensaje para verificar tu correo (en este prototipo el envío es simulado). No necesitas verificarlo para comprar.
           </p>
@@ -82,7 +103,7 @@ export const RegisterPage: React.FC = () => {
             {created.signedIn ? (
               <>
                 <Button type="button" variant="primary" size="lg" className="w-full" onClick={() => navigate(next)}>
-                  {next === '/' ? 'Buscar vuelos' : 'Continuar'}
+                  {created.linked ? 'Ver mis viajes' : next === '/' ? 'Buscar vuelos' : 'Continuar'}
                 </Button>
                 <Link to="/mi-cuenta" className="text-xs font-semibold text-brand-gold-dark hover:underline">
                   Ver mi cuenta

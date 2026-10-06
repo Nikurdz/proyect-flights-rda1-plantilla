@@ -43,3 +43,8 @@ export function useHistorialOrdenes(ownerId?: string) {
     enabled: Boolean(ownerId),
   });
 }
+
+/** Adds a trip bought as a guest to the signed-in account (same proof as the public recovery). */
+export async function vincularOrden(params: { numero?: string; pnr?: string; apellido: string }): Promise<OrdenViewDto> {
+  return apiClient<OrdenViewDto>('clientes/me/ordenes', { method: 'POST', body: JSON.stringify(params) });
+}
