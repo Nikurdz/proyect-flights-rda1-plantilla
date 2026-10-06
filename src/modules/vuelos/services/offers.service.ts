@@ -180,6 +180,9 @@ export class OffersService {
       if (new Date(vuelo.fechaSalida).getTime() <= Date.now()) {
         throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight already departed', `Flight ${vuelo.codigoVuelo} has already departed.`);
       }
+      if (vuelo.estado === 'CANCELLED') {
+        throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight cancelled', `Flight ${vuelo.codigoVuelo} was cancelled.`);
+      }
 
       lockedMinor += priceForParty(toMinorUnits(vuelo.precioBase), family.priceMultiplier, breakdown, this.config.taxRate);
       inventory.push({ vueloId: vuelo.id, seats });
@@ -251,30 +254,32 @@ export class OffersService {
     });
 
     if (released === 'expired') {
-      await this.events.publish('hold.expired', holdId, { holdId });
+      await this.events.publish('hold.expired', holdId, { holdId, ownerId, status: 'EXPIRED' });
       throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold expired', `Hold ${holdId} has already expired.`);
     }
     if (released) {
-      await this.events.publish('hold.released', holdId, { holdId });
+      await this.events.publish('hold.released', holdId, { holdId, ownerId, status: 'RELEASED' });
     }
   }
 
   /** Expires one hold if (and only if) it is still HELD past its expiry, restoring its seats. Idempotent. */
   async expireIfDue(holdId: string): Promise<boolean> {
+    let ownerId = '';
     const expired = await this.dataSource.transaction(async (manager) => {
       const hold = await manager.findOne(FlightHold, { where: { holdId }, lock: { mode: 'pessimistic_write' } });
       if (!hold || hold.status !== 'HELD' || hold.expiresAt.getTime() > Date.now()) return false;
+      ownerId = hold.ownerId;
       return this.transition(manager, hold, 'EXPIRED');
     });
     if (expired) {
-      await this.events.publish('hold.expired', holdId, { holdId });
+      await this.events.publish('hold.expired', holdId, { holdId, ownerId, status: 'EXPIRED' });
     }
     return expired;
   }
 
   /** Sweeps every overdue hold. Safe to run from several instances: rows are claimed with SKIP LOCKED. */
   async expireDueHolds(): Promise<number> {
-    const expiredIds: string[] = await this.dataSource.transaction(async (manager) => {
+    const expiredIds: { holdId: string; ownerId: string }[] = await this.dataSource.transaction(async (manager) => {
       const due = await manager
         .getRepository(FlightHold)
         .createQueryBuilder('h')
@@ -283,15 +288,15 @@ export class OffersService {
         .where('h.status = :status AND h.expiresAt < :now', { status: 'HELD', now: new Date() })
         .getMany();
 
-      const ids: string[] = [];
+      const ids: { holdId: string; ownerId: string }[] = [];
       for (const hold of due) {
-        if (await this.transition(manager, hold, 'EXPIRED')) ids.push(hold.holdId);
+        if (await this.transition(manager, hold, 'EXPIRED')) ids.push({ holdId: hold.holdId, ownerId: hold.ownerId });
       }
       return ids;
     });
 
-    for (const holdId of expiredIds) {
-      await this.events.publish('hold.expired', holdId, { holdId });
+    for (const { holdId, ownerId } of expiredIds) {
+      await this.events.publish('hold.expired', holdId, { holdId, ownerId, status: 'EXPIRED' });
     }
     if (expiredIds.length > 0) {
       this.logger.log(`Expired ${expiredIds.length} overdue hold(s) and restored their seats`);

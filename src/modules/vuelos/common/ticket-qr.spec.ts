@@ -1,4 +1,4 @@
-import { buildTicketCode, verifyTicketCode } from './ticket-qr';
+import { buildBoardingCode, buildTicketCode, verifyBoardingCode, verifyTicketCode } from './ticket-qr';
 
 const SECRET = 'a-test-secret-with-more-than-32-characters';
 

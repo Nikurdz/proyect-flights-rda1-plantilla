@@ -1,6 +1,8 @@
 import { Check, Column, Entity, Index, PrimaryGeneratedColumn, Unique } from 'typeorm';
 import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
 
+export type VueloEstado = 'SCHEDULED' | 'CANCELLED';
+
 @Entity('vuelos')
 @Unique('UQ_vuelos_codigo_salida', ['codigoVuelo', 'fechaSalida'])
 @Index('IDX_vuelos_ruta_salida', ['origenIATA', 'destinoIATA', 'fechaSalida'])
@@ -50,4 +52,8 @@ export class Vuelo {
 
   @Column({ type: 'int' })
   durationMinutes: number;
+
+  // CANCELLED flights are closed to search, holds and bookings; an admin cancels or reschedules a flight.
+  @Column({ type: 'varchar', length: 12, default: 'SCHEDULED' })
+  estado: VueloEstado;
 }

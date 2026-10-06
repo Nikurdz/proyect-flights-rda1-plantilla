@@ -91,6 +91,7 @@ describe('BookingsService', () => {
       currency: 'USD',
       expiresAt: new Date(Date.now() + 60_000),
       inventory: [{ vueloId: VUELO_ID, seats: 1 }],
+      itinerarySelections: [{ itineraryId: 'itinerary-1', cabinClass: 'ECONOMY', fareBrand: 'LIGHT' }],
       passengersBreakdown: { adults: 1, youths: 0, children: 0, infants: 0 },
     };
     vuelos = [
@@ -113,7 +114,7 @@ describe('BookingsService', () => {
         { provide: OffersService, useValue: offers },
         { provide: IdempotencyService, useValue: idempotency },
         { provide: DomainEventBus, useValue: events },
-        { provide: VUELOS_CONFIG, useValue: { jwtSecret: 'a-test-secret-with-more-than-32-characters' } },
+        { provide: VUELOS_CONFIG, useValue: { jwtSecret: 'a-test-secret-with-more-than-32-characters', postSale: { baggagePriceMinor: 4000, baggageMaxPerLeg: 2 } } },
       ],
     }).compile();
 

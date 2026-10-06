@@ -1,4 +1,4 @@
-import { Get, HttpStatus, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Get, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
@@ -6,10 +6,21 @@ import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
 import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import { OrdenParamDto } from '../ordenes/dto/ordenes.dto';
-import { AdminAsientosVueloDto, AdminOrdenViewDto, AdminOrdenesPaginaDto, AdminOrdenesQueryDto, AdminVueloParamDto, AdminVuelosPaginaDto, AdminVuelosQueryDto } from './admin.dto';
+import {
+  AdminAccionVueloViewDto,
+  AdminAsientosVueloDto,
+  AdminCancelarVueloDto,
+  AdminOrdenViewDto,
+  AdminOrdenesPaginaDto,
+  AdminOrdenesQueryDto,
+  AdminReprogramarVueloDto,
+  AdminVueloParamDto,
+  AdminVuelosPaginaDto,
+  AdminVuelosQueryDto,
+} from './admin.dto';
 import { AdminService } from './admin.service';
 
-const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND } = HttpStatus;
+const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT } = HttpStatus;
 
 /**
  * Back-office views across customers. Everything else in the API is owner-only; these routes are
@@ -44,6 +55,32 @@ export class AdminController {
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN)
   vuelos(@Query() query: AdminVuelosQueryDto) {
     return this.admin.listarVuelos(query);
+  }
+
+  @Post('vuelos/:vueloId/cancelar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Cancelar un vuelo (ADMIN)',
+    description:
+      'La aerolínea cancela el vuelo: se cierra a la venta, cada reserva confirmada que lo tenía se cancela con reembolso total (sin penalidad, sea cual sea la tarifa) y se emiten los eventos de webhook flight.cancelled y booking.cancelled. El reembolso llega a la pasarela y a la orden por esos eventos.',
+  })
+  @ApiResponse({ status: 200, type: AdminAccionVueloViewDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT)
+  cancelarVuelo(@Param() params: AdminVueloParamDto, @Body() body: AdminCancelarVueloDto) {
+    return this.admin.cancelarVuelo(params.vueloId, body.motivo);
+  }
+
+  @Post('vuelos/:vueloId/reprogramar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Reprogramar un vuelo (ADMIN)',
+    description:
+      'La aerolínea mueve la salida (la duración se conserva): las reservas confirmadas con ese vuelo se actualizan y se emiten los eventos de webhook flight.schedule_changed y booking.changed. Responde 409 si otro vuelo con el mismo número ya sale a esa hora.',
+  })
+  @ApiResponse({ status: 200, type: AdminAccionVueloViewDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT)
+  reprogramarVuelo(@Param() params: AdminVueloParamDto, @Body() body: AdminReprogramarVueloDto) {
+    return this.admin.reprogramarVuelo(params.vueloId, body);
   }
 
   @Get('vuelos/:vueloId/asientos')

@@ -1,9 +1,10 @@
 import { randomInt } from 'node:crypto';
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Not, Repository } from 'typeorm';
 import type { AuthClaims } from '../../auth/token.service';
 import { decodeCursor, encodeCursor } from '../../common/cursor.util';
+import { DomainEvent, DomainEventBus } from '../../common/domain-event-bus';
 import { toIso } from '../../common/date.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { buildTicketCode, verifyTicketCode } from '../../common/ticket-qr';
@@ -11,6 +12,7 @@ import { VUELOS_CONFIG, VuelosConfig } from '../../common/vuelos-config';
 import type { BookingDetailResponseDto } from '../../dto/booking.dto';
 import { Booking } from '../../entities/booking.entity';
 import { Ticket } from '../../entities/ticket.entity';
+import { Vuelo } from '../../entities/vuelo.entity';
 import { money } from '../common/moneda.util';
 import { SlidingWindowLimiter, assertWithinLimit } from '../common/rate-limiter';
 import { normalizarNombrePasajero } from '../common/texto.util';
@@ -25,7 +27,7 @@ const orderNotFound = () => new ProblemDetailsException(HttpStatus.NOT_FOUND, 'O
 
 /** D09. The commercial record of a purchase: number, state machine, snapshot, history. */
 @Injectable()
-export class OrdenesService {
+export class OrdenesService implements OnModuleInit {
   // RF-ORD-010 recovery is public (order number + surname), so it is rate-limited against guessing.
   private readonly recoveryLimiter = new SlidingWindowLimiter(10, 60_000);
 
@@ -35,8 +37,70 @@ export class OrdenesService {
   constructor(
     @InjectRepository(Orden) private readonly ordenes: Repository<Orden>,
     @InjectRepository(Ticket) private readonly tickets: Repository<Ticket>,
+    @InjectRepository(Vuelo) private readonly vuelos: Repository<Vuelo>,
     @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
+    private readonly events: DomainEventBus,
   ) {}
+
+  onModuleInit(): void {
+    // After-sale operations happen in the flight core, which only announces them; the order follows. Every handler is
+    // idempotent and safe to receive in any order (a refund can be announced before the cancellation is handled).
+    this.events.subscribe('booking.cancelled', (event) => this.alCancelarReserva(event));
+    this.events.subscribe('PagoReembolsado', (event) => this.alReembolsar(event));
+    this.events.subscribe('booking.changed', (event) => this.alCambiarReserva(event));
+  }
+
+  /** The reservation was cancelled: the order enters the refund state (EMITIDA -> DEVOLUCION_EN_CURSO). */
+  async alCancelarReserva(event: DomainEvent): Promise<void> {
+    const { bookingId } = event.payload as { bookingId?: string };
+    const orden = bookingId ? await this.ordenes.findOne({ where: { bookingId } }) : null;
+    if (!orden || orden.estado !== 'EMITIDA') return;
+    this.transicionar(orden, 'DEVOLUCION_EN_CURSO', 'Reserva cancelada');
+    await this.ordenes.save(orden);
+  }
+
+  /** The money went back to the card: the order is REEMBOLSADA (passing through the refund state if it had not yet). */
+  async alReembolsar(event: DomainEvent): Promise<void> {
+    const { bookingId, ordenId } = event.payload as { bookingId?: string; ordenId?: string };
+    const orden = bookingId ? await this.ordenes.findOne({ where: { bookingId } }) : ordenId ? await this.ordenes.findOne({ where: { ordenId } }) : null;
+    if (!orden) return;
+    if (orden.estado === 'EMITIDA') this.transicionar(orden, 'DEVOLUCION_EN_CURSO', 'Reserva cancelada');
+    if (orden.estado !== 'DEVOLUCION_EN_CURSO') return;
+    this.transicionar(orden, 'REEMBOLSADA', 'Reembolso ejecutado');
+    await this.ordenes.save(orden);
+  }
+
+  /** A leg moved to another flight (by the traveller or because the airline rescheduled): the order's leg follows. */
+  async alCambiarReserva(event: DomainEvent): Promise<void> {
+    const { bookingId, fromVueloId, toVueloId } = event.payload as { bookingId?: string; fromVueloId?: string; toVueloId?: string };
+    if (!bookingId || !fromVueloId || !toVueloId) return;
+    const orden = await this.ordenes.findOne({ where: { bookingId } });
+    const vuelo = await this.vuelos.findOne({ where: { id: toVueloId } });
+    const trayecto = orden?.trayectos.find((t) => t.itinerarioId === fromVueloId);
+    if (!orden || !vuelo || !trayecto || orden.estado !== 'EMITIDA') return;
+
+    this.transicionar(orden, 'MODIFICADA', 'Cambio de vuelo');
+    orden.trayectos = orden.trayectos.map((t) =>
+      t === trayecto
+        ? {
+            ...t,
+            itinerarioId: vuelo.id,
+            numeroVuelo: vuelo.codigoVuelo,
+            operadorCodigo: vuelo.codigoAerolinea,
+            operadorNombre: vuelo.aerolinea,
+            origen: vuelo.origenIATA,
+            destino: vuelo.destinoIATA,
+            salida: toIso(vuelo.fechaSalida),
+            llegada: toIso(vuelo.fechaLlegada),
+            duracionMinutos: vuelo.durationMinutes,
+          }
+        : t,
+    );
+    // The seats picked for the old flight do not travel to the new one.
+    orden.pasajeros = orden.pasajeros.map((p) => ({ ...p, asientos: p.asientos?.filter((a) => a.trayectoId !== fromVueloId) }));
+    this.transicionar(orden, 'EMITIDA', 'Cambio aplicado');
+    await this.ordenes.save(orden);
+  }
 
   /**
    * Public check of a QR code: authentic and issued? Returns the flight(s) and the ticket state only, never
@@ -276,11 +340,11 @@ export class OrdenesService {
           : {}),
       })),
       // The public recovery answers to a surname and a locator, so it never returns contact data.
-      ...(opciones.publica ? {} : { contacto: orden.contacto }),
+      ...(opciones.publica ? {} : { contacto: orden.contacto, ...(orden.bookingId ? { bookingId: orden.bookingId } : {}) }),
       pago: { marca: orden.pago.marca, ultimos4: orden.pago.ultimos4, cuotas: orden.pago.cuotas },
       creadaEn: toIso(orden.creadaEn),
       historial: orden.historial,
-      _links: { self: `/api/v1/ordenes/${orden.numeroOrden}` },
+      _links: { self: `/api/v1/ordenes/${orden.numeroOrden}`, ...(!opciones.publica && orden.bookingId ? { reserva: `/api/v1/bookings/${orden.bookingId}` } : {}) },
     };
   }
 

@@ -62,6 +62,30 @@ export function priceForPassengerType(
   return { baseFare, taxes, total: baseFare + taxes };
 }
 
+export interface PartyPrice {
+  baseFare: number;
+  taxes: number;
+  total: number;
+}
+
+/** Same as priceForParty but keeps the fare and tax parts apart (refunds and fare differences need them). */
+export function priceForPartyParts(
+  basePriceMinor: number,
+  familyMultiplier: number,
+  breakdown: PassengerBreakdown,
+  taxRate: number,
+): PartyPrice {
+  return PASSENGER_TYPES.reduce<PartyPrice>(
+    (sum, type) => {
+      const count = countFor(breakdown, type);
+      if (count === 0) return sum;
+      const unit = priceForPassengerType(basePriceMinor, familyMultiplier, type, taxRate);
+      return { baseFare: sum.baseFare + unit.baseFare * count, taxes: sum.taxes + unit.taxes * count, total: sum.total + unit.total * count };
+    },
+    { baseFare: 0, taxes: 0, total: 0 },
+  );
+}
+
 /** Total for the whole party on one flight/fare: sum of (unit price x head count) per type. */
 export function priceForParty(
   basePriceMinor: number,

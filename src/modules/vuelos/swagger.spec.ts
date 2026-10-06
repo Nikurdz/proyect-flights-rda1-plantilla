@@ -8,9 +8,14 @@ describe('Swagger sections', () => {
     expect(new Set(names).size).toBe(names.length);
     expect([...names].sort()).toEqual(Object.values(SWAGGER_TAGS).sort()); // nothing declared that no controller can use, and vice versa
     expect(SWAGGER_TAG_LIST.every((t) => t.description.length > 20)).toBe(true);
-    // The numbered sections come first, in order; what is not implemented goes last.
-    expect(names.slice(0, 6).map((n) => n[0])).toEqual(['1', '2', '3', '4', '5', '6']);
-    expect(names.slice(-3).every((n) => n.startsWith('⛔'))).toBe(true);
+    // Numbered in the order of a purchase: 1 to 9 one by one, then the GDS core (10) and the system section (11).
+    const numbers = names.map((n) => Number(/^(\d+) ·/.exec(n)?.[1]));
+    expect(numbers.every(Number.isInteger)).toBe(true);
+    expect(numbers.slice(0, 9)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect([...numbers].sort((a, b) => a - b)).toEqual(numbers);
+    // Nothing of the contract is left inactive, so there is no 'not implemented' section any more.
+    expect(names.some((n) => /no implementado|⛔/i.test(n))).toBe(false);
+    expect(SWAGGER_TAG_LIST.some((t) => /501|sin implementar/i.test(t.description))).toBe(false);
   });
 
   it('puts the declared tags into the document in that order', () => {

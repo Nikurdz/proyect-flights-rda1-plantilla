@@ -132,6 +132,7 @@ export class SearchService {
     return qb
       .andWhere('v."fechaSalida" >= :start AND v."fechaSalida" < :end', { start, end })
       .andWhere('v."fechaSalida" > :now', { now: new Date() })
+      .andWhere("v.estado = 'SCHEDULED'")
       .andWhere('v."asientosDisponibles" >= :seatsNeeded', { seatsNeeded })
       .orderBy('v."fechaSalida"', 'ASC')
       .getMany();
@@ -211,7 +212,7 @@ export class SearchService {
       operatingCarrier: vuelo.codigoAerolinea,
       aircraft: null,
       durationMinutes: vuelo.durationMinutes,
-      status: 'SCHEDULED',
+      status: vuelo.estado === 'CANCELLED' ? 'CANCELLED' : 'SCHEDULED',
     };
   }
 }

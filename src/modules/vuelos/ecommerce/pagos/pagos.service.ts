@@ -1,7 +1,7 @@
-import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, IsNull, LessThan, Not, Repository } from 'typeorm';
-import { DomainEventBus } from '../../common/domain-event-bus';
+import { DomainEvent, DomainEventBus } from '../../common/domain-event-bus';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { minorDigits } from '../common/moneda.util';
 import { Mercado } from '../mercados/entities/mercado.entity';
@@ -24,10 +24,11 @@ export type ResultadoAutorizacion =
 
 const CAPTURE_ATTEMPTS = 3;
 const VOID_ATTEMPTS = 3;
+const REFUND_ATTEMPTS = 3;
 
 /** D08. Authorises, captures and voids card payments through the gateway and fraud ports. */
 @Injectable()
-export class PagosService {
+export class PagosService implements OnModuleInit {
   private readonly logger = new Logger(PagosService.name);
 
   constructor(
@@ -36,6 +37,48 @@ export class PagosService {
     @Inject(ANTIFRAUDE) private readonly antifraude: Antifraude,
     private readonly events: DomainEventBus,
   ) {}
+
+  onModuleInit(): void {
+    // A cancelled booking is paid back through the gateway. The flight core only announces the cancellation (it
+    // knows a payment reference, not a gateway); this consumer finds the payment behind that reference.
+    this.events.subscribe('booking.cancelled', (event) => this.reembolsarPorCancelacion(event));
+  }
+
+  /** RF-PAY-012: refunds go back to the original method. A booking made outside the e-commerce has no payment here. */
+  async reembolsarPorCancelacion(event: DomainEvent): Promise<void> {
+    const payload = event.payload as { paymentReference?: string; refundMinor?: number; bookingId?: string };
+    if (!payload.paymentReference) return;
+    const pago = await this.pagos.findOne({ where: { autorizacionRef: payload.paymentReference } });
+    if (!pago) return;
+    await this.reembolsar(pago, payload.refundMinor ?? 0, payload.bookingId);
+  }
+
+  /**
+   * Returns `montoMinor` of a payment to the card. A captured payment is refunded; one that was only authorised
+   * (the capture is still pending) has charged nothing, so its authorisation is released instead. Repeatable and it
+   * never throws: if the gateway keeps failing the refund is parked as REEMBOLSO_PENDIENTE for the reconciler.
+   */
+  async reembolsar(pago: Pago, montoMinor: number, bookingId?: string): Promise<boolean> {
+    if (pago.estado === 'REEMBOLSADO' || pago.estado === 'ANULADO') return true;
+    const captured = pago.estado === 'CAPTURADO' || pago.estado === 'REEMBOLSO_PENDIENTE';
+    for (let attempt = 1; attempt <= REFUND_ATTEMPTS; attempt++) {
+      try {
+        if (montoMinor > 0 && captured) await this.pasarela.reembolsar(pago.autorizacionRef!, montoMinor);
+        else if (!captured && pago.autorizacionRef) await this.pasarela.anular(pago.autorizacionRef);
+        const estado = captured ? 'REEMBOLSADO' : 'ANULADO';
+        await this.pagos.update(pago.pagoId, { estado, reembolsoMinor: captured ? montoMinor : 0 });
+        pago.estado = estado;
+        await this.events.publish('PagoReembolsado', pago.pagoId, { pagoId: pago.pagoId, ordenId: pago.ordenId, ofertaId: pago.ofertaId, bookingId, montoMinor: captured ? montoMinor : 0 }, { market: pago.mercado });
+        return true;
+      } catch (error) {
+        this.logger.warn(`Refund attempt ${attempt}/${REFUND_ATTEMPTS} failed for payment ${pago.pagoId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    await this.pagos.update(pago.pagoId, { estado: 'REEMBOLSO_PENDIENTE', reembolsoMinor: montoMinor });
+    pago.estado = 'REEMBOLSO_PENDIENTE';
+    this.logger.error(`Payment ${pago.pagoId} could not be refunded: left as REEMBOLSO_PENDIENTE for reconciliation`);
+    return false;
+  }
 
   /** RF-PAY-006/007/009: fraud check first, then the authorisation; a refusal leaves the offer payable. */
   async autorizar(solicitud: SolicitudPago): Promise<ResultadoAutorizacion> {
@@ -175,6 +218,7 @@ export class PagosService {
         { estado: 'CAPTURA_PENDIENTE' },
         { estado: 'AUTORIZADO', ordenId: Not(IsNull()), actualizadoEn: LessThan(before) },
         { estado: 'ANULACION_PENDIENTE' },
+        { estado: 'REEMBOLSO_PENDIENTE' },
       ],
       order: { actualizadoEn: 'ASC' },
       take: 50,
@@ -182,7 +226,12 @@ export class PagosService {
 
     let settled = 0;
     for (const pago of pendientes) {
-      const resuelto = pago.estado === 'ANULACION_PENDIENTE' ? await this.anular(pago) : (await this.capturar(pago)).estado === 'CAPTURADO';
+      const resuelto =
+        pago.estado === 'ANULACION_PENDIENTE'
+          ? await this.anular(pago)
+          : pago.estado === 'REEMBOLSO_PENDIENTE'
+            ? await this.reembolsar(pago, pago.reembolsoMinor ?? 0)
+            : (await this.capturar(pago)).estado === 'CAPTURADO';
       if (resuelto) settled++;
     }
     return settled;

@@ -38,7 +38,9 @@ export class FlightStatusService {
     const now = Date.now();
 
     let status: string;
-    if (now < departure.getTime() - BOARDING_WINDOW_MS) {
+    if (vuelo.estado === 'CANCELLED') {
+      status = 'CANCELLED';
+    } else if (now < departure.getTime() - BOARDING_WINDOW_MS) {
       status = 'SCHEDULED';
     } else if (now < departure.getTime()) {
       status = 'BOARDING';

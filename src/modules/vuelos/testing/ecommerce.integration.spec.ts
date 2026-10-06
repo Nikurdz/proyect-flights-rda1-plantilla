@@ -572,6 +572,36 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(out).toBeDefined();
     });
 
+    it('refunds through the gateway when the booking is cancelled and the order follows (REEMBOLSADA)', async () => {
+      const { token } = await customer();
+      // Same days as the first purchase: the seed only covers 45 days, so this test does not spend a fresh pair.
+      const { ofertaId } = await ofertaLista(token, { familia: 'FULL', fechas: { out: dayAhead(2), back: dayAhead(9) } });
+      const compra = await comprar(token, ofertaId).expect(201);
+
+      // The owner's view links the order to the booking behind it.
+      const orden = await api().get(`/api/v1/ordenes/${compra.body.numeroOrden}`).set(bearer(token)).expect(200);
+      const bookingId = orden.body.bookingId as string;
+      expect(bookingId).toBeDefined();
+      expect(orden.body._links.reserva).toBe(`/api/v1/bookings/${bookingId}`);
+
+      const quote = await api().get(`/api/v1/bookings/${bookingId}/cancellation-quote`).set(bearer(token)).expect(200);
+      expect(quote.body.isRefundable).toBe(true);
+      await api()
+        .post(`/api/v1/bookings/${bookingId}/cancel`)
+        .set(bearer(token))
+        .set('Idempotency-Key', randomUUID())
+        .send({ quoteId: quote.body.quoteId, reason: 'Cambio de planes' })
+        .expect(200);
+
+      // The events are handled in-process: the payment went back to the card and the order was closed.
+      const [pago] = await pagos(ofertaId);
+      expect(pago.estado).toBe('REEMBOLSADO');
+      expect(pago.reembolsoMinor).toBe(Math.round(Number(quote.body.refundAmount) * 100));
+      const final = await api().get(`/api/v1/ordenes/${compra.body.numeroOrden}`).set(bearer(token)).expect(200);
+      expect(final.body.estado).toBe('REEMBOLSADA');
+      expect(final.body.historial.map((h: { estado: string }) => h.estado)).toEqual(['PENDIENTE_PAGO', 'PAGADA', 'EMITIDA', 'DEVOLUCION_EN_CURSO', 'REEMBOLSADA']);
+    });
+
     it('never charges twice: a retried key replays the result, and a new key resumes the existing order', async () => {
       const token = await guest();
       const { ofertaId } = await ofertaLista(token);

@@ -25,6 +25,8 @@ export interface PasarelaPago {
   capturar(autorizacionRef: string, monto: number): Promise<void>;
   /** Releases an authorisation (compensation). Must be safe to repeat. */
   anular(autorizacionRef: string): Promise<void>;
+  /** Returns part or all of a CAPTURED payment to the card. Must be safe to repeat. */
+  reembolsar(autorizacionRef: string, monto: number): Promise<void>;
 }
 
 export interface SolicitudAntifraude {

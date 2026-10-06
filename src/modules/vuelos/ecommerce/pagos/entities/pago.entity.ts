@@ -9,7 +9,11 @@ export type EstadoPago =
   | 'RECHAZADO_ANTIFRAUDE'
   | 'ANULADO'
   // The ticket was not issued but the gateway would not release the authorisation yet: retried by the reconciler.
-  | 'ANULACION_PENDIENTE';
+  | 'ANULACION_PENDIENTE'
+  // The booking was cancelled and the money went back to the card (the amount is in `reembolsoMinor`).
+  | 'REEMBOLSADO'
+  // The refund is owed but the gateway failed: retried by the reconciler.
+  | 'REEMBOLSO_PENDIENTE';
 
 export interface MedioPagoUsado {
   tipo: 'TARJETA';
@@ -55,6 +59,10 @@ export class Pago {
 
   @Column({ type: 'bigint', transformer: bigintNumber })
   montoMinor: number;
+
+  // What went back to the card when the booking was cancelled (or is owed while the state is REEMBOLSO_PENDIENTE).
+  @Column({ type: 'bigint', nullable: true, transformer: bigintNumber })
+  reembolsoMinor: number | null;
 
   @Column({ type: 'jsonb' })
   medio: MedioPagoUsado;

@@ -12,11 +12,13 @@ El módulo tiene dos capas, ambas con lógica real contra Postgres (sin mocks):
 ### Núcleo de vuelos (GDS) — rutas bajo `/api/v1`
 
 - **Real**: `POST /search`, `GET /offers/:offerId/seatmap`, `POST/GET/DELETE /offers/hold*`, `GET/POST /bookings`, `GET /bookings/:id`, `GET /bookings/:id/tickets*`, `GET /flights/:flightNumber/status`.
-- **No implementado — responden `501` (`NOT_IMPLEMENTED`), nunca un 200 vacío**: equipaje, cambio de fecha, cancelación, check-in, boarding passes y webhooks. Son las liberaciones R2 del SRS (post-venta y check-in).
+- **Posventa, check-in y webhooks (también reales)**: `GET /bookings/:id/baggage-options`, `POST /bookings/:id/baggage`, `POST /bookings/:id/date-change/search`, `POST /bookings/:id/date-change`, `GET /bookings/:id/cancellation-quote`, `POST /bookings/:id/cancel`, `POST /bookings/:id/check-in`, `GET /bookings/:id/boarding-passes` y `GET/POST/DELETE /webhooks`. Los montos, plazos y penalidades no los fija el contrato: son decisiones del equipo, en `common/vuelos-config.ts` (variables `POSTSALE_*`, `CHECKIN_*`, `WEBHOOKS_*`) y documentadas en `docs/planes/2026-10-07-posventa-checkin-webhooks.md`. Todas las respuestas son síncronas (`200`); no se usa `202`. Ninguna operación del contrato responde `501`.
+- **Eventos y webhooks**: el bus en proceso publica `booking.*`, `hold.expired` y, por las acciones de admin `POST /admin/vuelos/:id/cancelar|reprogramar`, `flight.*`; el despachador (`services/webhook-dispatcher.service.ts`, cada 15 s) los entrega firmados con HMAC-SHA256, con reintentos (1 min, 5 min, 30 min, 2 h, 6 h) y luego `DEAD`. Solo https y hosts públicos (`common/safe-http.ts`).
+- **Reembolsos**: cancelar publica `booking.cancelled`; el módulo de pagos devuelve el dinero por la pasarela (`REEMBOLSADO`, o `REEMBOLSO_PENDIENTE` si falla, reintentado por el reconciliador) y la orden pasa a `DEVOLUCION_EN_CURSO` → `REEMBOLSADA`.
 - **Autenticación**: toda ruta de datos exige un JWT `Bearer` con firma HS256 verificada; el `ownerId` sale del `sub` verificado, no hay fallback a un usuario por defecto, y lecturas/escrituras de holds, reservas y tickets exigen que el recurso sea del solicitante (`403` si no). `search`, `seatmap` y `flights/.../status` son públicas. No hay IdP externo en RDA1: el servicio de identidad de este módulo emite los tokens (`POST /auth/login`, `POST /auth/invitado`). Los *scopes* del contrato (`flights:book`, …) se documentan pero no se exigen.
 - **Atomicidad e inventario**: crear un hold descuenta `asientosDisponibles` con un `UPDATE` condicional (nunca vende de más); liberar o expirar lo devuelve exactamente una vez. `POST /bookings` crea reserva, pasajeros, asientos y tickets y consume el hold en **una sola transacción** con bloqueo de fila: dos reservas simultáneas del mismo hold → una gana (201) y la otra recibe 409.
 - **Idempotencia** (`Idempotency-Key`): una clave se reserva antes de ejecutar y se completa dentro de la misma transacción; un reintento devuelve la respuesta original, la misma clave con otro cuerpo da `422`, y otro usuario nunca puede reproducir la respuesta ajena.
-- **Errores**: `application/problem+json` con el enum `code` del contrato. Para estados que el contrato no define se usan códigos propios (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`, `NOT_IMPLEMENTED`, `SERVICE_UNAVAILABLE` y los del e-commerce); los errores inesperados nunca devuelven el mensaje interno.
+- **Errores**: `application/problem+json` con el enum `code` del contrato. Para estados que el contrato no define se usan códigos propios (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`, `NOT_IMPLEMENTED` (reservado, ya no se usa), `SERVICE_UNAVAILABLE` y los del e-commerce); los errores inesperados nunca devuelven el mensaje interno.
 
 Simplificaciones deliberadas y documentadas (no omisiones silenciosas):
 
@@ -70,7 +72,7 @@ npm run seed:vuelos               # vuelos de los próximos 45 días, familias t
 
 El seed es idempotente: no duplica ni pisa lo que un administrador editó, y cada ejecución extiende el calendario de vuelos. Para crear un administrador defina `ADMIN_EMAIL` y `ADMIN_PASSWORD` (≥ 12 caracteres) al ejecutarlo; no existe ninguna cuenta por defecto. En desarrollo el cuerpo de los correos simulados se imprime en la consola y también se puede leer con `GET /admin/notificaciones?referencia=…`.
 
-Swagger: `http://localhost:3000/api/docs` (use el botón *Authorize* con un token de `POST /auth/login` o `POST /auth/invitado`).
+Swagger: `http://localhost:3000/api/docs` (use el botón *Authorize* con un token de `POST /auth/login` o `POST /auth/invitado`). Sus secciones están numeradas en el orden de una compra; la guía para recorrerlas en una defensa, con los cuerpos de ejemplo y los casos de error, está en [`docs/GUIA-DEFENSA-SWAGGER.md`](docs/GUIA-DEFENSA-SWAGGER.md).
 
 Variables relevantes (ver `.env.example`): `DATABASE_URL`, `JWT_SECRET` (≥ 32 caracteres, obligatoria), `DATA_ENCRYPTION_KEY` (obligatoria en producción), `TAX_RATE`, `DEFAULT_CURRENCY`, `OFFER_TTL_MINUTES`, `HOLD_TTL_MINUTES`, `OFFER_MAX_COMBINATIONS`, `MAX_PASSENGERS_PER_ORDER`, `TRUST_PROXY` (saltos de proxy; `1` en Render para que los límites por cliente vean la IP real). La configuración se valida al arrancar: un valor inválido detiene la app con un mensaje claro.
 
@@ -151,7 +153,7 @@ graph TD
 
 > [!WARNING]
 > **Aviso para el Equipo de Desarrollo (E-commerce / Integradores):**
-> El núcleo de vuelos y el e-commerce R1 tienen lógica de negocio real (ver "Estado de la implementación"). Postventa, check-in y webhooks del contrato responden `501` hasta su liberación; la pasarela de pago, el antifraude y el correo son **simulados**.
+> El núcleo de vuelos y el e-commerce R1 tienen lógica de negocio real (ver "Estado de la implementación"). Todo el contrato de vuelos está activo (posventa, check-in y webhooks incluidos); la pasarela de pago, el antifraude y el correo son **simulados**.
 
 > [!IMPORTANT]
 > **Recordatorio (Fase RDA1):**

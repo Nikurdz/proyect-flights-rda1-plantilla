@@ -19,7 +19,7 @@ const DECLINES: Record<string, string> = {
   tok_3ds: '3ds_not_supported',
 };
 
-type AuthState = 'AUTHORIZED' | 'CAPTURED' | 'VOIDED';
+type AuthState = 'AUTHORIZED' | 'CAPTURED' | 'VOIDED' | 'REFUNDED';
 
 /**
  * SIMULATED payment gateway. It moves no money. It exists so RDA1 can run the whole purchase
@@ -61,6 +61,18 @@ export class PasarelaSimulada implements PasarelaPago {
     if (state !== 'AUTHORIZED') throw new Error(`Authorisation ${autorizacionRef} cannot be captured (${state ?? 'unknown'})`);
     if (this.failCapture.has(autorizacionRef)) throw new Error('Simulated capture failure');
     this.states.set(autorizacionRef, 'CAPTURED');
+  }
+
+  /**
+   * Refunding moves the payment to REFUNDED; repeating it is a no-op. Only a captured payment can be refunded: a
+   * reference this process does not know (the simulation keeps its state in memory, so it forgets across restarts)
+   * is accepted, since a simulated gateway has no money to be wrong about.
+   */
+  async reembolsar(autorizacionRef: string, _monto: number): Promise<void> {
+    const state = this.states.get(autorizacionRef);
+    if (state === 'REFUNDED') return;
+    if (state === 'AUTHORIZED' || state === 'VOIDED') throw new Error(`Authorisation ${autorizacionRef} was not captured, so it cannot be refunded (${state})`);
+    this.states.set(autorizacionRef, 'REFUNDED');
   }
 
   async anular(autorizacionRef: string): Promise<void> {

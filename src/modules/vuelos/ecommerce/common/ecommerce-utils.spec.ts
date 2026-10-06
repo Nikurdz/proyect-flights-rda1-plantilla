@@ -118,7 +118,7 @@ describe('password.util', () => {
 });
 
 describe('order state machine (SRS §8.5)', () => {
-  const service = new OrdenesService(undefined as never, undefined as never, undefined as never);
+  const service = new OrdenesService(undefined as never, undefined as never, undefined as never, undefined as never, undefined as never);
   const orden = (estado: Orden['estado']) => ({ estado, historial: [] }) as unknown as Orden;
 
   it('allows the documented path and records each step', () => {

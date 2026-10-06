@@ -33,29 +33,33 @@ import {
 } from './dto/booking.dto';
 import { FlightStatusParamDto, FlightStatusQueryDto } from './dto/flight-status.dto';
 import { HoldRequestDto, HoldResponseDto, HoldStatusResponseDto } from './dto/hold.dto';
-import { AddBaggageRequestDto, CancelBookingRequestDto, DateChangeRequestDto, DateChangeSearchRequestDto } from './dto/postventa.dto';
+import {
+  AddBaggageRequestDto,
+  BaggageAddedResponseDto,
+  BaggageOptionDto,
+  BoardingPassListResponseDto,
+  CancelBookingRequestDto,
+  CancelBookingResponseDto,
+  CancellationQuoteResponseDto,
+  CheckInResponseDto,
+  DateChangeOptionDto,
+  DateChangeRequestDto,
+  DateChangeSearchRequestDto,
+} from './dto/postventa.dto';
 import { SearchRequestDto, SearchResponseDto } from './dto/search.dto';
-import { WebhookSubscriptionDto } from './dto/webhooks.dto';
+import { WebhookSubscriptionDto, WebhookSubscriptionViewDto } from './dto/webhooks.dto';
+import { BaggageService } from './services/baggage.service';
 import { BookingsService } from './services/bookings.service';
+import { CancellationService } from './services/cancellation.service';
+import { CheckInService } from './services/check-in.service';
+import { DateChangeService } from './services/date-change.service';
 import { FlightStatusService } from './services/flight-status.service';
 import { OffersService } from './services/offers.service';
 import { SearchService } from './services/search.service';
+import { WebhooksService } from './services/webhooks.service';
 
 // Statuses used across the routes below.
-const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, NOT_IMPLEMENTED, SERVICE_UNAVAILABLE } = HttpStatus;
-
-/**
- * Honest placeholder for operations that exist in the contract but have no implementation
- * yet. A 501 can never be mistaken for a success, unlike the empty 200 it replaces.
- */
-function notImplemented(feature: string): never {
-  throw new ProblemDetailsException(
-    NOT_IMPLEMENTED,
-    'NOT_IMPLEMENTED',
-    'Not implemented',
-    `${feature} is part of the contract but is not implemented in this phase.`,
-  );
-}
+const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, SERVICE_UNAVAILABLE } = HttpStatus;
 
 @Controller()
 @UseFilters(VuelosProblemDetailsFilter)
@@ -66,6 +70,11 @@ export class VuelosController {
     private readonly offersService: OffersService,
     private readonly bookingsService: BookingsService,
     private readonly flightStatusService: FlightStatusService,
+    private readonly baggageService: BaggageService,
+    private readonly dateChangeService: DateChangeService,
+    private readonly cancellationService: CancellationService,
+    private readonly checkInService: CheckInService,
+    private readonly webhooksService: WebhooksService,
   ) {}
 
   // --- Búsqueda y Catálogo (público) ---
@@ -211,95 +220,156 @@ export class VuelosController {
     return this.bookingsService.getTicketDetail(auth.ownerId, bookingId, ticketId);
   }
 
-  // --- Postventa (Maletas, Fechas y Cancelaciones) ---
-  // En el contrato pero sin implementar en esta fase: responden 501, nunca un 200 vacío.
+  // --- Gestionar la reserva: equipaje, cambio de fecha y cancelación ---
   @Get('bookings/:bookingId/baggage-options')
   @UseGuards(JwtAuthGuard)
-  @ApiTags(SWAGGER_TAGS.postventa)
+  @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Opciones de equipaje post-emisión (no implementado)' })
+  @ApiOperation({
+    summary: 'Paso 6A · Opciones y precio del equipaje extra',
+    description: 'Scope de referencia: flights:read. Por pasajero y tramo: precio de una maleta, máximo permitido y las ya compradas. Los bebés en brazos no compran equipaje.',
+  })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
-  @ApiProblemResponses(UNAUTHORIZED, NOT_IMPLEMENTED)
-  getBaggageOptions(@Param('bookingId', ParseUUIDPipe) _bookingId: string) {
-    return notImplemented('Post-sale baggage options');
+  @ApiResponse({ status: 200, description: 'Tarifas y límites de maletas', type: [BaggageOptionDto] })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT)
+  getBaggageOptions(@CurrentAuth() auth: AuthClaims, @Param('bookingId', ParseUUIDPipe) bookingId: string) {
+    return this.baggageService.options(auth.ownerId, bookingId);
   }
 
   @Post('bookings/:bookingId/baggage')
-  @UseGuards(JwtAuthGuard)
-  @ApiTags(SWAGGER_TAGS.postventa)
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
+  @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Agregar maleta extra post-emisión (no implementado)' })
+  @ApiOperation({
+    summary: 'Paso 6B · Agregar equipaje extra',
+    description:
+      'Scope de referencia: flights:book. Hasta 3 h antes de la salida, máximo 2 maletas extra por pasajero y tramo. La referencia de pago es de un solo uso. Una sola transacción; con la misma Idempotency-Key devuelve el mismo resultado.',
+  })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
-  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
-  addBaggage(@Param('bookingId', ParseUUIDPipe) _bookingId: string, @Body() _addBaggageRequestDto: AddBaggageRequestDto) {
-    return notImplemented('Adding post-sale baggage');
+  @ApiResponse({ status: 200, description: 'Maleta agregada', type: BaggageAddedResponseDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, UNPROCESSABLE_ENTITY)
+  addBaggage(
+    @CurrentAuth() auth: AuthClaims,
+    @Headers('idempotency-key') idempotencyKey: string,
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @Body() body: AddBaggageRequestDto,
+  ) {
+    return this.baggageService.add(auth, idempotencyKey, bookingId, body);
   }
 
   @Post('bookings/:bookingId/date-change/search')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  @ApiTags(SWAGGER_TAGS.postventa)
+  @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Buscar disponibilidad para cambio de fecha (no implementado)' })
+  @ApiOperation({
+    summary: 'Paso 6C · Buscar opciones de cambio de fecha',
+    description:
+      'Scope de referencia: flights:read. Solo tarifas que permiten cambios. Devuelve vuelos directos de la misma ruta con cupo, con la diferencia de tarifa e impuestos más el cargo de cambio; cada opción vive 15 minutos.',
+  })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
-  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
-  searchDateChange(@Param('bookingId', ParseUUIDPipe) _bookingId: string, @Body() _dateChangeSearchRequestDto: DateChangeSearchRequestDto) {
-    return notImplemented('Date-change search');
+  @ApiResponse({ status: 200, description: 'Opciones de cambio', type: [DateChangeOptionDto] })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT)
+  searchDateChange(@CurrentAuth() auth: AuthClaims, @Param('bookingId', ParseUUIDPipe) bookingId: string, @Body() body: DateChangeSearchRequestDto) {
+    return this.dateChangeService.searchOptions(auth.ownerId, bookingId, body);
   }
 
   @Post('bookings/:bookingId/date-change')
-  @UseGuards(JwtAuthGuard)
-  @ApiTags(SWAGGER_TAGS.postventa)
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
+  @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Confirmar cambio de fecha (no implementado)' })
+  @ApiOperation({
+    summary: 'Paso 6D · Confirmar el cambio de fecha',
+    description:
+      'Scope de referencia: flights:book. Una sola transacción: toma los cupos del vuelo nuevo, devuelve los del viejo y actualiza la reserva. Si hay algo que pagar, hay que enviar payment.paymentReference (de un solo uso). Los asientos se asignan a los pasajeros que ocupan asiento en orden ascendente de passengerId.',
+  })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
-  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
-  confirmDateChange(@Param('bookingId', ParseUUIDPipe) _bookingId: string, @Body() _dateChangeRequestDto: DateChangeRequestDto) {
-    return notImplemented('Date-change confirmation');
+  @ApiResponse({ status: 200, description: 'Cambio confirmado', type: BookingDetailResponseDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY)
+  confirmDateChange(
+    @CurrentAuth() auth: AuthClaims,
+    @Headers('idempotency-key') idempotencyKey: string,
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @Body() body: DateChangeRequestDto,
+  ) {
+    return this.dateChangeService.confirm(auth, idempotencyKey, bookingId, body);
   }
 
   @Get('bookings/:bookingId/cancellation-quote')
   @UseGuards(JwtAuthGuard)
-  @ApiTags(SWAGGER_TAGS.postventa)
+  @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Cotizar reembolso por cancelación (no implementado)' })
+  @ApiOperation({
+    summary: 'Paso 6E · Cotizar la cancelación',
+    description:
+      'Scope de referencia: flights:read. Tarifa reembolsable (FULL): el total menos 10 % de penalidad; no reembolsable (BASIC/LIGHT): solo los impuestos; el equipaje extra se devuelve completo. La cotización vive 15 minutos. No se cancela un vuelo que ya salió ni a menos de 3 h de la salida.',
+  })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
-  @ApiProblemResponses(UNAUTHORIZED, NOT_IMPLEMENTED)
-  getCancellationQuote(@Param('bookingId', ParseUUIDPipe) _bookingId: string) {
-    return notImplemented('Cancellation quote');
+  @ApiResponse({ status: 200, description: 'Cotización de cancelación', type: CancellationQuoteResponseDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT)
+  getCancellationQuote(@CurrentAuth() auth: AuthClaims, @Param('bookingId', ParseUUIDPipe) bookingId: string) {
+    return this.cancellationService.quote(auth.ownerId, bookingId);
   }
 
   @Post('bookings/:bookingId/cancel')
-  @UseGuards(JwtAuthGuard)
-  @ApiTags(SWAGGER_TAGS.postventa)
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
+  @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Cancelar reserva (no implementado)' })
+  @ApiOperation({
+    summary: 'Paso 6F · Cancelar la reserva',
+    description:
+      'Scope de referencia: flights:cancel. Una sola transacción: la reserva pasa a CANCELLED, los billetes a REFUNDED (o VOIDED si no hay nada que devolver), los asientos y cupos vuelven al inventario. El reembolso se ejecuta en la pasarela y la orden del e-commerce pasa a REEMBOLSADA.',
+  })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
-  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
-  cancelBooking(@Param('bookingId', ParseUUIDPipe) _bookingId: string, @Body() _cancelBookingRequestDto: CancelBookingRequestDto) {
-    return notImplemented('Booking cancellation');
+  @ApiResponse({ status: 200, description: 'Cancelación exitosa', type: CancelBookingResponseDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE)
+  cancelBooking(
+    @CurrentAuth() auth: AuthClaims,
+    @Headers('idempotency-key') idempotencyKey: string,
+    @Param('bookingId', ParseUUIDPipe) bookingId: string,
+    @Body() body: CancelBookingRequestDto,
+  ) {
+    return this.cancellationService.cancel(auth, idempotencyKey, bookingId, body);
   }
 
-  // --- Check-in y Boarding Pass (no implementado) ---
+  // --- Check-in y pases de abordar ---
   @Post('bookings/:bookingId/check-in')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @ApiTags(SWAGGER_TAGS.checkin)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Realizar check-in de la reserva (no implementado)' })
+  @ApiOperation({
+    summary: 'Paso 7A · Hacer el check-in',
+    description:
+      'Scope de referencia: flights:book. Abre 48 h y cierra 1 h antes de la salida de cada tramo. Usa el asiento elegido o asigna el primero libre; los bebés en brazos no llevan asiento. Repetirlo no cambia nada (no necesita Idempotency-Key).',
+  })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
-  @ApiProblemResponses(UNAUTHORIZED, NOT_IMPLEMENTED)
-  checkIn(@Param('bookingId', ParseUUIDPipe) _bookingId: string) {
-    return notImplemented('Check-in');
+  @ApiResponse({ status: 200, description: 'Check-in realizado', type: CheckInResponseDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT)
+  checkIn(@CurrentAuth() auth: AuthClaims, @Param('bookingId', ParseUUIDPipe) bookingId: string) {
+    return this.checkInService.checkIn(auth, bookingId);
   }
 
   @Get('bookings/:bookingId/boarding-passes')
   @UseGuards(JwtAuthGuard)
   @ApiTags(SWAGGER_TAGS.checkin)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Consultar pases de abordar (no implementado)' })
+  @ApiOperation({
+    summary: 'Paso 7B · Pases de abordar',
+    description:
+      'Scope de referencia: flights:read. Uno por pasajero con asiento y tramo, con su grupo y posición de embarque y un código QR firmado (sin datos personales). Antes del check-in responde 404 BOARDING_PASS_NOT_AVAILABLE.',
+  })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
-  @ApiProblemResponses(UNAUTHORIZED, NOT_IMPLEMENTED)
-  getBoardingPasses(@Param('bookingId', ParseUUIDPipe) _bookingId: string) {
-    return notImplemented('Boarding passes');
+  @ApiResponse({ status: 200, description: 'Pases de abordar disponibles', type: BoardingPassListResponseDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT)
+  getBoardingPasses(@CurrentAuth() auth: AuthClaims, @Param('bookingId', ParseUUIDPipe) bookingId: string) {
+    return this.checkInService.boardingPasses(auth.ownerId, bookingId);
   }
 
   // --- Estado de Vuelos (público) ---
@@ -312,26 +382,31 @@ export class VuelosController {
     return this.flightStatusService.getStatus(params.flightNumber, query.date);
   }
 
-  // --- Webhooks (no implementado) ---
+  // --- Webhooks ---
   @Get('webhooks')
   @UseGuards(JwtAuthGuard)
   @ApiTags(SWAGGER_TAGS.webhooks)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Listar suscripciones (no implementado)' })
-  @ApiProblemResponses(UNAUTHORIZED, NOT_IMPLEMENTED)
-  listWebhooks() {
-    return notImplemented('Webhook subscriptions');
+  @ApiOperation({ summary: 'Paso 8A · Listar mis suscripciones', description: 'Scope de referencia: flights:webhooks. El secreto nunca se devuelve.' })
+  @ApiResponse({ status: 200, description: 'Suscripciones activas', type: [WebhookSubscriptionViewDto] })
+  @ApiProblemResponses(UNAUTHORIZED)
+  listWebhooks(@CurrentAuth() auth: AuthClaims) {
+    return this.webhooksService.list(auth.ownerId);
   }
 
   @Post('webhooks')
-  @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard)
   @ApiTags(SWAGGER_TAGS.webhooks)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Registrar webhook (no implementado)' })
-  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
-  createWebhook(@Body() _webhookSubscriptionDto: WebhookSubscriptionDto) {
-    return notImplemented('Webhook registration');
+  @ApiOperation({
+    summary: 'Paso 8B · Registrar un webhook',
+    description:
+      'Scope de referencia: flights:webhooks. Solo URLs https que resuelvan a direcciones públicas (se rechazan localhost y redes privadas). Cada entrega es un POST con X-Webhook-Id, X-Webhook-Event, X-Webhook-Timestamp y X-Webhook-Signature = sha256=HMAC(secret, timestamp.cuerpo); se reintenta 5 veces (1 min, 5 min, 30 min, 2 h, 6 h). Máximo 10 por cuenta.',
+  })
+  @ApiResponse({ status: 201, description: 'Webhook registrado', type: WebhookSubscriptionViewDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, UNPROCESSABLE_ENTITY)
+  registerWebhook(@CurrentAuth() auth: AuthClaims, @Body() body: WebhookSubscriptionDto) {
+    return this.webhooksService.create(auth.ownerId, body);
   }
 
   @Delete('webhooks/:id')
@@ -339,10 +414,11 @@ export class VuelosController {
   @UseGuards(JwtAuthGuard)
   @ApiTags(SWAGGER_TAGS.webhooks)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Eliminar suscripción (no implementado)' })
+  @ApiOperation({ summary: 'Paso 8C · Eliminar un webhook', description: 'Scope de referencia: flights:webhooks. Las entregas pendientes de esa suscripción se descartan.' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
-  deleteWebhook(@Param('id', ParseUUIDPipe) _id: string) {
-    return notImplemented('Webhook deletion');
+  @ApiResponse({ status: 204, description: 'Eliminado' })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_FOUND)
+  async deleteWebhook(@CurrentAuth() auth: AuthClaims, @Param('id', ParseUUIDPipe) id: string) {
+    await this.webhooksService.remove(auth.ownerId, id);
   }
 }

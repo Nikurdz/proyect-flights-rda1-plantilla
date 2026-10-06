@@ -16,6 +16,8 @@ const config: VuelosConfig = {
   jwtSecret: 'x'.repeat(32),
   jwtTtlSeconds: 3600,
   dataEncryptionKey: Buffer.alloc(32, 1),
+  postSale: { baggagePriceMinor: 4000, baggageMaxPerLeg: 2, cutoffHours: 3, changeFeeMinor: 3000, cancelPenaltyPercent: 10, quoteTtlMinutes: 15, checkInOpensHours: 48, checkInClosesHours: 1 },
+  webhooks: { maxPerOwner: 10, allowPrivateHosts: false },
 };
 
 const vuelo = (id: string, precioBase: number): Vuelo => ({
@@ -31,6 +33,7 @@ const vuelo = (id: string, precioBase: number): Vuelo => ({
   asientosDisponibles: 40,
   capacidadTotal: 180,
   durationMinutes: 300,
+  estado: 'SCHEDULED',
 });
 
 const family = (code: string, priceMultiplier: number): FareFamily => ({

@@ -4,6 +4,7 @@ import * as jwt from 'jsonwebtoken';
 import request = require('supertest');
 import { DataSource } from 'typeorm';
 import { TokenService } from '../auth/token.service';
+import { BaggagePurchase } from '../entities/baggage-purchase.entity';
 import { Booking } from '../entities/booking.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
 import { Vuelo } from '../entities/vuelo.entity';
@@ -132,14 +133,16 @@ describeIntegration('Vuelos core against a real Postgres', () => {
       expect(prices.pricingOptions[0].pricePerPassengerType.map((p) => p.passengerType).sort()).toEqual(['ADULT', 'CHILD', 'INFANT']);
     });
 
-    it('answers 501 problem+json (never a fake 200) for unimplemented operations, still behind auth (C5)', async () => {
+    it('serves what used to be stubs for real: behind auth, and a typed problem for something that does not exist (C5)', async () => {
       const bookingId = randomUUID();
-      const res = await api().get(`/api/v1/bookings/${bookingId}/baggage-options`).set(auth('u1')).expect(501);
+      const res = await api().get(`/api/v1/bookings/${bookingId}/baggage-options`).set(auth('u1')).expect(404);
       expect(res.headers['content-type']).toContain('application/problem+json');
-      expect(res.body.code).toBe('NOT_IMPLEMENTED');
+      expect(res.body.code).toBe('BOOKING_NOT_CONFIRMED');
 
       await api().get(`/api/v1/bookings/${bookingId}/baggage-options`).expect(401);
-      await api().get('/api/v1/webhooks').set(auth('u1')).expect(501);
+      await api().get(`/api/v1/bookings/${bookingId}/boarding-passes`).expect(401);
+      await api().get('/api/v1/webhooks').expect(401);
+      expect((await api().get('/api/v1/webhooks').set(auth('u1')).expect(200)).body).toEqual([]);
     });
   });
 
@@ -465,13 +468,25 @@ describeIntegration('Vuelos core against a real Postgres', () => {
       expect(res.body.invalidParams[0].name).toBe('itinerarySelections.cabinClass');
     });
 
-    it('refuses extra baggage it would neither store nor charge (A2)', async () => {
+    it('stores the extra baggage bought with the booking, within the limits (A2)', async () => {
       const offer = await searchOffer(dayAhead(32));
+      const itineraryId = offer.itineraries[0].itineraryId;
       const hold = await createHold('owner-a2', holdBody(offer)).expect(201);
-      const withBag = pax('a1', { extraBaggage: [{ itineraryId: offer.itineraries[0].itineraryId, quantity: 1 }] });
-      const res = await createBooking('owner-a2', hold.body.holdId, [withBag], 'pay_bag_000001').expect(422);
-      expect(res.body.invalidParams[0].name).toBe('passengers.extraBaggage');
-      expect((await holdRow(hold.body.holdId)).status).toBe('HELD'); // nothing was consumed
+
+      // A leg that is not part of the hold, and more bags than the cap, are refused and nothing is consumed.
+      const strange = await createBooking('owner-a2', hold.body.holdId, [pax('a1', { extraBaggage: [{ itineraryId: randomUUID(), quantity: 1 }] })], 'pay_bag_000001').expect(422);
+      expect(strange.body.invalidParams[0].name).toBe('passengers.extraBaggage.itineraryId');
+      const tooMany = await createBooking('owner-a2', hold.body.holdId, [pax('a1', { extraBaggage: [{ itineraryId, quantity: 3 }] })], 'pay_bag_000002').expect(409);
+      expect(tooMany.body.code).toBe('BAGGAGE_LIMIT_EXCEEDED');
+      expect((await holdRow(hold.body.holdId)).status).toBe('HELD');
+
+      const booked = await createBooking('owner-a2', hold.body.holdId, [pax('a1', { extraBaggage: [{ itineraryId, quantity: 2 }] })], 'pay_bag_000003').expect(201);
+      const rows = await ds.getRepository(BaggagePurchase).find({ where: { bookingId: booked.body.bookingId } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ quantity: 2, unitPriceMinor: 4000, totalMinor: 8000, paymentReference: 'pay_bag_000003' });
+
+      const options = await api().get(`/api/v1/bookings/${booked.body.bookingId}/baggage-options`).set(auth('owner-a2')).expect(200);
+      expect(options.body[0]).toMatchObject({ passengerId: 'a1', itineraryId, alreadyPurchased: 2, maxAllowed: 2 });
     });
 
     it('does not confirm a hold whose flight has already departed (A8)', async () => {
@@ -485,9 +500,17 @@ describeIntegration('Vuelos core against a real Postgres', () => {
       expect(await ds.getRepository(Booking).count({ where: { ownerId: 'owner-a8' } })).toBe(0);
     });
 
-    it('answers 501 for write stubs even without an Idempotency-Key (A9)', async () => {
-      const res = await api().post(`/api/v1/bookings/${randomUUID()}/cancel`).set(auth('u1')).send({ quoteId: randomUUID(), reason: 'Change of plans' });
-      expect(res.status).toBe(501);
+    it('requires an Idempotency-Key on every write after the sale (A9)', async () => {
+      const id = randomUUID();
+      const body = { quoteId: randomUUID(), reason: 'Change of plans' };
+      for (const [path, payload] of [
+        [`/api/v1/bookings/${id}/cancel`, body],
+        [`/api/v1/bookings/${id}/baggage`, { passengerId: 'a1', itineraryId: randomUUID(), quantity: 1, payment: { paymentReference: 'pay_0000001' } }],
+        [`/api/v1/bookings/${id}/date-change`, { changeOfferId: randomUUID() }],
+      ] as [string, object][]) {
+        const res = await api().post(path).set(auth('u1')).send(payload);
+        expect(res.status).toBe(400);
+      }
     });
 
     it('stores passenger identity and contact data encrypted (C1)', async () => {

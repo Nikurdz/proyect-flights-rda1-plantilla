@@ -6,6 +6,7 @@ import { runtimeMetrics } from '../../common/runtime-metrics';
 import { FlightHold } from '../../entities/flight-hold.entity';
 import { IdempotencyRecord } from '../../entities/idempotency-record.entity';
 import { Vuelo } from '../../entities/vuelo.entity';
+import { WebhookDelivery } from '../../entities/webhook-delivery.entity';
 import { money } from '../common/moneda.util';
 import { AuditoriaCambio } from '../mercados/entities/auditoria-cambio.entity';
 import { Notificacion } from '../notificaciones/entities/notificacion.entity';
@@ -102,9 +103,10 @@ export class ObservabilidadService {
         .getRawOne<{ vuelos: number; libres: number; capacidad: number }>(),
     ]);
 
-    const [capturaPendiente, anulacionPendiente, autorizadoSinCaptura, emitidasSinConfirmacion, holdsVencidos, idempotenciaEnCurso, idempotenciaConError, auditoria] = await Promise.all([
+    const [capturaPendiente, anulacionPendiente, reembolsoPendiente, autorizadoSinCaptura, emitidasSinConfirmacion, holdsVencidos, idempotenciaEnCurso, idempotenciaConError, auditoria, webhooks] = await Promise.all([
       m.count(Pago, { where: { estado: 'CAPTURA_PENDIENTE' } }),
       m.count(Pago, { where: { estado: 'ANULACION_PENDIENTE' } }),
+      m.count(Pago, { where: { estado: 'REEMBOLSO_PENDIENTE' } }),
       m.count(Pago, { where: { estado: 'AUTORIZADO', ordenId: Not(IsNull()), actualizadoEn: LessThan(new Date(now - PAYMENT_GRACE_MS)) } }),
       m
         .createQueryBuilder(Orden, 'o')
@@ -122,6 +124,14 @@ export class ObservabilidadService {
         .where('r."createdAt" >= :desde AND r."responseStatus" >= 500', { desde })
         .getCount(),
       m.find(AuditoriaCambio, { order: { creadoEn: 'DESC' }, take: 10, select: { id: true, entidad: true, entidadId: true, accion: true, creadoEn: true } }),
+      // Webhook deliveries: the queue as it is now (PENDING = waiting or retrying, DEAD = gave up), whatever the window.
+      m
+        .createQueryBuilder(WebhookDelivery, 'w')
+        .select('w."status"', 'k')
+        .addSelect('COUNT(*)::int', 'n')
+        .where("w.\"status\" IN ('PENDING', 'DEAD')")
+        .groupBy('w."status"')
+        .getRawMany<{ k: string; n: number }>(),
     ]);
 
     const total = (c: Counts) => Object.values(c).reduce((a, b) => a + b, 0);
@@ -144,7 +154,8 @@ export class ObservabilidadService {
         compensacion: ratio(ordenes.FALLIDA_COMPENSADA ?? 0, ordenesConPago),
         notificacionesFallidas: ratio(notificaciones.FALLIDO ?? 0, total(notificaciones)),
       },
-      pendientes: { capturaPendiente, anulacionPendiente, autorizadoSinCaptura, emitidasSinConfirmacion },
+      pendientes: { capturaPendiente, anulacionPendiente, reembolsoPendiente, autorizadoSinCaptura, emitidasSinConfirmacion },
+      webhooks: { entregasPendientes: Number(webhooks.find((w) => w.k === 'PENDING')?.n ?? 0), entregasMuertas: Number(webhooks.find((w) => w.k === 'DEAD')?.n ?? 0) },
       ofertas: { total: total(ofertas), porEstado: ofertas },
       notificaciones: { total: total(notificaciones), porEstado: notificaciones },
       holds: { total: total(holds), porEstado: holds, vencidosSinLiberar: holdsVencidos },

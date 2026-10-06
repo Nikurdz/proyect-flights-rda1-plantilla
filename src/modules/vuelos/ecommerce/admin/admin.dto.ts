@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 import { IsDateOnly, ToUpperTrimmed } from '../../dto/validators';
 import { OrdenViewDto } from '../ordenes/dto/ordenes.dto';
 
@@ -137,6 +137,35 @@ export class AdminAsientosVueloDto {
   @ApiProperty() capacidadTotal: number;
   @ApiProperty({ type: [AdminAsientoReservadoDto], description: 'Asientos reservados, por número.' }) reservados: AdminAsientoReservadoDto[];
   @ApiProperty({ type: [AdminFilaMapaDto], description: 'Mapa completo de la cabina con la disponibilidad de cada asiento.' }) filas: AdminFilaMapaDto[];
+}
+
+export class AdminCancelarVueloDto {
+  @ApiPropertyOptional({ example: 'Falla técnica de la aeronave' })
+  @IsString()
+  @MaxLength(300)
+  @IsOptional()
+  motivo?: string;
+}
+
+export class AdminReprogramarVueloDto {
+  @ApiProperty({ example: '2026-11-20T14:30:00.000Z', description: 'Nueva hora de salida (UTC), en el futuro. La llegada se recalcula conservando la duración.' })
+  @IsDateString()
+  nuevaSalida: string;
+
+  @ApiPropertyOptional({ example: 'Cambio de franja operativa' })
+  @IsString()
+  @MaxLength(300)
+  @IsOptional()
+  motivo?: string;
+}
+
+export class AdminAccionVueloViewDto {
+  @ApiProperty({ format: 'uuid' }) vueloId: string;
+  @ApiProperty({ example: 'LA800' }) codigoVuelo: string;
+  @ApiProperty({ enum: ['SCHEDULED', 'CANCELLED'] }) estado: string;
+  @ApiProperty() salida: string;
+  @ApiProperty({ description: 'Reservas confirmadas que tenían este vuelo y fueron actualizadas o canceladas.' }) reservasAfectadas: number;
+  @ApiProperty({ type: [String], description: 'Eventos de webhook emitidos.' }) eventos: string[];
 }
 
 export class AdminVuelosPaginaDto {

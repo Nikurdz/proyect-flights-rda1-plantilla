@@ -139,6 +139,7 @@ export class OrdenViewDto extends BaseResponseDto {
   @ApiProperty({ type: [ItinerarioOrdenDto] }) itinerarios: ItinerarioOrdenDto[];
   @ApiProperty({ type: [PasajeroOrdenViewDto] }) pasajeros: PasajeroOrdenViewDto[];
   @ApiPropertyOptional({ description: 'Solo en la vista del propietario; la recuperación pública lo enmascara.' }) contacto?: { correo: string; telefono: string };
+  @ApiPropertyOptional({ format: 'uuid', description: 'Reserva del núcleo de vuelos tras la emisión: es el `bookingId` de las rutas de equipaje, cambio, cancelación, check-in y pases. Solo en la vista del propietario.' }) bookingId?: string;
   @ApiProperty() pago: { marca: string; ultimos4: string | null; cuotas: number };
   @ApiProperty() creadaEn: string;
   @ApiProperty() historial: { estado: string; en: string; motivo?: string }[];

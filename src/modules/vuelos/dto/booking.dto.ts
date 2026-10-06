@@ -235,6 +235,8 @@ export class BookingDetailResponseDto {
   updatedAt: string;
   @ApiPropertyOptional({ type: [TicketResponseDto] })
   tickets?: TicketResponseDto[];
+  @ApiPropertyOptional({ description: 'History of changes (date changes, flight reschedules, cancellation).' })
+  changes?: { changedAt: string; description: string }[];
 }
 
 export class BookingListItemDto {

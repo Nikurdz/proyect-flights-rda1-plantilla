@@ -214,6 +214,7 @@ export class ComprasService {
 
     const anulado = await this.pagos.anular(pago);
     const fallida = await this.ordenes.registrarFallida(oferta, pago, motivo);
+    await this.bookings.announceFailed(oferta.ownerId, oferta.holdId, motivo);
 
     // If the inventory hold survived the failure the customer can simply try again.
     const hold = await this.gdsOffers.getHoldStatus(oferta.ownerId, oferta.holdId).catch(() => null);

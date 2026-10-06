@@ -67,4 +67,8 @@ export class Booking {
 
   @UpdateDateColumn({ type: 'timestamp', precision: 3 })
   updatedAt: Date;
+
+  // History shown in BookingDetail.changes (date changes, flight reschedules, cancellation); null until the first one.
+  @Column({ type: 'jsonb', nullable: true })
+  changes: { changedAt: string; description: string }[] | null;
 }

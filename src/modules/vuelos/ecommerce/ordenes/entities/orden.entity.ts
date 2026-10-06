@@ -59,6 +59,7 @@ const bigintNumber: ValueTransformer = {
 @Entity('ecom_ordenes')
 @Index('UQ_ecom_ordenes_numero', ['numeroOrden'], { unique: true })
 @Index('IDX_ecom_ordenes_pnr', ['pnr'])
+@Index('IDX_ecom_ordenes_booking', ['bookingId'])
 @Index('IDX_ecom_ordenes_owner_created', ['ownerId', 'creadaEn', 'ordenId'])
 @Index('IDX_ecom_ordenes_creada', ['creadaEn', 'ordenId'])
 // One live order per offer; a failed (compensated) attempt does not block a retry on the same offer.

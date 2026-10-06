@@ -9,10 +9,12 @@ import { toIso, utcDayRange } from '../common/date.util';
 import { mapBookingUniqueViolation } from '../common/db-errors';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { PassengerBreakdown, PassengerType, countFor, PASSENGER_TYPES } from '../common/pricing.util';
+import type { ProblemDetailsBody } from '../common/problem-details.exception';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { seatExists } from '../common/seat-grid';
 import { buildTicketCode } from '../common/ticket-qr';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
+import { BaggagePurchase } from '../entities/baggage-purchase.entity';
 import { Booking } from '../entities/booking.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
 import { Passenger } from '../entities/passenger.entity';
@@ -75,6 +77,9 @@ export class BookingsService {
       if (error instanceof ProblemDetailsException && (error.getResponse() as { code?: string }).code === 'QUOTE_EXPIRED') {
         await this.offersService.expireIfDue(request.holdId);
       }
+      if (error instanceof ProblemDetailsException) {
+        await this.announceFailed(auth.ownerId, request.holdId, (error.getResponse() as ProblemDetailsBody).code);
+      }
       throw error;
     }
 
@@ -84,15 +89,36 @@ export class BookingsService {
     return outcome.result.response;
   }
 
-  /** Publishes booking.confirmed; call it only after the transaction that created the booking committed. */
+  /**
+   * Publishes booking.confirmed, then the ticket events; call it only after the transaction that created the
+   * booking committed. Tickets are issued synchronously inside that transaction, so `ticket_issuing` and
+   * `ticket_issued` are announced together, once the issuance is a fact.
+   */
   async announceConfirmed(ownerId: string, outcome: BookingOutcome): Promise<void> {
-    await this.events.publish('booking.confirmed', outcome.response.bookingId, {
+    const base = {
       bookingId: outcome.response.bookingId,
       pnr: outcome.response.pnr,
       holdId: outcome.holdId,
       ownerId,
       ticketNumbers: (outcome.response.tickets ?? []).map((t) => t.eTicketNumber),
-    });
+    };
+    await this.events.publish('booking.confirmed', outcome.response.bookingId, { ...base, status: 'CONFIRMED' });
+    await this.events.publish('booking.ticket_issuing', outcome.response.bookingId, { ...base, status: 'TICKET_ISSUING' });
+    await this.events.publish('booking.ticket_issued', outcome.response.bookingId, { ...base, status: 'CONFIRMED' });
+  }
+
+  /**
+   * Publishes booking.failed (and booking.ticket_failed when the failure is in the ticketing step) for a booking
+   * that could not be created although its hold was valid. There is no booking yet, so the event names the hold.
+   */
+  async announceFailed(ownerId: string, holdId: string, failureCode: string): Promise<void> {
+    const ISSUANCE_FAILURES = ['SEAT_TAKEN', 'PNR_CREATION_FAILED', 'TICKET_ISSUANCE_FAILED', 'PAYMENT_REFERENCE_INVALID'];
+    if (!ISSUANCE_FAILURES.includes(failureCode)) return;
+    const payload = { holdId, ownerId, status: 'FAILED', failureCode };
+    await this.events.publish('booking.failed', holdId, payload);
+    if (failureCode === 'PNR_CREATION_FAILED' || failureCode === 'TICKET_ISSUANCE_FAILED') {
+      await this.events.publish('booking.ticket_failed', holdId, payload);
+    }
   }
 
   /**
@@ -118,12 +144,15 @@ export class BookingsService {
     const firstFlight = ordered[0];
     const lastFlight = ordered[ordered.length - 1];
 
+    if (vuelos.some((v) => v.estado === 'CANCELLED')) {
+      throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight cancelled', 'A flight of this hold was cancelled.');
+    }
     // A hold taken before departure must not turn into a booking once the flight has left.
     if (new Date(firstFlight.fechaSalida).getTime() <= Date.now()) {
       throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight already departed', `Flight ${firstFlight.codigoVuelo} has already departed.`);
     }
 
-    this.validatePassengers(request, hold.passengersBreakdown, firstFlight, lastFlight, vuelos);
+    this.validatePassengers(request, hold.passengersBreakdown, firstFlight, lastFlight, vuelos, hold.itinerarySelections.map((s) => s.itineraryId));
 
     if (await manager.exists(Booking, { where: { paymentReference: request.payment.paymentReference } })) {
       throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PAYMENT_REFERENCE_INVALID', 'Payment already used', 'This paymentReference is already attached to another booking.');
@@ -183,6 +212,27 @@ export class BookingsService {
       await manager.save(seatRows);
     }
 
+    // Extra bags bought with the booking are covered by the booking's own payment.
+    const baggageRows = request.passengers.flatMap((p, index) =>
+      (p.extraBaggage ?? []).map((bag) => {
+        const leg = hold.itinerarySelections.findIndex((s) => s.itineraryId === bag.itineraryId);
+        return manager.create(BaggagePurchase, {
+          bookingId: booking.bookingId,
+          passengerId: savedPassengers[index].passengerId,
+          itineraryId: bag.itineraryId,
+          vueloId: hold.inventory[leg].vueloId,
+          quantity: bag.quantity,
+          unitPriceMinor: this.config.postSale.baggagePriceMinor,
+          totalMinor: this.config.postSale.baggagePriceMinor * bag.quantity,
+          currency: hold.currency,
+          paymentReference: request.payment.paymentReference,
+        });
+      }),
+    );
+    if (baggageRows.length > 0) {
+      await manager.save(baggageRows);
+    }
+
     const issuedAt = new Date();
     const issuedTickets: Ticket[] = [];
     for (const passenger of savedPassengers) {
@@ -220,6 +270,7 @@ export class BookingsService {
     firstFlight: Vuelo,
     lastFlight: Vuelo,
     vuelos: Vuelo[],
+    itineraryIds: string[],
   ): void {
     const fail = (title: string, detail: string, invalid?: { name: string; reason: string }) => {
       throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', title, detail, invalid ? [invalid] : undefined);
@@ -237,16 +288,21 @@ export class BookingsService {
       }
     }
 
-    // Extra baggage is neither stored nor charged yet: refuse it rather than let the customer believe it was bought.
-    const withBaggage = request.passengers.find((p) => (p.extraBaggage ?? []).length > 0);
-    if (withBaggage) {
-      throw new ProblemDetailsException(
-        HttpStatus.UNPROCESSABLE_ENTITY,
-        'VALIDATION_FAILED',
-        'Extra baggage not available',
-        `Extra baggage cannot be purchased in this phase (passenger ${withBaggage.passengerId}).`,
-        [{ name: 'passengers.extraBaggage', reason: 'not supported in this phase' }],
-      );
+    // Extra baggage bought with the booking: it must be for a leg of the hold, not for a lap infant, within the cap.
+    for (const passenger of request.passengers) {
+      const perLeg = new Map<string, number>();
+      for (const bag of passenger.extraBaggage ?? []) {
+        if (!itineraryIds.includes(bag.itineraryId)) {
+          fail('Baggage itinerary not part of the hold', `itineraryId ${bag.itineraryId} is not part of this booking.`, { name: 'passengers.extraBaggage.itineraryId', reason: 'does not belong to the hold' });
+        }
+        if (passenger.passengerType === 'INFANT') {
+          fail('Infants cannot carry baggage', `Passenger ${passenger.passengerId} is a lap infant.`, { name: 'passengers.extraBaggage', reason: 'a lap infant has no baggage allowance' });
+        }
+        perLeg.set(bag.itineraryId, (perLeg.get(bag.itineraryId) ?? 0) + bag.quantity);
+        if ((perLeg.get(bag.itineraryId) ?? 0) > this.config.postSale.baggageMaxPerLeg) {
+          throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BAGGAGE_LIMIT_EXCEEDED', 'Baggage limit exceeded', `A passenger can have at most ${this.config.postSale.baggageMaxPerLeg} extra bag(s) per leg.`);
+        }
+      }
     }
 
     assertNoDuplicatePassengers(request.passengers);
@@ -366,7 +422,14 @@ export class BookingsService {
       createdAt: toIso(booking.createdAt),
       updatedAt: toIso(booking.updatedAt),
       tickets: tickets.map((t) => this.toTicketDto(t, booking.pnr)),
+      ...(booking.changes?.length ? { changes: booking.changes } : {}),
     };
+  }
+
+  /** The contract detail of a booking, for operations that return it after changing it. */
+  async detailOf(manager: EntityManager, booking: Booking): Promise<BookingDetailResponseDto> {
+    const tickets = await manager.find(Ticket, { where: { bookingId: booking.bookingId } });
+    return this.toBookingDetail(booking, tickets);
   }
 
   private toTicketDto(ticket: Ticket, pnr: string): TicketResponseDto {

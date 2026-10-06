@@ -11,17 +11,20 @@ const DESCRIPTION = `
 | 3 | **Oferta y checkout** | \`POST /ofertas\` → \`PUT /ofertas/{id}/pasajeros\` (asiento opcional) → \`PUT …/facturacion\` → \`POST …/condiciones\`. |
 | 4 | **Pagar y emitir** | \`POST /ofertas/{id}/compra\` con un token de tarjeta de prueba. |
 | 5 | **Mis viajes y billetes** | \`GET /ordenes/{numero}\` o recuperar con PNR y apellido; \`GET /tickets/verificar\` con el código del QR. |
-| 6 | **Administración** | Solo con el token del ADMIN. |
+| 6 | **Gestionar la reserva** | Con el \`bookingId\` de tu orden (\`GET /ordenes/{numero}\`): equipaje extra, cambio de fecha y cancelación con reembolso. |
+| 7 | **Check-in y pases** | \`POST /bookings/{id}/check-in\` (abre 48 h antes) y \`GET …/boarding-passes\` con el QR firmado. |
+| 8 | **Webhooks** | Suscribe una URL https pública para recibir los eventos de tus reservas, firmados con HMAC. |
+| 9 | **Administración** | Solo con el token del ADMIN: órdenes, vuelos y asientos; cancelar o reprogramar un vuelo. |
 
-Las operaciones de los pasos 1 a 5 llevan "Paso N" en el título. **Pasos que piden \`Idempotency-Key\`**: crear la oferta y pagar; usa un UUID nuevo y repítelo para comprobar que no cobra dos veces.
+Las operaciones de los pasos 1 a 8 llevan "Paso N" en el título. **Pasos que piden \`Idempotency-Key\`**: crear la oferta, pagar, agregar equipaje, confirmar el cambio de fecha y cancelar; usa un UUID nuevo y repítelo para comprobar que no cobra ni devuelve dos veces. El check-in se puede repetir sin clave.
 
 ## Tarjetas de prueba (pasarela simulada, nunca se envía un número real)
-\`tok_visa_ok\` · \`tok_mastercard_ok\` · \`tok_amex_ok\` · \`tok_diners_ok\` aprueban. \`tok_declined\`, \`tok_insufficient\`, \`tok_expired\` y \`tok_fraud\` fuerzan un rechazo; \`tok_3ds\` y \`tok_review\` piden verificación; \`tok_<marca>_capture_fail\` falla el cobro tras emitir (queda para la reconciliación). Un monto mayor a 5,000 USD pasa a revisión.
+\`tok_visa_ok\` · \`tok_mastercard_ok\` · \`tok_amex_ok\` · \`tok_diners_ok\` aprueban (la \`marca\` del cuerpo debe coincidir). \`tok_declined\`, \`tok_insufficient\`, \`tok_expired\` y \`tok_3ds\` los rechaza el banco (\`402 PAYMENT_DECLINED\`). \`tok_fraud\`, \`tok_review\`, un monto mayor a 5,000 USD o 3 pagos rechazados previos en la misma oferta los rechaza el antifraude (\`402 PAYMENT_REJECTED_BY_FRAUD\`). \`tok_<marca>_capture_fail\` emite los billetes pero el cobro no se captura: queda pendiente para la reconciliación.
 
 ## Qué no se usa
 - **Alojamientos, Autos y Atracciones** son de otros equipos y no están montados: no aparecen aquí.
-- Sección **7 · Núcleo GDS**: es el contrato de vuelos que el e-commerce usa por dentro; no hace falta para comprar.
-- Las secciones **⛔ No implementado** (postventa, check-in y webhooks) están en el contrato pero responden \`501\` en esta fase.
+- Sección **10 · Núcleo GDS**: es el contrato de vuelos que el e-commerce usa por dentro; no hace falta para comprar.
+- Todo el contrato de vuelos está activo: ninguna operación responde \`501\`. Las reglas de negocio de la posventa (cargos, ventanas, penalidades) son decisiones del equipo, documentadas en \`docs/planes/2026-10-07-posventa-checkin-webhooks.md\`; la pasarela de pago, el antifraude y el correo son simulados.
 `.trim();
 
 export function buildVuelosSwaggerConfig(): Omit<OpenAPIObject, 'paths'> {

@@ -21,3 +21,15 @@ export class WebhookSubscriptionDto {
   @MaxLength(200)
   secret: string;
 }
+
+/** A subscription as it is shown back: the secret is write-only. */
+export class WebhookSubscriptionViewDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty({ format: 'uri' })
+  url: string;
+
+  @ApiProperty({ type: [String], enum: WEBHOOK_EVENTS })
+  events: string[];
+}
