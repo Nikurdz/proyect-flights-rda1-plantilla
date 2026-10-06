@@ -5,7 +5,7 @@ import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
 import { OrdenParamDto } from '../ordenes/dto/ordenes.dto';
-import { AdminOrdenViewDto, AdminOrdenesPaginaDto, AdminOrdenesQueryDto, AdminVuelosPaginaDto, AdminVuelosQueryDto } from './admin.dto';
+import { AdminAsientosVueloDto, AdminOrdenViewDto, AdminOrdenesPaginaDto, AdminOrdenesQueryDto, AdminVueloParamDto, AdminVuelosPaginaDto, AdminVuelosQueryDto } from './admin.dto';
 import { AdminService } from './admin.service';
 
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND } = HttpStatus;
@@ -43,5 +43,13 @@ export class AdminController {
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN)
   vuelos(@Query() query: AdminVuelosQueryDto) {
     return this.admin.listarVuelos(query);
+  }
+
+  @Get('vuelos/:vueloId/asientos')
+  @ApiOperation({ summary: 'Asientos reservados de un vuelo (ADMIN)', description: 'Mapa de la cabina con la disponibilidad de cada asiento y la lista de reservados con su código de reserva y orden. No muestra nombres de pasajeros.' })
+  @ApiResponse({ status: 200, type: AdminAsientosVueloDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND)
+  asientos(@Param() params: AdminVueloParamDto) {
+    return this.admin.asientosDeVuelo(params.vueloId);
   }
 }

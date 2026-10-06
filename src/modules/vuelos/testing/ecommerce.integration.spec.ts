@@ -1026,6 +1026,25 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     });
   });
 
+  // Same shape as the seat tests' helper (which lives inside their own describe), kept here for the admin checks.
+  async function ofertaConAsientosAdmin(token: string, asientos: { adulto: string; nino: string }) {
+    const { res, out, ida } = await nuevaOferta(token);
+    expect(res.status).toBe(201);
+    const ofertaId = res.body.ofertaId as string;
+    const pick = (seat: string) => ({ asientos: [{ trayectoId: ida.itinerarioId, asiento: seat }] });
+    await api()
+      .put(`/api/v1/ofertas/${ofertaId}/pasajeros`)
+      .set(bearer(token))
+      .send({
+        pasajeros: [pasajero('a1', 'ADULT', yearsBefore(35, out), pick(asientos.adulto)), pasajero('c1', 'CHILD', yearsBefore(8, out), pick(asientos.nino))],
+        contacto: { correo: 'comprador@example.com', telefono: '+593999999999' },
+      })
+      .expect(200);
+    await api().put(`/api/v1/ofertas/${ofertaId}/facturacion`).set(bearer(token)).send({ tipoIdentificacion: 'CEDULA', numeroIdentificacion: '1712345678', razonSocial: 'María Peña', direccion: 'Av. Amazonas 123', pais: 'EC' }).expect(200);
+    await api().post(`/api/v1/ofertas/${ofertaId}/condiciones`).set(bearer(token)).send({ versionTerminos: '2026-10', versionCondicionesTransporte: '2026-10' }).expect(200);
+    return { ofertaId, ida };
+  }
+
   // ------------------------------------------------------------------------------------------------
   describe('observabilidad del admin', () => {
     it('refuses everyone but an ADMIN (401 anonymous, 403 guest and customer); /health is public', async () => {
@@ -1101,7 +1120,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     it('refuses everyone but an ADMIN (401 anonymous, 403 guest and customer) on every admin read', async () => {
       const mine = await sharedCustomer();
       const guestToken = await guest();
-      for (const path of ['/api/v1/admin/ordenes', '/api/v1/admin/ordenes/ORD-AAAAAAAAAA', '/api/v1/admin/vuelos']) {
+      for (const path of ['/api/v1/admin/ordenes', '/api/v1/admin/ordenes/ORD-AAAAAAAAAA', '/api/v1/admin/vuelos', `/api/v1/admin/vuelos/${randomUUID()}/asientos`]) {
         await api().get(path).expect(401);
         await api().get(path).set(bearer(guestToken)).expect(403);
         await api().get(path).set(bearer(mine.token)).expect(403);
@@ -1150,6 +1169,40 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       const one = await api().get('/api/v1/admin/vuelos').query({ vuelo: 'LA1500', fecha: dayAhead(20) }).set(bearer(adminToken)).expect(200);
       expect(one.body.items).toHaveLength(1);
       expect(one.body.items[0].codigoVuelo).toBe('LA1500');
+    });
+
+    it('shows the admin the QR and seats of each ticket on an order, and the reserved seats of a flight', async () => {
+      const buyer = await guest();
+      const { ofertaId, ida } = await ofertaConAsientosAdmin(buyer, { adulto: '20C', nino: '20D' });
+      const bought = (await comprar(buyer, ofertaId).expect(201)).body;
+
+      // Order detail: one signed QR per passenger, the same text the customer gets, plus the chosen seats.
+      const detail = await api().get(`/api/v1/admin/ordenes/${bought.numeroOrden}`).set(bearer(adminToken)).expect(200);
+      expect(detail.body.pasajeros).toHaveLength(2);
+      for (const [i, p] of detail.body.pasajeros.entries()) {
+        expect(p.qr).toBe(bought.pasajeros[i].qr);
+        expect(p.qr).toMatch(/^v1\.\d{13}\.[A-Z0-9]{6}\.[A-Za-z0-9_-]{22}$/);
+      }
+      expect(detail.body.pasajeros.map((p: { asientos: { asiento: string }[] }) => p.asientos[0].asiento).sort()).toEqual(['20C', '20D']);
+
+      // Flight list: how many numbered seats are already taken.
+      const list = await api().get('/api/v1/admin/vuelos').query({ vuelo: bought.itinerarios[0].numeroVuelo, fecha: bought.itinerarios[0].salida.slice(0, 10) }).set(bearer(adminToken)).expect(200);
+      const row = list.body.items.find((f: { vueloId: string }) => f.vueloId === ida.itinerarioId);
+      expect(row.asientosReservados).toBe(2);
+
+      // The cabin of that flight: reserved seats with their locator and order, no names.
+      const cabin = await api().get(`/api/v1/admin/vuelos/${ida.itinerarioId}/asientos`).set(bearer(adminToken)).expect(200);
+      expect(cabin.body.reservados).toEqual([
+        { asiento: '20C', pnr: bought.pnr, numeroOrden: bought.numeroOrden },
+        { asiento: '20D', pnr: bought.pnr, numeroOrden: bought.numeroOrden },
+      ]);
+      const seats = cabin.body.filas.flatMap((f: { seats: { seatNumber: string; isAvailable: boolean }[] }) => f.seats);
+      expect(seats.find((s: { seatNumber: string }) => s.seatNumber === '20C').isAvailable).toBe(false);
+      expect(seats.find((s: { seatNumber: string }) => s.seatNumber === '20A').isAvailable).toBe(true);
+      expect(JSON.stringify(cabin.body)).not.toMatch(/Peña|Niño|María|comprador@example\.com/);
+
+      await api().get(`/api/v1/admin/vuelos/${randomUUID()}/asientos`).set(bearer(adminToken)).expect(404);
+      await api().get('/api/v1/admin/vuelos/not-a-uuid/asientos').set(bearer(adminToken)).expect(400);
     });
   });
 

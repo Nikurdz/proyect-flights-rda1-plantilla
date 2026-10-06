@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 import { IsDateOnly, ToUpperTrimmed } from '../../dto/validators';
 import { OrdenViewDto } from '../ordenes/dto/ordenes.dto';
 
@@ -102,6 +102,41 @@ export class AdminVueloViewDto {
   @ApiProperty({ description: 'Tarifa base por adulto en USD, antes de familia e impuestos.' }) precioBaseUsd: number;
   @ApiProperty() asientosDisponibles: number;
   @ApiProperty() capacidadTotal: number;
+  @ApiProperty({ description: 'Asientos con número ya reservados (los pasajeros que no eligieron asiento no cuentan).' }) asientosReservados: number;
+}
+
+export class AdminVueloParamDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  vueloId: string;
+}
+
+class AdminAsientoReservadoDto {
+  @ApiProperty({ example: '12A' }) asiento: string;
+  @ApiProperty({ example: 'ABC234', description: 'Código de reserva que lo tiene (sin nombres).' }) pnr: string;
+  @ApiPropertyOptional({ nullable: true, example: 'ORD-7K3M9PQ2XA', description: 'Orden del e-commerce, si la reserva salió de una.' }) numeroOrden: string | null;
+}
+
+class AdminAsientoMapaDto {
+  @ApiProperty({ example: '12A' }) seatNumber: string;
+  @ApiProperty() isAvailable: boolean;
+  @ApiProperty({ type: [String] }) characteristics: string[];
+}
+
+class AdminFilaMapaDto {
+  @ApiProperty() rowNumber: number;
+  @ApiProperty({ type: [AdminAsientoMapaDto] }) seats: AdminAsientoMapaDto[];
+}
+
+export class AdminAsientosVueloDto {
+  @ApiProperty({ format: 'uuid' }) vueloId: string;
+  @ApiProperty({ example: 'LA800' }) codigoVuelo: string;
+  @ApiProperty({ example: 'BOG' }) origen: string;
+  @ApiProperty({ example: 'SCL' }) destino: string;
+  @ApiProperty() salida: string;
+  @ApiProperty() capacidadTotal: number;
+  @ApiProperty({ type: [AdminAsientoReservadoDto], description: 'Asientos reservados, por número.' }) reservados: AdminAsientoReservadoDto[];
+  @ApiProperty({ type: [AdminFilaMapaDto], description: 'Mapa completo de la cabina con la disponibilidad de cada asiento.' }) filas: AdminFilaMapaDto[];
 }
 
 export class AdminVuelosPaginaDto {
