@@ -64,6 +64,9 @@ export class RecuperarOrdenQueryDto {
   apellido: string;
 }
 
+/** Same proof as the public recovery, sent in the body because it is a write. */
+export class VincularOrdenDto extends RecuperarOrdenQueryDto {}
+
 export class HistorialOrdenesQueryDto {
   @ApiPropertyOptional({ minimum: 1, maximum: 50, default: 20 })
   @Type(() => Number)

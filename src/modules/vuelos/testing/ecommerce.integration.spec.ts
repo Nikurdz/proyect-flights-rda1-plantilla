@@ -58,6 +58,10 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     return { token: login.body.accessToken as string, clienteId: created.body.clienteId as string, correo };
   }
 
+  // Sign-in is rate limited per address (20 / 15 min), and this suite is one address: share an empty account.
+  let spareCustomer: Awaited<ReturnType<typeof customer>> | undefined;
+  const sharedCustomer = async () => (spareCustomer ??= await customer());
+
   const money = (v: { monto: string }) => Number(v.monto);
 
   type Itinerario = { itinerarioId: string; precioDesde: { moneda: string; monto: string }; distintivos: string[]; fechaSalidaIso?: string; salida: string };
@@ -820,7 +824,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
   // ------------------------------------------------------------------------------------------------
   describe('back-office: only an ADMIN reads across customers', () => {
     it('refuses everyone but an ADMIN (401 anonymous, 403 guest and customer) on every admin read', async () => {
-      const mine = await customer();
+      const mine = await sharedCustomer();
       const guestToken = await guest();
       for (const path of ['/api/v1/admin/ordenes', '/api/v1/admin/ordenes/ORD-AAAAAAAAAA', '/api/v1/admin/vuelos']) {
         await api().get(path).expect(401);
@@ -876,6 +880,34 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
 
   // ------------------------------------------------------------------------------------------------
   describe('historial, privacidad y abuso', () => {
+    it('adds a trip bought as a guest to an account, once, and never takes it from another account', async () => {
+      const guestToken = await guest();
+      const { ofertaId } = await ofertaLista(guestToken);
+      const bought = (await comprar(guestToken, ofertaId).expect(201)).body;
+      const claim = (token: string, body: Record<string, unknown>) => api().post('/api/v1/clientes/me/ordenes').set(bearer(token)).send(body);
+
+      const mine = await sharedCustomer();
+      expect((await api().get('/api/v1/clientes/me/ordenes').set(bearer(mine.token)).expect(200)).body.items).toHaveLength(0); // before
+
+      // proof required: a wrong surname looks like a missing order; a guest cannot claim; one identifier only
+      await claim(mine.token, { numero: bought.numeroOrden, apellido: 'Nadie' }).expect(404);
+      await claim(guestToken, { numero: bought.numeroOrden, apellido: 'Peña' }).expect(403);
+      await claim(mine.token, { numero: bought.numeroOrden, pnr: bought.pnr, apellido: 'Peña' }).expect(400);
+
+      const linked = await claim(mine.token, { pnr: bought.pnr, apellido: 'Peña' }).expect(200);
+      expect(linked.body.numeroOrden).toBe(bought.numeroOrden);
+
+      const history = await api().get('/api/v1/clientes/me/ordenes').set(bearer(mine.token)).expect(200);
+      expect(history.body.items.map((o: { numeroOrden: string }) => o.numeroOrden)).toEqual([bought.numeroOrden]);
+      await api().get(`/api/v1/ordenes/${bought.numeroOrden}`).set(bearer(mine.token)).expect(200); // now owner-readable
+      expect(await ds.getRepository(Booking).count({ where: { ownerId: mine.clienteId } })).toBe(1);
+
+      // idempotent for the owner; another account cannot take it; the old guest session no longer reads it
+      await claim(mine.token, { numero: bought.numeroOrden, apellido: 'Peña' }).expect(200);
+      await claim(adminToken, { numero: bought.numeroOrden, apellido: 'Peña' }).expect(404); // another account
+      await api().get(`/api/v1/ordenes/${bought.numeroOrden}`).set(bearer(guestToken)).expect(404);
+    });
+
     it('lists a customer’s orders newest first with a stable cursor, and keeps them private', async () => {
       const mine = await customer();
       const numeros: string[] = [];
@@ -937,5 +969,20 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     expect(second).toEqual({ mercados: 0, localidades: 0, plantillas: 0, administradores: 0 });
     expect(await ds.getRepository(Localidad).count()).toBe(before);
     expect(await ds.getRepository(Mercado).count()).toBe(1);
+  });
+
+  it('replaces the placeholder legal data of an old seed, but never an admin edit', async () => {
+    const repo = ds.getRepository(Mercado);
+    const current = await repo.findOneByOrFail({ codigo: 'ec' });
+    const old = { ...current.textosLegales, razonSocial: 'Booking Hub Vuelos Ecuador S.A. (dato de ejemplo)', terminos: { version: '2026-10', url: 'https://www.example.com/ec/es/terminos' } };
+
+    await repo.update({ codigo: 'ec' }, { textosLegales: old });
+    await seedEcommerce(ds, ADMIN);
+    expect((await repo.findOneByOrFail({ codigo: 'ec' })).textosLegales.terminos.url).toBe('/terminos');
+
+    const edited = { ...current.textosLegales, razonSocial: 'Empresa real S.A.' };
+    await repo.update({ codigo: 'ec' }, { textosLegales: edited });
+    await seedEcommerce(ds, ADMIN);
+    expect((await repo.findOneByOrFail({ codigo: 'ec' })).textosLegales.razonSocial).toBe('Empresa real S.A.');
   });
 });

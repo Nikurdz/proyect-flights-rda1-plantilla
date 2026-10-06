@@ -1,4 +1,4 @@
-import { Body, Get, Headers, HttpStatus, Ip, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Get, Headers, HttpCode, HttpStatus, Ip, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { IdempotencyKeyGuard } from '../../../../common/guards/idempotency-key.guard';
@@ -9,7 +9,7 @@ import { ProblemController } from '../../common/problem-controller';
 import { ClienteParamDto } from '../identidad/dto/identidad.dto';
 import { OfertaParamDto } from '../ofertas/dto/ofertas.dto';
 import { ComprasService } from './compras.service';
-import { CompraDto, HistorialOrdenesQueryDto, OrdenParamDto, OrdenViewDto, OrdenesPaginaViewDto, RecuperarOrdenQueryDto } from './dto/ordenes.dto';
+import { CompraDto, HistorialOrdenesQueryDto, OrdenParamDto, OrdenViewDto, OrdenesPaginaViewDto, RecuperarOrdenQueryDto, VincularOrdenDto } from './dto/ordenes.dto';
 import { OrdenesService } from './ordenes.service';
 
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, PAYMENT_REQUIRED, TOO_MANY_REQUESTS, BAD_GATEWAY, SERVICE_UNAVAILABLE } = HttpStatus;
@@ -79,6 +79,18 @@ export class OrdenesController {
 @ApiBearerAuth()
 export class ClienteOrdenesController {
   constructor(private readonly ordenes: OrdenesService) {}
+
+  @Post(':id/ordenes')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Agregar a mi cuenta un viaje comprado como invitado',
+    description: 'Con el número de orden o el código de reserva y un apellido de los pasajeros. Solo se puede reclamar un viaje que aún no pertenece a ninguna cuenta; a partir de ahí aparece en el historial.',
+  })
+  @ApiResponse({ status: 200, type: OrdenViewDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, TOO_MANY_REQUESTS)
+  vincular(@CurrentAuth() auth: AuthClaims, @Param() params: ClienteParamDto, @Body() body: VincularOrdenDto, @Ip() ip: string) {
+    return this.ordenes.vincular(auth, params.id, body, ip);
+  }
 
   @Get(':id/ordenes')
   @ApiOperation({ summary: 'Historial de órdenes del cliente', description: 'RF-ORD-011: más recientes primero, paginado por cursor. Use "me" como id.' })

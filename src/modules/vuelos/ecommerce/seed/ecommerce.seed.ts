@@ -125,6 +125,13 @@ export async function seedEcommerce(dataSource: DataSource, admin?: { correo: st
   // on record for old orders but can no longer be sold from.
   await dataSource.getRepository(Mercado).update({ moneda: Not('USD') }, { activo: false });
 
+  // An earlier seed wrote placeholder legal data (a made-up company and example.com links). Replace it
+  // only while it is still exactly that: anything an admin edited since is left alone.
+  const ecuador = await dataSource.getRepository(Mercado).findOneBy({ codigo: 'ec' });
+  if (ecuador?.textosLegales?.razonSocial?.startsWith('Booking Hub') && ecuador.textosLegales.terminos?.url?.includes('example.com')) {
+    await dataSource.getRepository(Mercado).update({ codigo: 'ec' }, { textosLegales: MERCADOS[0].textosLegales });
+  }
+
   const localidades = await dataSource
     .createQueryBuilder()
     .insert()

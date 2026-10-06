@@ -7,8 +7,9 @@ import { decodeCursor, encodeCursor } from '../../common/cursor.util';
 import { toIso } from '../../common/date.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import type { BookingDetailResponseDto } from '../../dto/booking.dto';
+import { Booking } from '../../entities/booking.entity';
 import { money } from '../common/moneda.util';
-import { SlidingWindowLimiter } from '../common/rate-limiter';
+import { SlidingWindowLimiter, assertWithinLimit } from '../common/rate-limiter';
 import { normalizarNombrePasajero } from '../common/texto.util';
 import type { Oferta } from '../ofertas/entities/oferta.entity';
 import type { Pago } from '../pagos/entities/pago.entity';
@@ -139,6 +140,12 @@ export class OrdenesService {
       throw new ProblemDetailsException(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMIT_EXCEEDED', 'Too many lookups', `Try again in ${limit.retryAfterSeconds} seconds.`);
     }
 
+    const orden = await this.buscarPorCodigoYApellido(query);
+    return this.vista(orden, { publica: true });
+  }
+
+  /** The order named by number or PNR whose passengers include that surname, else the same 404 for every miss. */
+  private async buscarPorCodigoYApellido(query: RecuperarOrdenQueryDto): Promise<Orden> {
     const orden = await this.ordenes.findOne({ where: query.numero ? { numeroOrden: query.numero } : { pnr: query.pnr } });
     const apellido = normalizarNombrePasajero(query.apellido);
     // People give one surname or both: accept the full surname or any whole word of it, never a fragment.
@@ -147,7 +154,39 @@ export class OrdenesService {
       return registrado === apellido || (apellido.length >= 2 && registrado.split(' ').includes(apellido));
     });
     if (!orden || !apellido || !coincide) throw orderNotFound();
-    return this.vista(orden, { publica: true });
+    return orden;
+  }
+
+  /**
+   * Moves a trip bought as a guest into the signed-in customer's account (same proof as the public
+   * recovery: number or PNR plus a passenger's surname). Only an order nobody owns yet can be claimed,
+   * so this can never take a trip away from another account. Idempotent for the account that owns it.
+   */
+  async vincular(auth: AuthClaims, id: string, query: RecuperarOrdenQueryDto, ip: string): Promise<OrdenViewDto> {
+    if (auth.kind !== 'customer') {
+      throw new ProblemDetailsException(HttpStatus.FORBIDDEN, 'FORBIDDEN', 'Account required', 'Sign in with an account to add a trip to it.');
+    }
+    if (id !== 'me' && id !== auth.ownerId) {
+      throw new ProblemDetailsException(HttpStatus.FORBIDDEN, 'FORBIDDEN', 'Not your account', 'You can only add trips to your own account.');
+    }
+    if (Boolean(query.numero) === Boolean(query.pnr)) {
+      throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Order number or PNR required', 'Provide exactly one of numero or pnr, plus apellido.', [
+        { name: 'numero', reason: 'send either numero or pnr' },
+      ]);
+    }
+    assertWithinLimit(this.recoveryLimiter, `recover:${ip}`, 'Too many lookups');
+
+    const orden = await this.buscarPorCodigoYApellido(query);
+    if (orden.ownerId === auth.ownerId) return this.vista(orden);
+    if (orden.clienteId || !orden.ownerId.startsWith('guest:')) throw orderNotFound();
+
+    await this.ordenes.manager.transaction(async (manager) => {
+      await manager.update(Orden, { ordenId: orden.ordenId, ownerId: orden.ownerId }, { ownerId: auth.ownerId, clienteId: auth.ownerId });
+      if (orden.bookingId) await manager.update(Booking, { bookingId: orden.bookingId }, { ownerId: auth.ownerId });
+    });
+    orden.ownerId = auth.ownerId;
+    orden.clienteId = auth.ownerId;
+    return this.vista(orden);
   }
 
   /** RF-ORD-011: the customer's own history, newest first, keyset-paginated. */
