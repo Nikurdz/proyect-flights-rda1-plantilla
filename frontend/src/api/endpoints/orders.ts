@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { apiClient } from '../client';
-import type { OrdenViewDto, OrdenesPaginaViewDto } from '../types';
+import type { OrdenViewDto, OrdenesPaginaViewDto, VerificacionBilleteViewDto } from '../types';
 
 export async function recuperarOrden(params: { numero?: string; pnr?: string; apellido: string }): Promise<OrdenViewDto> {
   const query = new URLSearchParams();
@@ -22,6 +22,20 @@ export async function obtenerHistorialOrdenes(params: { limit?: number; cursor?:
   const qs = query.toString();
 
   return apiClient<OrdenesPaginaViewDto>(`clientes/me/ordenes${qs ? `?${qs}` : ''}`);
+}
+
+export async function verificarBillete(codigo: string): Promise<VerificacionBilleteViewDto> {
+  return apiClient<VerificacionBilleteViewDto>(`tickets/verificar?codigo=${encodeURIComponent(codigo)}`, { skipAuth: true });
+}
+
+/** Public check of a ticket's QR code. */
+export function useVerificacionBillete(codigo?: string) {
+  return useQuery({
+    queryKey: ['verificar-billete', codigo],
+    queryFn: () => verificarBillete(codigo!),
+    enabled: Boolean(codigo),
+    retry: false,
+  });
 }
 
 export function useOrdenPropia(numero?: string, enabled: boolean = true) {

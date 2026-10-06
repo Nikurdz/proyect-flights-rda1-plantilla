@@ -53,6 +53,14 @@ export type MedioPagoViewDto = Schemas['MedioPagoViewDto'];
 export type CompraDto = Schemas['CompraDto'];
 export type MedioCompraDto = Schemas['MedioCompraDto'];
 export type OrdenViewDto = Schemas['OrdenViewDto'];
+
+/** GET /tickets/verificar: whether a QR code is an authentic, issued ticket (no personal data). */
+export interface VerificacionBilleteViewDto {
+  valido: boolean;
+  estado?: string;
+  pnr?: string;
+  itinerarios?: { numeroVuelo: string; origen: string; destino: string; salida: string }[];
+}
 export type OrdenesPaginaViewDto = Schemas['OrdenesPaginaViewDto'];
 export type TokenViewDto = Schemas['TokenViewDto'];
 export type LoginDto = Schemas['LoginDto'];

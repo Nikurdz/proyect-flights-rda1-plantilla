@@ -23,6 +23,7 @@ import { FareComparisonModal } from '../fares/FareComparisonModal';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { getValidSearchDateString, addDaysToDate } from '../../lib/dates';
+import { outboundSelectionKey } from '../../lib/search';
 
 export const ResultsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -60,11 +61,17 @@ export const ResultsPage: React.FC = () => {
     familia: FamiliaTarifariaDto;
   } | null>(null);
 
-  // A new search starts over: a leg picked for another route or day must not carry into it.
-  const searchKey = `${origin}|${destination}|${outbound}|${inbound}|${trip}|${adt}|${chd}|${inf}`;
+  // The outbound flight picked is only valid for the route, outbound day and party it was picked for. The return
+  // date is not part of the key: changing it must keep the outbound choice and stay on the return leg.
+  const outboundKey = outboundSelectionKey({ origin, destination, outbound, trip, adt, chd, inf });
   useEffect(() => {
     setSelectedOutbound(null);
     setActiveLegIndex(0);
+  }, [outboundKey]);
+
+  // Any change of the search (the return day included) clears an old error from a previous attempt.
+  const searchKey = `${outboundKey}|${inbound}`;
+  useEffect(() => {
     setOfferError(null);
   }, [searchKey]);
 

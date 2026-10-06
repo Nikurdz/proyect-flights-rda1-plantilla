@@ -1685,6 +1685,8 @@ export interface components {
             eTicket?: string | null;
             /** @description Asientos elegidos, uno por trayecto. */
             asientos?: components["schemas"]["AsientoOrdenViewDto"][];
+            /** @description Texto firmado del código QR del pasajero (v1.<billete>.<PNR>.<firma>); sin datos personales. */
+            qr?: string;
         };
         AsientoOrdenViewDto: {
             /** @example LA800 */

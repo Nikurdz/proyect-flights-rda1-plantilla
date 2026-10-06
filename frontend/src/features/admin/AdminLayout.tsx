@@ -21,7 +21,7 @@ export const AdminLayout: React.FC = () => {
             </span>
             <div>
               <h1 className="text-2xl font-black text-brand-black">Administración</h1>
-              <p className="text-xs text-slate-500">Consulta de órdenes y vuelos. Solo lectura.</p>
+              <p className="text-xs text-slate-500">Órdenes, vuelos y estado del sistema. Solo lectura.</p>
             </div>
           </div>
           <nav aria-label="Administración" className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1">
@@ -30,6 +30,9 @@ export const AdminLayout: React.FC = () => {
             </NavLink>
             <NavLink to="/admin/vuelos" className={tabClass}>
               Vuelos
+            </NavLink>
+            <NavLink to="/admin/observabilidad" className={tabClass}>
+              Observabilidad
             </NavLink>
           </nav>
         </div>

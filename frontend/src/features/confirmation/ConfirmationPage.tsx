@@ -6,6 +6,7 @@ import { MoneyText } from '../../components/common/MoneyText';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Logo } from '../../components/ui/Logo';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { TicketQr } from '../../components/common/TicketQr';
 import { timeZoneOf } from '../../lib/airports';
 import { fareFamilyLabel, formatDateTime, orderStatusLabel, passengerTypeLabel } from '../../lib/labels';
 import { useSession } from '../../lib/session';
@@ -224,6 +225,11 @@ export const ConfirmationPage: React.FC = () => {
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-slate-500">Asiento{pax.asientos.length > 1 ? 's' : ''}</span>
                           <span className="font-mono font-bold text-slate-800">{pax.asientos.map((a) => `${a.numeroVuelo} · ${a.asiento}`).join('   ')}</span>
+                        </div>
+                      )}
+                      {pax.qr && (
+                        <div className="flex justify-center border-t border-slate-200/60 pt-3">
+                          <TicketQr code={pax.qr} passengerName={`${pax.nombres} ${pax.apellidos}`} />
                         </div>
                       )}
                     </div>

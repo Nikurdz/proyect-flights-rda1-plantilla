@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { MoneyText } from '../../components/common/MoneyText';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
+import { TicketQr } from '../../components/common/TicketQr';
 import { timeZoneOf } from '../../lib/airports';
 import { fareFamilyLabel, formatDateTime, orderStatusLabel, orderStatusTone, passengerTypeLabel } from '../../lib/labels';
 import { saveLastOrder } from '../../lib/storage';
@@ -187,9 +188,12 @@ export const RetrieveOrderPage: React.FC = () => {
                     </div>
 
                     {pax.eTicket && (
-                      <div className="flex items-center gap-1.5 font-mono text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">
-                        <Ticket className="w-3.5 h-3.5 text-brand-gold-dark" />
-                        <span>Billete: {pax.eTicket}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 font-mono text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">
+                          <Ticket className="w-3.5 h-3.5 text-brand-gold-dark" />
+                          <span>Billete: {pax.eTicket}</span>
+                        </div>
+                        {pax.qr && <TicketQr code={pax.qr} size={72} passengerName={`${pax.nombres} ${pax.apellidos}`} />}
                       </div>
                     )}
                   </div>

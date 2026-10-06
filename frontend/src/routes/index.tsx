@@ -9,6 +9,7 @@ import { ResultsPage } from '../features/results/ResultsPage';
 import { CheckoutPage } from '../features/checkout/CheckoutPage';
 import { ConfirmationPage } from '../features/confirmation/ConfirmationPage';
 import { RetrieveOrderPage } from '../features/orders/RetrieveOrderPage';
+import { VerifyTicketPage } from '../features/verify/VerifyTicketPage';
 import { OrderHistoryPage } from '../features/account/OrderHistoryPage';
 import { LoginPage } from '../features/account/LoginPage';
 import { RegisterPage } from '../features/account/RegisterPage';
@@ -22,6 +23,7 @@ import { HelpPage } from '../features/legal/HelpPage';
 import { AdminLayout } from '../features/admin/AdminLayout';
 import { AdminOrdersPage } from '../features/admin/AdminOrdersPage';
 import { AdminFlightsPage } from '../features/admin/AdminFlightsPage';
+import { AdminObservabilityPage } from '../features/admin/AdminObservabilityPage';
 import { RequireAdmin, RequireCustomer } from './guards';
 import { RouteEffects } from './RouteEffects';
 import { NotFoundPage } from './NotFoundPage';
@@ -66,8 +68,11 @@ export const AppRoutes: React.FC = () => {
             <Route index element={<AdminOrdersPage />} />
             <Route path="ordenes" element={<AdminOrdersPage />} />
             <Route path="vuelos" element={<AdminFlightsPage />} />
+            <Route path="observabilidad" element={<AdminObservabilityPage />} />
           </Route>
         </Route>
+
+        <Route path="/verificar/:codigo" element={<VerifyTicketPage />} />
 
         <Route path="/transparencia" element={<TransparencyPage />} />
         <Route path="/condiciones-transporte" element={<TransportConditionsPage />} />

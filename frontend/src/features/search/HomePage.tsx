@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Clock, Luggage, PlaneTakeoff, ReceiptText } from 'lucide-react';
 import { SearchBar } from './SearchBar';
+import { PassengerSelector, type PassengerCounts } from './PassengerSelector';
 import { addDaysToDate, getTomorrowDateString } from '../../lib/dates';
+import { buildSearchPath, describePassengers } from '../../lib/search';
 
 const FEATURES = [
   {
@@ -38,6 +40,8 @@ const POPULAR_ROUTES: { from: string; to: string; fromCity: string; toCity: stri
 
 export const HomePage: React.FC = () => {
   const outbound = addDaysToDate(getTomorrowDateString(), 6);
+  // Chosen before clicking a popular route, so the search starts with the right party instead of one adult.
+  const [passengers, setPassengers] = useState<PassengerCounts>({ adt: 1, chd: 0, inf: 0 });
 
   return (
     <div className="bg-slate-50">
@@ -59,17 +63,24 @@ export const HomePage: React.FC = () => {
       </div>
 
       <section className="mx-auto max-w-7xl px-4 pt-16 sm:px-6 lg:px-8" aria-labelledby="rutas">
-        <div className="mb-6 flex items-end justify-between gap-4">
-          <h2 id="rutas" className="text-xl font-black text-brand-black sm:text-2xl">
-            Rutas populares
-          </h2>
-          <span className="text-xs text-slate-500">Búsqueda de ida para dentro de una semana</span>
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 id="rutas" className="text-xl font-black text-brand-black sm:text-2xl">
+              Rutas populares
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Búsqueda de ida para dentro de una semana · <strong className="font-semibold text-slate-700">{describePassengers(passengers)}</strong>
+            </p>
+          </div>
+          <div className="w-full sm:w-64">
+            <PassengerSelector counts={passengers} onChange={setPassengers} />
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {POPULAR_ROUTES.map((route) => (
             <Link
               key={`${route.from}-${route.to}`}
-              to={`/resultados?origin=${route.from}&destination=${route.to}&outbound=${outbound}&trip=OW&adt=1&sort=MAS_BARATOS`}
+              to={buildSearchPath({ origin: route.from, destination: route.to, outbound, trip: 'OW', passengers, sort: 'MAS_BARATOS' })}
               className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-brand-gold hover:shadow-card"
             >
               <span>
