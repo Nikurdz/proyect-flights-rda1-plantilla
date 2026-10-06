@@ -1521,6 +1521,7 @@ export interface components {
             tipo: string;
             nombres: string;
             apellidos: string;
+            asientos?: components["schemas"]["AsientoElegidoDto"][];
         };
         OfertaViewDto: {
             /** @description HATEOAS links (Richardson Maturity Model Level 3) */
@@ -1597,6 +1598,14 @@ export interface components {
             /** @description RF-CHK-006: número LATAM Pass del pasajero. */
             numeroSocio?: string;
             necesidades?: ("MOVILIDAD_REDUCIDA" | "MENOR_NO_ACOMPANADO" | "ALIMENTACION_ESPECIAL" | "MASCOTA")[];
+            /** @description Asiento opcional por trayecto; los infantes en brazos no ocupan asiento. */
+            asientos?: components["schemas"]["AsientoElegidoDto"][];
+        };
+        AsientoElegidoDto: {
+            /** Format: uuid */
+            trayectoId: string;
+            /** @example 12A */
+            asiento: string;
         };
         ContactoDto: {
             /** Format: email */
@@ -1674,6 +1683,14 @@ export interface components {
             apellidos: string;
             /** @description Billete electrónico de 13 dígitos (RF-ORD-003). */
             eTicket?: string | null;
+            /** @description Asientos elegidos, uno por trayecto. */
+            asientos?: components["schemas"]["AsientoOrdenViewDto"][];
+        };
+        AsientoOrdenViewDto: {
+            /** @example LA800 */
+            numeroVuelo: string;
+            /** @example 12A */
+            asiento: string;
         };
         OrdenViewDto: {
             /** @description HATEOAS links (Richardson Maturity Model Level 3) */

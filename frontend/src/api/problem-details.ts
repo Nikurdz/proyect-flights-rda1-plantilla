@@ -128,6 +128,11 @@ export function getFriendlyErrorMessage(code: string | undefined, status: number
     case 'CONDITIONS_VERSION_MISMATCH':
       return 'Las condiciones se actualizaron. Léelas y acéptalas de nuevo.';
     case 'SEAT_TAKEN':
+      return 'Alguien más tomó uno de los asientos que elegiste (o el vuelo se llenó). No se te cobró: vuelve a Pasajeros y elige otro asiento.';
+    case 'SEAT_CABIN_MISMATCH':
+      return 'Uno de los asientos elegidos no existe en este vuelo. Elige otro.';
+    case 'INFANT_SEAT_NOT_ALLOWED':
+      return 'Los bebés que viajan en brazos no ocupan asiento.';
     case 'OFFER_NO_LONGER_AVAILABLE':
       return 'Ya no quedan cupos en este vuelo. Elige otro horario.';
     case 'PAYMENT_DECLINED':

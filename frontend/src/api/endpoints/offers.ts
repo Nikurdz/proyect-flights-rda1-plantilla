@@ -6,6 +6,7 @@ import type {
   ArmarOfertaDto,
   CompraDto,
   FacturacionDto,
+  MapaAsientosViewDto,
   MedioPagoViewDto,
   OfertaViewDto,
   OrdenViewDto,
@@ -47,6 +48,10 @@ export async function registrarPasajeros(id: string, dto: RegistrarPasajerosDto)
   });
 }
 
+export async function obtenerMapaAsientos(id: string, trayectoId: string): Promise<MapaAsientosViewDto> {
+  return apiClient<MapaAsientosViewDto>(`ofertas/${id}/asientos?trayectoId=${encodeURIComponent(trayectoId)}`);
+}
+
 export async function registrarFacturacion(id: string, dto: FacturacionDto): Promise<OfertaViewDto> {
   return apiClient<OfertaViewDto>(`ofertas/${id}/facturacion`, {
     method: 'PUT',
@@ -84,6 +89,17 @@ export function useOferta(id?: string) {
       if (state === 'VENCIDA' || state === 'PAGADA' || state === 'CANCELADA') return false;
       return 15000; // Poll every 15s to keep countdown aligned
     },
+  });
+}
+
+/** The seat map of one leg. Kept fresh-ish: another traveller may take a seat while this one chooses. */
+export function useMapaAsientos(id?: string, trayectoId?: string) {
+  return useQuery({
+    queryKey: ['asientos', id, trayectoId],
+    queryFn: () => obtenerMapaAsientos(id!, trayectoId!),
+    enabled: Boolean(id && trayectoId),
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 }
 

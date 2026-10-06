@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { Users, Mail, Phone, ArrowRight, Baby, UserCheck } from 'lucide-react';
 import { registrarPasajeros } from '../../api/endpoints/offers';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
+import { selectionsFromRegistered, toAsientosPayload, type SeatSelections } from '../../lib/seats';
+import { SeatSelector } from './SeatSelector';
 import type { OfertaViewDto, RegistrarPasajerosDto, PasajeroDto } from '../../api/types';
 
 const COUNTRIES = [
@@ -62,6 +64,8 @@ interface PassengerFormProps {
 export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess }) => {
   const [submitError, setSubmitError] = useState<unknown>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Optional seat picks, kept here so they travel with the passengers (and survive coming back to this step).
+  const [seats, setSeats] = useState<SeatSelections>(() => selectionsFromRegistered(oferta.pasajerosRegistrados));
 
   // Initialize initial passengers list based on offer passenger counts
   const adtCount = oferta.pasajeros?.adultos || 1;
@@ -126,6 +130,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
     register,
     control,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -143,7 +148,17 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
     name: 'pasajeros',
   });
 
-  const adultsList = fields.filter((f) => f.tipo === 'ADULT');
+  // `fields[].id` is the key react-hook-form generates, not the passenger id the API needs: take ids from the defaults.
+  const adultsList = defaultPassengers.filter((p) => p.tipo === 'ADULT');
+
+  const watched = watch('pasajeros');
+  const seatPassengers = defaultPassengers
+    .map((p, idx) => ({ id: p.id, tipo: p.tipo, idx }))
+    .filter((p) => p.tipo !== 'INFANT')
+    .map((p, order) => {
+      const typed = `${watched?.[p.idx]?.nombres ?? ''} ${watched?.[p.idx]?.apellidos ?? ''}`.trim();
+      return { id: p.id, label: typed || `Pasajero ${order + 1}` };
+    });
 
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -151,8 +166,10 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
 
     try {
       const payload: RegistrarPasajerosDto = {
-        pasajeros: values.pasajeros.map((p) => ({
+        pasajeros: values.pasajeros.map((p, idx) => ({
           ...p,
+          id: defaultPassengers[idx].id,
+          asientos: p.tipo === 'INFANT' ? undefined : toAsientosPayload(seats, defaultPassengers[idx].id),
           documento: {
             ...p.documento,
             vencimiento: p.documento.vencimiento || undefined,
@@ -374,6 +391,9 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
           );
         })}
       </div>
+
+      {/* Optional seat selection, per leg */}
+      <SeatSelector oferta={oferta} passengers={seatPassengers} value={seats} onChange={setSeats} />
 
       {/* Contact Section */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">

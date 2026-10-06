@@ -220,6 +220,12 @@ export const ConfirmationPage: React.FC = () => {
                         <span className="text-[11px] text-slate-500">Billete electrónico</span>
                         <span className="font-mono text-xs font-black tracking-wider text-brand-black">{pax.eTicket || 'Pendiente'}</span>
                       </div>
+                      {pax.asientos && pax.asientos.length > 0 && (
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500">Asiento{pax.asientos.length > 1 ? 's' : ''}</span>
+                          <span className="font-mono font-bold text-slate-800">{pax.asientos.map((a) => `${a.numeroVuelo} · ${a.asiento}`).join('   ')}</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

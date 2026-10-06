@@ -30,6 +30,20 @@ export type OfertaViewDto = Schemas['OfertaViewDto'];
 export type ArmarOfertaDto = Schemas['ArmarOfertaDto'];
 export type RegistrarPasajerosDto = Schemas['RegistrarPasajerosDto'];
 export type PasajeroDto = Schemas['PasajeroDto'];
+export type AsientoElegidoDto = Schemas['AsientoElegidoDto'];
+
+/** One seat of a leg's seat map (GET /ofertas/{id}/asientos). */
+export interface AsientoMapaDto {
+  seatNumber: string;
+  isAvailable: boolean;
+  characteristics: string[];
+}
+
+export interface MapaAsientosViewDto {
+  trayectoId: string;
+  numeroVuelo: string;
+  filas: { rowNumber: number; seats: AsientoMapaDto[] }[];
+}
 export type ContactoDto = Schemas['ContactoDto'];
 export type FacturacionDto = Schemas['FacturacionDto'];
 export type AceptarCondicionesDto = Schemas['AceptarCondicionesDto'];
