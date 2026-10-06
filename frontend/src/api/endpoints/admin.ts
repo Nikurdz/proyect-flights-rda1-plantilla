@@ -7,6 +7,18 @@ export type AdminOrdenesPagina = Schemas['AdminOrdenesPaginaDto'];
 export type AdminVueloView = Schemas['AdminVueloViewDto'];
 export type AdminVuelosPagina = Schemas['AdminVuelosPaginaDto'];
 
+/** GET /admin/vuelos/{id}/asientos: the cabin and every reserved seat with its locator (no passenger names). */
+export interface AdminAsientosVuelo {
+  vueloId: string;
+  codigoVuelo: string;
+  origen: string;
+  destino: string;
+  salida: string;
+  capacidadTotal: number;
+  reservados: { asiento: string; pnr: string; numeroOrden: string | null }[];
+  filas: { rowNumber: number; seats: { seatNumber: string; isAvailable: boolean; characteristics: string[] }[] }[];
+}
+
 export type VentanaObservabilidad = '24h' | '7d';
 
 type Counts = Record<string, number>;
@@ -95,6 +107,16 @@ export function useAdminRuntime(ownerId?: string) {
     queryFn: () => apiClient<ObservabilidadRuntime>('admin/observabilidad/runtime'),
     enabled: Boolean(ownerId),
     refetchInterval: 15_000,
+    retry: false,
+  });
+}
+
+/** Loaded only when a flight is opened. */
+export function useAdminAsientosVuelo(vueloId?: string, ownerId?: string) {
+  return useQuery({
+    queryKey: ['admin-asientos-vuelo', ownerId, vueloId],
+    queryFn: () => apiClient<AdminAsientosVuelo>(`admin/vuelos/${vueloId}/asientos`),
+    enabled: Boolean(vueloId && ownerId),
     retry: false,
   });
 }

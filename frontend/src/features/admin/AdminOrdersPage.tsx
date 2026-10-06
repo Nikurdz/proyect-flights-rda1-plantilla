@@ -7,6 +7,7 @@ import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { TicketQr } from '../../components/common/TicketQr';
 import { fareFamilyLabel, formatDateTime, orderStatusLabel, orderStatusTone, passengerTypeLabel } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 
@@ -167,13 +168,26 @@ export const AdminOrdersPage: React.FC = () => {
 
             <div>
               <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Pasajeros</h3>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {selected.pasajeros.map((p) => (
-                  <li key={p.id} className="flex flex-wrap justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
-                    <span className="font-bold">
-                      {p.nombres} {p.apellidos} ({passengerTypeLabel(p.tipo)})
-                    </span>
-                    <span className="font-mono">{p.eTicket ?? 'sin billete'}</span>
+                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2.5 text-xs">
+                    <div className="space-y-1">
+                      <div className="font-bold">
+                        {p.nombres} {p.apellidos} ({passengerTypeLabel(p.tipo)})
+                      </div>
+                      <div className="font-mono text-slate-600">Billete: {p.eTicket ?? 'sin billete'}</div>
+                      {p.asientos && p.asientos.length > 0 && (
+                        <div className="text-slate-600">
+                          Asiento{p.asientos.length > 1 ? 's' : ''}: <span className="font-mono font-semibold">{p.asientos.map((a) => `${a.numeroVuelo} · ${a.asiento}`).join('   ')}</span>
+                        </div>
+                      )}
+                      {p.qr && (
+                        <div className="break-all font-mono text-[10px] text-slate-400" title="Texto firmado del código QR">
+                          {p.qr}
+                        </div>
+                      )}
+                    </div>
+                    {p.qr && <TicketQr code={p.qr} size={88} passengerName={`${p.nombres} ${p.apellidos}`} />}
                   </li>
                 ))}
               </ul>

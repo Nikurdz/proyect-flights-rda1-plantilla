@@ -13,13 +13,15 @@ interface SeatMapProps {
   filas: MapaAsientosViewDto['filas'];
   picks: Map<string, SeatPick>;
   onSelect: (seatNumber: string) => void;
+  /** Optional note per taken seat (e.g. the booking that holds it), shown as its tooltip; used by the back office. */
+  takenInfo?: Map<string, string>;
 }
 
 const LEFT = ['A', 'B', 'C'];
 const RIGHT = ['D', 'E', 'F'];
 
 /** Single-aisle economy cabin: A-B-C | D-E-F, one row per line. Pure presentation; the page owns the state. */
-export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect }) => {
+export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect, takenInfo }) => {
   const byColumn = (seats: MapaAsientosViewDto['filas'][number]['seats'], column: string) => seats.find((s) => s.seatNumber.endsWith(column));
 
   const renderSeat = (column: string, seats: MapaAsientosViewDto['filas'][number]['seats']) => {
@@ -36,14 +38,15 @@ export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect }) => {
     if (taken) tone = 'cursor-not-allowed border-slate-200 bg-slate-200 text-slate-400';
     if (pick) tone = pick.mine ? 'border-brand-gold bg-brand-gold text-brand-black ring-2 ring-brand-gold/40' : 'border-brand-black bg-brand-black text-white';
 
-    const state = pick ? (pick.mine ? 'elegido por ti' : `elegido (pasajero ${pick.tag})`) : taken ? 'ocupado' : 'disponible';
+    const holder = takenInfo?.get(seat.seatNumber);
+    const state = pick ? (pick.mine ? 'elegido por ti' : `elegido (pasajero ${pick.tag})`) : taken ? (holder ? `reservado (${holder})` : 'ocupado') : 'disponible';
     return (
       <button
         key={column}
         type="button"
         disabled={taken && !pick}
         onClick={() => onSelect(seat.seatNumber)}
-        title={`${seat.seatNumber}${traits ? ` · ${traits}` : ''}`}
+        title={`${seat.seatNumber}${traits ? ` · ${traits}` : ''}${holder ? ` · ${holder}` : ''}`}
         aria-label={`Asiento ${seat.seatNumber}, ${state}${traits ? `, ${traits}` : ''}`}
         aria-pressed={Boolean(pick?.mine)}
         className={`flex h-9 w-9 items-center justify-center rounded-lg border text-[11px] font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold ${tone}`}

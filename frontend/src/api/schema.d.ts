@@ -1773,6 +1773,8 @@ export interface components {
             precioBaseUsd: number;
             asientosDisponibles: number;
             capacidadTotal: number;
+            /** @description Asientos con número ya reservados. */
+            asientosReservados: number;
         };
         AdminVuelosPaginaDto: {
             items: components["schemas"]["AdminVueloViewDto"][];
