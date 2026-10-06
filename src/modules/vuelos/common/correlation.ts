@@ -1,8 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { CallHandler, ExecutionContext, Injectable, Logger, NestInterceptor } from '@nestjs/common';
+import { CallHandler, ExecutionContext, HttpException, Injectable, Logger, NestInterceptor } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { Observable } from 'rxjs';
+import { runtimeMetrics } from './runtime-metrics';
 
 const storage = new AsyncLocalStorage<{ correlationId: string }>();
 
@@ -17,6 +18,12 @@ export function runWithCorrelation<T>(correlationId: string, fn: () => T): T {
 }
 
 const SAFE_ID = /^[A-Za-z0-9._-]{8,100}$/;
+
+/** The route pattern (`/api/v1/ofertas/:id`), never the raw path, so ids do not create one entry each. */
+function routeLabel(request: Request): string {
+  const pattern = (request.route as { path?: string } | undefined)?.path;
+  return pattern ? `${request.baseUrl ?? ''}${pattern}` : 'unmatched';
+}
 
 /**
  * RNF-30: every request carries a correlation id end to end. A well-formed inbound
@@ -42,10 +49,13 @@ export class CorrelationInterceptor implements NestInterceptor {
         next.handle().subscribe({
           next: (value) => subscriber.next(value),
           error: (error: unknown) => {
+            const status = error instanceof HttpException ? error.getStatus() : 500;
+            runtimeMetrics.recordRequest(request.method, routeLabel(request), status, Date.now() - startedAt);
             this.logger.warn(`${request.method} ${request.path} failed in ${Date.now() - startedAt}ms [${correlationId}]`);
             subscriber.error(error);
           },
           complete: () => {
+            runtimeMetrics.recordRequest(request.method, routeLabel(request), response.statusCode, Date.now() - startedAt);
             this.logger.log(`${request.method} ${request.path} ${response.statusCode} ${Date.now() - startedAt}ms [${correlationId}]`);
             subscriber.complete();
           },

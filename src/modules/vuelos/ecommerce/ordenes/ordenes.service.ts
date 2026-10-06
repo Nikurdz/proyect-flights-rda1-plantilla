@@ -1,19 +1,22 @@
 import { randomInt } from 'node:crypto';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Not, Repository } from 'typeorm';
 import type { AuthClaims } from '../../auth/token.service';
 import { decodeCursor, encodeCursor } from '../../common/cursor.util';
 import { toIso } from '../../common/date.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
+import { buildTicketCode, verifyTicketCode } from '../../common/ticket-qr';
+import { VUELOS_CONFIG, VuelosConfig } from '../../common/vuelos-config';
 import type { BookingDetailResponseDto } from '../../dto/booking.dto';
 import { Booking } from '../../entities/booking.entity';
+import { Ticket } from '../../entities/ticket.entity';
 import { money } from '../common/moneda.util';
 import { SlidingWindowLimiter, assertWithinLimit } from '../common/rate-limiter';
 import { normalizarNombrePasajero } from '../common/texto.util';
 import type { Oferta } from '../ofertas/entities/oferta.entity';
 import type { Pago } from '../pagos/entities/pago.entity';
-import { HistorialOrdenesQueryDto, OrdenViewDto, OrdenesPaginaViewDto, RecuperarOrdenQueryDto } from './dto/ordenes.dto';
+import { HistorialOrdenesQueryDto, OrdenViewDto, OrdenesPaginaViewDto, RecuperarOrdenQueryDto, VerificacionBilleteViewDto } from './dto/ordenes.dto';
 import { EstadoOrden, Orden, TRANSICIONES } from './entities/orden.entity';
 
 const ORDER_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -26,7 +29,37 @@ export class OrdenesService {
   // RF-ORD-010 recovery is public (order number + surname), so it is rate-limited against guessing.
   private readonly recoveryLimiter = new SlidingWindowLimiter(10, 60_000);
 
-  constructor(@InjectRepository(Orden) private readonly ordenes: Repository<Orden>) {}
+  // The ticket check is public too (anyone holding a QR can open it), so it is limited per address as well.
+  private readonly verificationLimiter = new SlidingWindowLimiter(30, 60_000);
+
+  constructor(
+    @InjectRepository(Orden) private readonly ordenes: Repository<Orden>,
+    @InjectRepository(Ticket) private readonly tickets: Repository<Ticket>,
+    @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
+  ) {}
+
+  /**
+   * Public check of a QR code: authentic and issued? Returns the flight(s) and the ticket state only, never
+   * names or contact data. Anything that is not an authentic, issued ticket answers `valido: false`.
+   */
+  async verificarBillete(codigo: string, ip: string): Promise<VerificacionBilleteViewDto> {
+    assertWithinLimit(this.verificationLimiter, `verify:${ip}`, 'Too many checks');
+
+    const firmado = verifyTicketCode(this.config.jwtSecret, codigo);
+    if (!firmado) return { valido: false };
+
+    const ticket = await this.tickets.findOne({ where: { eTicketNumber: firmado.eTicketNumber } });
+    if (!ticket) return { valido: false };
+    const orden = await this.ordenes.findOne({ where: { pnr: firmado.pnr } });
+    if (!orden || orden.bookingId !== ticket.bookingId) return { valido: false };
+
+    return {
+      valido: ticket.status === 'ISSUED',
+      estado: ticket.status,
+      pnr: orden.pnr ?? undefined,
+      itinerarios: orden.trayectos.map((t) => ({ numeroVuelo: t.numeroVuelo, origen: t.origen, destino: t.destino, salida: t.salida })),
+    };
+  }
 
   /** The live order of an offer (a failed, compensated attempt does not count). */
   async deOferta(ofertaId: string): Promise<Orden | null> {
@@ -237,6 +270,7 @@ export class OrdenesService {
         nombres: p.nombres,
         apellidos: p.apellidos,
         eTicket: p.eTicket,
+        ...(p.eTicket && orden.pnr ? { qr: buildTicketCode(this.config.jwtSecret, p.eTicket, orden.pnr) } : {}),
         ...(p.asientos?.length
           ? { asientos: p.asientos.map((a) => ({ numeroVuelo: orden.trayectos.find((t) => t.itinerarioId === a.trayectoId)?.numeroVuelo ?? '', asiento: a.asiento })) }
           : {}),

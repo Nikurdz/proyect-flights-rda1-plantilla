@@ -6,6 +6,7 @@ import { FlightHold } from '../entities/flight-hold.entity';
 import { Ticket } from '../entities/ticket.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import type { BookingRequestDto, PassengerItemDto } from '../dto/booking.dto';
+import { VUELOS_CONFIG } from '../common/vuelos-config';
 import { BookingsService } from './bookings.service';
 import { IdempotencyService } from './idempotency.service';
 import { OffersService } from './offers.service';
@@ -112,6 +113,7 @@ describe('BookingsService', () => {
         { provide: OffersService, useValue: offers },
         { provide: IdempotencyService, useValue: idempotency },
         { provide: DomainEventBus, useValue: events },
+        { provide: VUELOS_CONFIG, useValue: { jwtSecret: 'a-test-secret-with-more-than-32-characters' } },
       ],
     }).compile();
 

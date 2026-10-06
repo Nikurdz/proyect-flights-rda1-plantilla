@@ -1,5 +1,6 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { Response } from 'express';
+import { runtimeMetrics } from './runtime-metrics';
 import {
   InvalidParam,
   isProblemDetailsBody,
@@ -85,6 +86,7 @@ export class VuelosProblemDetailsFilter implements ExceptionFilter {
       };
     }
 
+    runtimeMetrics.recordProblem(body.code);
     response.status(body.status).type('application/problem+json').json(body);
   }
 }

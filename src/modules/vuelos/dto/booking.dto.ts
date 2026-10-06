@@ -216,6 +216,8 @@ export class TicketResponseDto {
   status: string;
   @ApiPropertyOptional({ nullable: true })
   issuedAt: string | null;
+  @ApiPropertyOptional({ nullable: true, readOnly: true, description: 'Texto firmado para el código QR del pasajero (v1.<billete>.<PNR>.<firma>); no contiene datos personales.' })
+  qrPayload?: string | null;
 }
 
 export class BookingDetailResponseDto {

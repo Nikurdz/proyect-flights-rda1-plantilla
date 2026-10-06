@@ -37,6 +37,8 @@ Simplificaciones deliberadas y documentadas (no omisiones silenciosas):
 | D08/D09 Pago y órdenes | `POST /ofertas/{id}/compra` (saga) · `GET /ordenes/{numero}` · `GET /ordenes?numero=` o `?pnr=` más `apellido=` (recuperación pública) · `GET /clientes/{id o me}/ordenes` |
 | D16 Notificaciones | automático por eventos de dominio · `GET /admin/notificaciones` (ADMIN) |
 | Back-office | `GET /admin/ordenes` (filtros y cursor) · `GET /admin/ordenes/:numero` · `GET /admin/vuelos` (inventario), solo ADMIN: es lo único que lee datos de otros clientes |
+| Observabilidad (ADMIN) | `GET /admin/observabilidad/resumen?ventana=24h|7d` (cifras desde la BD: órdenes, ingresos, pagos y tasas, pendientes de reconciliación, notificaciones, holds, ocupación) · `GET /admin/observabilidad/runtime` (contadores en memoria del proceso: tráfico por ruta, errores, eventos, último ciclo del reconciliador) · `GET /health` público (200 si alcanza la BD) |
+| Verificación de billetes | `GET /tickets/verificar?codigo=` público y con límite por IP: valida el código QR de un pasajero (`v1.<billete>.<PNR>.<firma>`, firmado con HMAC derivado de `JWT_SECRET`) y devuelve vuelo y estado, sin datos personales. El código sale en `Ticket.qrPayload` y en `pasajeros[].qr` de la orden |
 
 Flujo de compra (SRS §8.4), con `Idempotency-Key` en `POST /ofertas` y `POST /ofertas/{id}/compra`:
 

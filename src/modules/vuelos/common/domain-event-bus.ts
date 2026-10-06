@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { currentCorrelationId } from './correlation';
+import { runtimeMetrics } from './runtime-metrics';
 
 // SRS §10.3: every event carries id, type, schema version, instant, market, correlation id
 // and the affected aggregate. Consumers must be idempotent (events may be delivered twice).
@@ -52,10 +53,12 @@ export class DomainEventBus {
     };
 
     this.logger.log(`${type} aggregate=${aggregateId} [${event.correlationId}]`);
+    runtimeMetrics.recordEvent(type);
     for (const handler of this.handlers.get(type) ?? []) {
       try {
         await handler(event);
       } catch (error) {
+        runtimeMetrics.recordConsumerFailure(type);
         this.logger.error(
           `Consumer of ${type} failed (event ${event.id}): ${error instanceof Error ? error.message : String(error)}`,
         );

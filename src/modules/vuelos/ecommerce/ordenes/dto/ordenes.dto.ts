@@ -105,6 +105,28 @@ class PasajeroOrdenViewDto {
   @ApiProperty() apellidos: string;
   @ApiPropertyOptional({ nullable: true, description: 'Billete electrónico de 13 dígitos (RF-ORD-003).' }) eTicket: string | null;
   @ApiPropertyOptional({ type: [AsientoOrdenViewDto], description: 'Asientos elegidos, uno por trayecto.' }) asientos?: AsientoOrdenViewDto[];
+  @ApiPropertyOptional({ description: 'Texto firmado del código QR del pasajero (v1.<billete>.<PNR>.<firma>); sin datos personales.' }) qr?: string;
+}
+
+export class VerificarBilleteQueryDto {
+  @ApiProperty({ example: 'v1.1234567890123.ABC234.abcdefghijklmnopqrstuv', description: 'Texto del código QR de un billete.' })
+  @IsString()
+  @MaxLength(80)
+  codigo: string;
+}
+
+class ItinerarioVerificadoDto {
+  @ApiProperty() numeroVuelo: string;
+  @ApiProperty() origen: string;
+  @ApiProperty() destino: string;
+  @ApiProperty() salida: string;
+}
+
+export class VerificacionBilleteViewDto {
+  @ApiProperty({ description: 'false si el código no es auténtico o no corresponde a un billete emitido.' }) valido: boolean;
+  @ApiPropertyOptional({ example: 'ISSUED' }) estado?: string;
+  @ApiPropertyOptional() pnr?: string;
+  @ApiPropertyOptional({ type: [ItinerarioVerificadoDto], description: 'Sin nombres ni datos de contacto.' }) itinerarios?: ItinerarioVerificadoDto[];
 }
 
 export class OrdenViewDto extends BaseResponseDto {

@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { runtimeMetrics } from '../common/runtime-metrics';
 import { IdempotencyService } from './idempotency.service';
 import { OffersService } from './offers.service';
 
@@ -33,10 +34,13 @@ export class HoldsSweeper implements OnModuleInit, OnModuleDestroy {
   async sweep(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    const startedAt = Date.now();
     try {
       await this.offers.expireDueHolds();
       await this.idempotency.purgeExpired();
+      runtimeMetrics.recordJob('barredor-holds', { durationMs: Date.now() - startedAt });
     } catch (error) {
+      runtimeMetrics.recordJob('barredor-holds', { durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) });
       this.logger.error(`Sweep failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.running = false;

@@ -1,5 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
+import { runtimeMetrics } from '../../common/runtime-metrics';
 
 /**
  * Small in-memory sliding-window limiter for abuse-prone public endpoints (login, order
@@ -19,6 +20,7 @@ export class SlidingWindowLimiter {
     const recent = (this.hits.get(key) ?? []).filter((at) => now - at < this.windowMs);
 
     if (recent.length >= this.maxHits) {
+      runtimeMetrics.recordRateLimited();
       this.hits.set(key, recent);
       return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((recent[0] + this.windowMs - now) / 1000)) };
     }

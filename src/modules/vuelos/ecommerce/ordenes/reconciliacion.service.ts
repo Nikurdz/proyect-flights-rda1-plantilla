@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { runtimeMetrics } from '../../common/runtime-metrics';
 import { MercadosService } from '../mercados/mercados.service';
 import { Notificacion } from '../notificaciones/entities/notificacion.entity';
 import { PagosService } from '../pagos/pagos.service';
@@ -44,11 +45,14 @@ export class ReconciliacionService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return { pagos: 0, anuncios: 0 };
     this.running = true;
     const result = { pagos: 0, anuncios: 0 };
+    const startedAt = Date.now();
     try {
       result.pagos = await this.pagos.reconciliarPendientes();
       result.anuncios = await this.reanunciarEmisiones();
+      runtimeMetrics.recordJob('reconciliacion', { durationMs: Date.now() - startedAt, result });
       if (result.pagos + result.anuncios > 0) this.logger.log(`Reconciled ${result.pagos} payment(s) and ${result.anuncios} order announcement(s)`);
     } catch (error) {
+      runtimeMetrics.recordJob('reconciliacion', { durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) });
       this.logger.error(`Reconciliation failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.running = false;

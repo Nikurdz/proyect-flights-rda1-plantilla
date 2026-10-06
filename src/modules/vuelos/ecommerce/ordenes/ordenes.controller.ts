@@ -9,10 +9,27 @@ import { ProblemController } from '../../common/problem-controller';
 import { ClienteParamDto } from '../identidad/dto/identidad.dto';
 import { OfertaParamDto } from '../ofertas/dto/ofertas.dto';
 import { ComprasService } from './compras.service';
-import { CompraDto, HistorialOrdenesQueryDto, OrdenParamDto, OrdenViewDto, OrdenesPaginaViewDto, RecuperarOrdenQueryDto, VincularOrdenDto } from './dto/ordenes.dto';
+import { CompraDto, HistorialOrdenesQueryDto, OrdenParamDto, OrdenViewDto, OrdenesPaginaViewDto, RecuperarOrdenQueryDto, VerificacionBilleteViewDto, VerificarBilleteQueryDto, VincularOrdenDto } from './dto/ordenes.dto';
 import { OrdenesService } from './ordenes.service';
 
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, PAYMENT_REQUIRED, TOO_MANY_REQUESTS, BAD_GATEWAY, SERVICE_UNAVAILABLE } = HttpStatus;
+
+@ProblemController('tickets', 'E-commerce · Verificación de billetes')
+export class VerificacionBilletesController {
+  constructor(private readonly ordenes: OrdenesService) {}
+
+  @Get('verificar')
+  @ApiOperation({
+    summary: 'Verificar un billete a partir de su código QR',
+    description:
+      'Acceso público: quien escanea el QR de un pasajero ve si el billete es auténtico y está emitido, con el vuelo y el estado. La firma (HMAC) impide inventar o alterar códigos; no devuelve nombres ni contacto. Limita los intentos por IP.',
+  })
+  @ApiResponse({ status: 200, type: VerificacionBilleteViewDto })
+  @ApiProblemResponses(BAD_REQUEST, TOO_MANY_REQUESTS)
+  verificar(@Query() query: VerificarBilleteQueryDto, @Ip() ip: string) {
+    return this.ordenes.verificarBillete(query.codigo, ip);
+  }
+}
 
 @ProblemController('ofertas', 'E-commerce · Compra y órdenes')
 @UseGuards(JwtAuthGuard)

@@ -7,6 +7,7 @@ export type EstadoNotificacion = 'ENVIADO' | 'FALLIDO';
 /** RF-NTF-008: one row per message with its outcome, attempts and error, so every send is traceable. */
 @Entity('ecom_notificaciones')
 @Index('IDX_ecom_notificaciones_referencia', ['referencia', 'creadoEn'])
+@Index('IDX_ecom_notificaciones_creado', ['creadoEn'])
 export class Notificacion {
   @PrimaryGeneratedColumn('uuid')
   notificacionId: string;

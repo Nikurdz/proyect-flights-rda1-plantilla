@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Repository } from 'typeorm';
 import type { AuthClaims } from '../auth/token.service';
@@ -11,6 +11,8 @@ import { DomainEventBus } from '../common/domain-event-bus';
 import { PassengerBreakdown, PassengerType, countFor, PASSENGER_TYPES } from '../common/pricing.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { seatExists } from '../common/seat-grid';
+import { buildTicketCode } from '../common/ticket-qr';
+import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { Booking } from '../entities/booking.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
 import { Passenger } from '../entities/passenger.entity';
@@ -43,6 +45,7 @@ export class BookingsService {
     private readonly offersService: OffersService,
     private readonly idempotency: IdempotencyService,
     private readonly events: DomainEventBus,
+    @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
   ) {}
 
   /**
@@ -296,18 +299,18 @@ export class BookingsService {
   }
 
   async getBookingTickets(ownerId: string, bookingId: string): Promise<TicketResponseDto[]> {
-    await this.findOwnedBookingOrThrow(ownerId, bookingId);
+    const booking = await this.findOwnedBookingOrThrow(ownerId, bookingId);
     const tickets = await this.tickets.find({ where: { bookingId } });
-    return tickets.map((t) => this.toTicketDto(t));
+    return tickets.map((t) => this.toTicketDto(t, booking.pnr));
   }
 
   async getTicketDetail(ownerId: string, bookingId: string, ticketId: string): Promise<TicketResponseDto> {
-    await this.findOwnedBookingOrThrow(ownerId, bookingId);
+    const booking = await this.findOwnedBookingOrThrow(ownerId, bookingId);
     const ticket = await this.tickets.findOne({ where: { bookingId, ticketId } });
     if (!ticket) {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'BOOKING_NOT_CONFIRMED', 'Ticket not found', `Ticket ${ticketId} was not found for booking ${bookingId}.`);
     }
-    return this.toTicketDto(ticket);
+    return this.toTicketDto(ticket, booking.pnr);
   }
 
   async listBookings(ownerId: string, query: ListBookingsQueryDto): Promise<BookingListResponseDto> {
@@ -362,11 +365,11 @@ export class BookingsService {
       grandTotal: { currency: booking.currency, total: booking.grandTotal },
       createdAt: toIso(booking.createdAt),
       updatedAt: toIso(booking.updatedAt),
-      tickets: tickets.map((t) => this.toTicketDto(t)),
+      tickets: tickets.map((t) => this.toTicketDto(t, booking.pnr)),
     };
   }
 
-  private toTicketDto(ticket: Ticket): TicketResponseDto {
+  private toTicketDto(ticket: Ticket, pnr: string): TicketResponseDto {
     return {
       ticketId: ticket.ticketId,
       bookingId: ticket.bookingId,
@@ -374,6 +377,8 @@ export class BookingsService {
       eTicketNumber: ticket.eTicketNumber,
       status: ticket.status,
       issuedAt: ticket.issuedAt ? toIso(ticket.issuedAt) : null,
+      // Signed text for the passenger's QR code (no personal data); see common/ticket-qr.ts.
+      qrPayload: ticket.eTicketNumber ? buildTicketCode(this.config.jwtSecret, ticket.eTicketNumber, pnr) : null,
     };
   }
 

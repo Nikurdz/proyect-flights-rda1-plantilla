@@ -90,6 +90,7 @@ const bigintNumber: ValueTransformer = {
 @Entity('ecom_ofertas')
 @Index('IDX_ecom_ofertas_owner', ['ownerId', 'creadaEn'])
 @Index('IDX_ecom_ofertas_hold', ['holdId'])
+@Index('IDX_ecom_ofertas_creada', ['creadaEn'])
 export class Oferta {
   @PrimaryGeneratedColumn('uuid')
   ofertaId: string;

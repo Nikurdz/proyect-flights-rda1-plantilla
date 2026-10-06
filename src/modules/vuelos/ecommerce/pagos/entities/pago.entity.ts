@@ -32,6 +32,7 @@ const bigintNumber: ValueTransformer = {
 /** One payment attempt. A declined or fraud-rejected attempt is kept: it is the audit trail. */
 @Entity('ecom_pagos')
 @Index('IDX_ecom_pagos_oferta', ['ofertaId', 'creadoEn'])
+@Index('IDX_ecom_pagos_creado', ['creadoEn'])
 export class Pago {
   @PrimaryGeneratedColumn('uuid')
   pagoId: string;

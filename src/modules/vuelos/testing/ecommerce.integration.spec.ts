@@ -824,6 +824,71 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
   });
 
   // ------------------------------------------------------------------------------------------------
+  describe('código QR por pasajero', () => {
+    const verificar = (codigo: string) => api().get('/api/v1/tickets/verificar').query({ codigo });
+
+    // One purchase serves the first two tests: every offer of this suite uses up a pair of the seeded flight days.
+    let compra: { token: string; ofertaId: string; res: request.Response } | undefined;
+    const compraDeQr = async () => {
+      if (!compra) {
+        const token = await guest();
+        const { ofertaId } = await ofertaLista(token);
+        compra = { token, ofertaId, res: await comprar(token, ofertaId).expect(201) };
+      }
+      return compra;
+    };
+
+    it('gives each passenger a signed code on the order, the same one the flight core reports for the ticket', async () => {
+      const { token, ofertaId, res } = await compraDeQr();
+
+      const codes: string[] = res.body.pasajeros.map((p: { qr: string }) => p.qr);
+      expect(codes).toHaveLength(2);
+      expect(new Set(codes).size).toBe(2); // one per ticket
+      for (const [i, code] of codes.entries()) {
+        expect(code).toBe(`v1.${res.body.pasajeros[i].eTicket}.${res.body.pnr}.${code.split('.')[3]}`);
+        expect(code).not.toMatch(/Peña|Niño|María/); // no personal data
+      }
+
+      // The core's own ticket endpoint reports the very same text, and it is stable between reads.
+      const orden = await ds.getRepository(Orden).findOneByOrFail({ ofertaId });
+      const tickets = await api().get(`/api/v1/bookings/${orden.bookingId}/tickets`).set(bearer(token)).expect(200);
+      const first = tickets.body.map((t: { qrPayload: string }) => t.qrPayload).sort();
+      expect(first).toEqual([...codes].sort());
+      const again = await api().get(`/api/v1/bookings/${orden.bookingId}/tickets`).set(bearer(token)).expect(200);
+      expect(again.body.map((t: { qrPayload: string }) => t.qrPayload).sort()).toEqual(first);
+
+      // Public recovery shows it too.
+      const recovered = await api().get('/api/v1/ordenes').query({ pnr: res.body.pnr, apellido: 'Peña' }).expect(200);
+      expect(recovered.body.pasajeros.map((p: { qr: string }) => p.qr).sort()).toEqual([...codes].sort());
+    });
+
+    it('verifies a genuine code publicly (flight and state only) and answers valido:false to anything else', async () => {
+      const { res } = await compraDeQr();
+      const code: string = res.body.pasajeros[0].qr;
+
+      const ok = await verificar(code).expect(200);
+      expect(ok.body).toMatchObject({ valido: true, estado: 'ISSUED', pnr: res.body.pnr });
+      expect(ok.body.itinerarios).toHaveLength(2);
+      expect(JSON.stringify(ok.body)).not.toMatch(/Peña|Niño|María|comprador@example\.com/);
+
+      const altered = code.replace(/\.[A-Za-z0-9_-]{22}$/, '.' + 'A'.repeat(22));
+      expect((await verificar(altered).expect(200)).body).toEqual({ valido: false });
+      expect((await verificar('v1.0000000000000.ABC234.' + 'A'.repeat(22)).expect(200)).body).toEqual({ valido: false });
+      expect((await verificar('not-a-code').expect(200)).body).toEqual({ valido: false });
+      await api().get('/api/v1/tickets/verificar').expect(400); // the parameter is required
+    });
+
+    it('limits the public check per address', async () => {
+      let limited: number | undefined;
+      for (let i = 0; i < 40 && !limited; i += 1) {
+        const r = await verificar('not-a-code');
+        if (r.status === 429) limited = r.status;
+      }
+      expect(limited).toBe(429);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------
   describe('selección de asientos', () => {
     const seatPlan = (token: string, ofertaId: string, pasajeros: Record<string, unknown>[]) =>
       api().put(`/api/v1/ofertas/${ofertaId}/pasajeros`).set(bearer(token)).send({ pasajeros, contacto: { correo: 'comprador@example.com', telefono: '+593999999999' } });
@@ -846,9 +911,18 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       return { ofertaId, out, ida, vuelta };
     }
 
+    // The map test and the validation test share one offer (each offer uses up a pair of the seeded flight days).
+    let abierta: (Awaited<ReturnType<typeof nuevaOferta>> & { token: string }) | undefined;
+    const ofertaAbierta = async () => {
+      if (!abierta) {
+        const token = await guest();
+        abierta = { ...(await nuevaOferta(token)), token };
+      }
+      return abierta;
+    };
+
     it('serves the seat map only to the owner, for a leg of that offer', async () => {
-      const token = await guest();
-      const { res, ida } = await nuevaOferta(token);
+      const { token, res, ida } = await ofertaAbierta();
       const ofertaId = res.body.ofertaId as string;
 
       const map = await mapa(token, ofertaId, ida.itinerarioId).expect(200);
@@ -863,8 +937,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     });
 
     it('rejects bad seat picks before any payment: missing seat, repeated seat, two seats on a leg, a lap infant', async () => {
-      const token = await guest();
-      const { res, out, ida } = await nuevaOferta(token);
+      const { token, res, out, ida } = await ofertaAbierta();
       const ofertaId = res.body.ofertaId as string;
       const seat = (asiento: string, trayectoId = ida.itinerarioId) => ({ asientos: [{ trayectoId, asiento }] });
       const adult = (extra = {}) => pasajero('a1', 'ADULT', yearsBefore(35, out), extra);
@@ -950,6 +1023,76 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
 
       const loserOffer = results[0].status === 201 ? b.ofertaId : a.ofertaId;
       expect((await pagos(loserOffer)).filter((p) => p.estado === 'CAPTURADO')).toHaveLength(0);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------
+  describe('observabilidad del admin', () => {
+    it('refuses everyone but an ADMIN (401 anonymous, 403 guest and customer); /health is public', async () => {
+      const mine = await sharedCustomer();
+      const guestToken = await guest();
+      for (const path of ['/api/v1/admin/observabilidad/resumen', '/api/v1/admin/observabilidad/runtime']) {
+        await api().get(path).expect(401);
+        await api().get(path).set(bearer(guestToken)).expect(403);
+        await api().get(path).set(bearer(mine.token)).expect(403);
+      }
+      const health = await api().get('/api/v1/health').expect(200);
+      expect(health.body).toMatchObject({ status: 'UP', db: 'UP' });
+      expect(health.body.uptimeSeconds).toBeGreaterThanOrEqual(0);
+    });
+
+    it('validates the window', async () => {
+      await api().get('/api/v1/admin/observabilidad/resumen').query({ ventana: '1h' }).set(bearer(adminToken)).expect(400);
+    });
+
+    it('summarises what the database holds, with no personal data', async () => {
+      // Orders were bought by the tests above. First read of the 7-day window in this suite, so it is not served from the short cache.
+      const res = await api().get('/api/v1/admin/observabilidad/resumen').query({ ventana: '7d' }).set(bearer(adminToken)).expect(200);
+      const s = res.body;
+      const desde = new Date(s.desde);
+
+      const emitidas = await ds.getRepository(Orden).createQueryBuilder('o').where('o."estado" = :e AND o."creadaEn" >= :d', { e: 'EMITIDA', d: desde }).getCount();
+      expect(s.ventana).toBe('7d');
+      expect(s.ordenes.porEstado.EMITIDA).toBe(emitidas);
+      expect(s.ordenes.total).toBe(Object.values(s.ordenes.porEstado as Record<string, number>).reduce((a, b) => a + b, 0));
+
+      const capturados = await ds.getRepository(Pago).createQueryBuilder('p').where('p."estado" = :e AND p."creadoEn" >= :d', { e: 'CAPTURADO', d: desde }).getCount();
+      expect(s.pagos.porEstado.CAPTURADO).toBe(capturados);
+
+      const usd = s.ingresos.find((i: { moneda: string }) => i.moneda === 'USD');
+      const sumRow = await ds
+        .getRepository(Orden)
+        .createQueryBuilder('o')
+        .select('COALESCE(SUM(o."totalMinor"), 0)::text', 'total')
+        .where('o."estado" IN (:...e) AND o."creadaEn" >= :d', { e: ['EMITIDA', 'MODIFICADA', 'EN_VIAJE', 'COMPLETADA'], d: desde })
+        .getRawOne<{ total: string }>();
+      expect(Number(usd.monto.replace('.', ''))).toBe(Number(sumRow!.total));
+
+      expect(s.tasas.rechazoDePago === null || (s.tasas.rechazoDePago >= 0 && s.tasas.rechazoDePago <= 1)).toBe(true);
+      expect(s.inventario.capacidad).toBeGreaterThan(0);
+      expect(s.inventario.ocupacion).toBeGreaterThanOrEqual(0);
+      for (const key of ['capturaPendiente', 'anulacionPendiente', 'autorizadoSinCaptura', 'emitidasSinConfirmacion']) {
+        expect(typeof s.pendientes[key]).toBe('number');
+      }
+      expect(typeof s.holds.vencidosSinLiberar).toBe('number');
+
+      // Aggregates only: nothing that identifies a traveller.
+      expect(JSON.stringify(s)).not.toMatch(/Peña|Niño|María|comprador@example\.com|ORD-[A-Z0-9]{10}/);
+    });
+
+    it('reports live process metrics: traffic by route, events and the last reconciliation run', async () => {
+      await app.get(ReconciliacionService).reconciliar();
+
+      const res = await api().get('/api/v1/admin/observabilidad/runtime').set(bearer(adminToken)).expect(200);
+      const s = res.body;
+      expect(s.requests.total).toBeGreaterThan(0);
+      expect(s.uptimeSeconds).toBeGreaterThanOrEqual(0);
+      expect(s.routes.some((r: { route: string; count: number }) => /\/ofertas\/:id\/compra$/.test(r.route) && r.count > 0)).toBe(true);
+      expect(s.routes.every((r: { route: string }) => !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(r.route))).toBe(true); // patterns, not raw ids
+      expect(s.events.OrdenEmitida).toBeGreaterThan(0);
+      expect(s.jobs.reconciliacion).toMatchObject({ lastError: null });
+      expect(s.jobs.reconciliacion.lastRunAt).toEqual(expect.any(String));
+      expect(s.problemCodes).toBeDefined();
     });
   });
 
