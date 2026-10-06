@@ -64,6 +64,7 @@ If port 5432 is taken locally (e.g. a native Postgres service), create a gitigno
 - **Frontend** lives in `frontend/` (its own package, excluded from the Nest build via `tsconfig.json`); see `frontend/README.md`. Brand: RAM Alliance. Do not add real card capture: payments are simulated.
 - **Reconciliation** (`ecommerce/ordenes/reconciliacion.service.ts`, every 60 s) is the stand-in for an outbox/broker: captures `CAPTURA_PENDIENTE` payments, voids `ANULACION_PENDIENTE` ones, re-announces issued orders with no confirmation notification. The saga records the compensated order even if the gateway cannot void. Keep every step idempotent.
 - **Domain events** (`DomainEventBus`, SRS §10.3 shape) are in-process; a failing consumer is isolated and never fails the producer. Notifications and offer expiry subscribe to them. There is no outbox/broker in this phase.
+- **Seat selection** (optional, free in this phase): the passenger's `asientos` (`{trayectoId, asiento}` per leg) travel encrypted inside the offer's `datosPasajeros` and become the GDS `assignedSeats` in the purchase saga. `OfertasService.verificarAsientos` rejects bad picks when passengers are saved and again before any charge (`SEAT_TAKEN` 409, nothing authorised); the unique index on `(vueloId, seatNumber)` is the final guarantee, and a lost race is compensated like any issuance failure. Seats are only locked when the order is issued, as the contract defines.
 - **Direct flights, economy only, UTC day search** are deliberate documented simplifications — not gaps to fix silently.
 
 ## Env vars

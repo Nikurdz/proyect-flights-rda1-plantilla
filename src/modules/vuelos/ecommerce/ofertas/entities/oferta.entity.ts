@@ -36,6 +36,12 @@ export interface TrayectoOferta {
   totalMinor: number;
 }
 
+/** A seat the passenger picked on one leg; `trayectoId` is `TrayectoOferta.itinerarioId` (the Vuelo.id). */
+export interface AsientoElegido {
+  trayectoId: string;
+  asiento: string;
+}
+
 export interface PasajeroDatos {
   id: string;
   tipo: PassengerType;
@@ -48,6 +54,7 @@ export interface PasajeroDatos {
   documento: { tipo: 'PASSPORT' | 'NATIONAL_ID'; numero: string; vencimiento?: string };
   numeroSocio?: string;
   necesidades?: string[];
+  asientos?: AsientoElegido[];
 }
 
 export interface Contacto {

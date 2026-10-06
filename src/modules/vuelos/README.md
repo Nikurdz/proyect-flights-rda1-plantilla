@@ -33,7 +33,7 @@ Simplificaciones deliberadas y documentadas (no omisiones silenciosas):
 | D02/D19 Mercados y configuración | `GET /mercados/{pais}` · `PUT /admin/mercados/{pais}` (ADMIN, control optimista y auditoría) · `GET /admin/auditoria` |
 | D01 Identidad | `POST /clientes` · `POST /auth/login` · `POST /auth/invitado` · `POST /auth/verificar-correo` · `GET /clientes/{id o me}` · `PUT /clientes/{id o me}/preferencias` |
 | D04/D05 Búsqueda y precios | `GET /localidades?q=` · `GET /disponibilidad` (parámetros del enlace profundo) · `GET /itinerarios/{id}/tarifas` |
-| D06/D07 Oferta y checkout | `POST /ofertas` · `GET/DELETE /ofertas/{id}` · `POST …/revalidacion` · `POST …/aceptacion-precio` · `PUT …/pasajeros` · `PUT …/facturacion` · `POST …/condiciones` · `GET …/medios-pago` |
+| D06/D07 Oferta y checkout | `POST /ofertas` · `GET/DELETE /ofertas/{id}` · `POST …/revalidacion` · `POST …/aceptacion-precio` · `PUT …/pasajeros` (con asiento opcional por trayecto) · `GET …/asientos?trayectoId=` (mapa de asientos de un trayecto) · `PUT …/facturacion` · `POST …/condiciones` · `GET …/medios-pago` |
 | D08/D09 Pago y órdenes | `POST /ofertas/{id}/compra` (saga) · `GET /ordenes/{numero}` · `GET /ordenes?numero=` o `?pnr=` más `apellido=` (recuperación pública) · `GET /clientes/{id o me}/ordenes` |
 | D16 Notificaciones | automático por eventos de dominio · `GET /admin/notificaciones` (ADMIN) |
 | Back-office | `GET /admin/ordenes` (filtros y cursor) · `GET /admin/ordenes/:numero` · `GET /admin/vuelos` (inventario), solo ADMIN: es lo único que lee datos de otros clientes |

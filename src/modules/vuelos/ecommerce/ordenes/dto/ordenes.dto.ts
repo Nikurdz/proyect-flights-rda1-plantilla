@@ -93,12 +93,18 @@ class ItinerarioOrdenDto {
   @ApiProperty() familia: string;
 }
 
+class AsientoOrdenViewDto {
+  @ApiProperty({ example: 'LA800' }) numeroVuelo: string;
+  @ApiProperty({ example: '12A' }) asiento: string;
+}
+
 class PasajeroOrdenViewDto {
   @ApiProperty() id: string;
   @ApiProperty() tipo: string;
   @ApiProperty() nombres: string;
   @ApiProperty() apellidos: string;
   @ApiPropertyOptional({ nullable: true, description: 'Billete electrónico de 13 dígitos (RF-ORD-003).' }) eTicket: string | null;
+  @ApiPropertyOptional({ type: [AsientoOrdenViewDto], description: 'Asientos elegidos, uno por trayecto.' }) asientos?: AsientoOrdenViewDto[];
 }
 
 export class OrdenViewDto extends BaseResponseDto {

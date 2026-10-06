@@ -231,7 +231,16 @@ export class OrdenesService {
         llegada: t.llegada,
         familia: t.familia,
       })),
-      pasajeros: orden.pasajeros.map((p) => ({ id: p.id, tipo: p.tipo, nombres: p.nombres, apellidos: p.apellidos, eTicket: p.eTicket })),
+      pasajeros: orden.pasajeros.map((p) => ({
+        id: p.id,
+        tipo: p.tipo,
+        nombres: p.nombres,
+        apellidos: p.apellidos,
+        eTicket: p.eTicket,
+        ...(p.asientos?.length
+          ? { asientos: p.asientos.map((a) => ({ numeroVuelo: orden.trayectos.find((t) => t.itinerarioId === a.trayectoId)?.numeroVuelo ?? '', asiento: a.asiento })) }
+          : {}),
+      })),
       // The public recovery answers to a surname and a locator, so it never returns contact data.
       ...(opciones.publica ? {} : { contacto: orden.contacto }),
       pago: { marca: orden.pago.marca, ultimos4: orden.pago.ultimos4, cuotas: orden.pago.cuotas },

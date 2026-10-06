@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { AuthClaims } from '../../auth/token.service';
+import { mapBookingUniqueViolation } from '../../common/db-errors';
 import { DomainEventBus } from '../../common/domain-event-bus';
 import { ProblemDetailsBody, ProblemDetailsException } from '../../common/problem-details.exception';
 import type { BookingRequestDto } from '../../dto/booking.dto';
@@ -110,6 +111,8 @@ export class ComprasService {
     try {
       // RF-CRT-003 / RN-12: price and availability are re-checked right before charging.
       await this.ofertas.revalidarBloqueada(bloqueada);
+      // A seat taken by someone else is reported before any charge, so the customer can pick another.
+      await this.ofertas.verificarAsientos(bloqueada, bloqueada.datosPasajeros!.pasajeros);
       return await this.cobrarYEmitir(bloqueada, mercado, dto, key);
     } catch (error) {
       // An unexpected failure outside the compensated paths: free the offer so a retry can proceed.
@@ -200,7 +203,9 @@ export class ComprasService {
    * RN-19: the charge was authorised but the ticket could not be issued, so the authorisation is
    * voided, the failed attempt is recorded, and the customer is told what happened.
    */
-  private async compensar(oferta: Oferta, pago: Pago, error: unknown): Promise<SagaOutcome> {
+  private async compensar(oferta: Oferta, pago: Pago, rawError: unknown): Promise<SagaOutcome> {
+    // A seat/locator race surfaces as a bare unique violation: report it as the typed problem it is.
+    const error = mapBookingUniqueViolation(rawError);
     const known = error instanceof ProblemDetailsException ? error : null;
     const motivo = known ? (known.getResponse() as ProblemDetailsBody).code : 'unexpected_error';
     if (!known) {
@@ -283,6 +288,7 @@ export class ComprasService {
         birthDate: p.fechaNacimiento,
         gender: p.genero,
         contact: { email: datos.contacto.correo, phone: datos.contacto.telefono },
+        ...(p.asientos?.length ? { assignedSeats: p.asientos.map((a) => ({ segmentId: a.trayectoId, seatNumber: a.asiento })) } : {}),
       })),
       // The gateway's authorisation reference is the flight core's paymentReference.
       payment: { paymentReference: pago.autorizacionRef! },

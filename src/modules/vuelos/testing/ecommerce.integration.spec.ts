@@ -3,6 +3,7 @@ import { HttpStatus, INestApplication } from '@nestjs/common';
 import request = require('supertest');
 import { DataSource } from 'typeorm';
 import { Booking } from '../entities/booking.entity';
+import { SeatAssignment } from '../entities/seat-assignment.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import { ProblemDetailsException } from '../common/problem-details.exception';
@@ -68,10 +69,11 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
   const disponibilidad = (query: Record<string, string | number>) => api().get('/api/v1/disponibilidad').query(query);
 
   /** A priced round trip BOG-SCL-BOG built as an offer; returns what the next steps need. */
-  async function nuevaOferta(token: string, opciones: { mercado?: string; familia?: string; pasajeros?: { adultos: number; ninos?: number; infantes?: number }; key?: string } = {}) {
-    const out = dayAhead(cursor);
-    const back = dayAhead(cursor + 7);
-    cursor += 1;
+  async function nuevaOferta(token: string, opciones: { mercado?: string; familia?: string; pasajeros?: { adultos: number; ninos?: number; infantes?: number }; key?: string; fechas?: { out: string; back: string } } = {}) {
+    // `fechas` lets two offers target the very same flights (seat contention); otherwise each offer gets fresh days.
+    const out = opciones.fechas?.out ?? dayAhead(cursor);
+    const back = opciones.fechas?.back ?? dayAhead(cursor + 7);
+    if (!opciones.fechas) cursor += 1;
     const pasajeros = opciones.pasajeros ?? { adultos: 1, ninos: 1 };
     const mercado = opciones.mercado ?? 'ec';
 
@@ -818,6 +820,136 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
 
       await api().put('/api/v1/admin/mercados/ec').set(bearer(adminToken)).send({ versionEsperada: version + 1, activo: true }).expect(200);
       await comprar(token, ofertaId).expect(201);
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------------
+  describe('selección de asientos', () => {
+    const seatPlan = (token: string, ofertaId: string, pasajeros: Record<string, unknown>[]) =>
+      api().put(`/api/v1/ofertas/${ofertaId}/pasajeros`).set(bearer(token)).send({ pasajeros, contacto: { correo: 'comprador@example.com', telefono: '+593999999999' } });
+
+    const mapa = (token: string, ofertaId: string, trayectoId: string) =>
+      api().get(`/api/v1/ofertas/${ofertaId}/asientos`).query({ trayectoId }).set(bearer(token));
+
+    /** The same trip dates as an existing offer, so both target the very same flights. */
+    const mismasFechas = (out: string) => ({ out, back: dayAhead(Math.round((new Date(`${out}T00:00:00Z`).getTime() - Date.now()) / 86_400_000) + 7) });
+
+    /** An offer with an adult (and a child) whose seats on the outbound leg are the ones given; ready to pay. */
+    async function ofertaConAsientos(token: string, asientos: { adulto?: string; nino?: string }, fechas?: { out: string; back: string }) {
+      const { res, out, ida, vuelta } = await nuevaOferta(token, { fechas });
+      expect(res.status).toBe(201);
+      const ofertaId = res.body.ofertaId as string;
+      const pick = (seat?: string) => (seat ? { asientos: [{ trayectoId: ida.itinerarioId, asiento: seat }] } : {});
+      await seatPlan(token, ofertaId, [pasajero('a1', 'ADULT', yearsBefore(35, out), pick(asientos.adulto)), pasajero('c1', 'CHILD', yearsBefore(8, out), pick(asientos.nino))]).expect(200);
+      await api().put(`/api/v1/ofertas/${ofertaId}/facturacion`).set(bearer(token)).send({ tipoIdentificacion: 'CEDULA', numeroIdentificacion: '1712345678', razonSocial: 'María Peña', direccion: 'Av. Amazonas 123', pais: 'EC' }).expect(200);
+      await api().post(`/api/v1/ofertas/${ofertaId}/condiciones`).set(bearer(token)).send({ versionTerminos: '2026-10', versionCondicionesTransporte: '2026-10' }).expect(200);
+      return { ofertaId, out, ida, vuelta };
+    }
+
+    it('serves the seat map only to the owner, for a leg of that offer', async () => {
+      const token = await guest();
+      const { res, ida } = await nuevaOferta(token);
+      const ofertaId = res.body.ofertaId as string;
+
+      const map = await mapa(token, ofertaId, ida.itinerarioId).expect(200);
+      expect(map.body.trayectoId).toBe(ida.itinerarioId);
+      expect(map.body.filas.length).toBeGreaterThan(5);
+      expect(map.body.filas[0].seats[0]).toMatchObject({ seatNumber: '1A', isAvailable: true });
+
+      await api().get(`/api/v1/ofertas/${ofertaId}/asientos`).query({ trayectoId: ida.itinerarioId }).expect(401);
+      const other = await mapa(await guest(), ofertaId, ida.itinerarioId);
+      expect([403, 404]).toContain(other.status);
+      await mapa(token, ofertaId, randomUUID()).expect(400);
+    });
+
+    it('rejects bad seat picks before any payment: missing seat, repeated seat, two seats on a leg, a lap infant', async () => {
+      const token = await guest();
+      const { res, out, ida } = await nuevaOferta(token);
+      const ofertaId = res.body.ofertaId as string;
+      const seat = (asiento: string, trayectoId = ida.itinerarioId) => ({ asientos: [{ trayectoId, asiento }] });
+      const adult = (extra = {}) => pasajero('a1', 'ADULT', yearsBefore(35, out), extra);
+      const child = (extra = {}) => pasajero('c1', 'CHILD', yearsBefore(8, out), extra);
+
+      const missing = await seatPlan(token, ofertaId, [adult(seat('999F')), child()]).expect(422);
+      expect(missing.body.code).toBe('SEAT_CABIN_MISMATCH');
+
+      const repeated = await seatPlan(token, ofertaId, [adult(seat('3C')), child(seat('3C'))]).expect(409);
+      expect(repeated.body.code).toBe('SEAT_TAKEN');
+
+      const twice = await seatPlan(token, ofertaId, [adult({ asientos: [{ trayectoId: ida.itinerarioId, asiento: '4A' }, { trayectoId: ida.itinerarioId, asiento: '4B' }] }), child()]).expect(422);
+      expect(twice.body.code).toBe('VALIDATION_FAILED');
+
+      const foreignLeg = await seatPlan(token, ofertaId, [adult(seat('4A', randomUUID())), child()]).expect(400);
+      expect(foreignLeg.body.code).toBe('VALIDATION_FAILED');
+
+      // A lap infant takes no seat.
+      const withInfant = await nuevaOferta(token, { pasajeros: { adultos: 1, ninos: 0, infantes: 1 } });
+      expect(withInfant.res.status).toBe(201);
+      const infantPlan = await seatPlan(token, withInfant.res.body.ofertaId, [
+        pasajero('a1', 'ADULT', yearsBefore(35, withInfant.out)),
+        pasajero('i1', 'INFANT', yearsBefore(1, withInfant.out), { asociadoA: 'a1', asientos: [{ trayectoId: withInfant.ida.itinerarioId, asiento: '5A' }] }),
+      ]).expect(422);
+      expect(infantPlan.body.code).toBe('INFANT_SEAT_NOT_ALLOWED');
+    });
+
+    it('buys with seats: the order shows them, the inventory records them, and the map marks them taken', async () => {
+      const token = await guest();
+      const { ofertaId, out, ida } = await ofertaConAsientos(token, { adulto: '10A', nino: '10B' });
+
+      const res = await comprar(token, ofertaId).expect(201);
+      const seatsOf = (id: string) => res.body.pasajeros.find((p: { id: string }) => p.id === id).asientos;
+      expect(seatsOf('a1')).toEqual([{ numeroVuelo: expect.any(String), asiento: '10A' }]);
+      expect(seatsOf('c1')).toEqual([{ numeroVuelo: expect.any(String), asiento: '10B' }]);
+
+      const rows = await ds.getRepository(SeatAssignment).find({ where: { vueloId: ida.itinerarioId }, order: { seatNumber: 'ASC' } });
+      expect(rows.map((r) => r.seatNumber)).toEqual(['10A', '10B']);
+
+      // Another visitor shopping for the same flight sees them occupied.
+      const rival = await guest();
+      const { res: rivalOffer, ida: rivalIda } = await nuevaOferta(rival, { fechas: mismasFechas(out) });
+      expect(rivalIda.itinerarioId).toBe(ida.itinerarioId);
+      const map = await mapa(rival, rivalOffer.body.ofertaId, ida.itinerarioId).expect(200);
+      const seats = map.body.filas.flatMap((f: { seats: { seatNumber: string; isAvailable: boolean }[] }) => f.seats);
+      expect(seats.find((s: { seatNumber: string }) => s.seatNumber === '10A').isAvailable).toBe(false);
+      expect(seats.find((s: { seatNumber: string }) => s.seatNumber === '10C').isAvailable).toBe(true);
+    });
+
+    it('reports a seat taken meanwhile BEFORE charging, and the customer can pick another and still buy', async () => {
+      const first = await guest();
+      const a = await ofertaConAsientos(first, { adulto: '12C' });
+
+      const second = await guest();
+      const b = await ofertaConAsientos(second, { adulto: '12C' }, mismasFechas(a.out)); // still free when picked
+      expect(b.ida.itinerarioId).toBe(a.ida.itinerarioId);
+
+      await comprar(first, a.ofertaId).expect(201);
+
+      const blocked = await comprar(second, b.ofertaId).expect(409);
+      expect(blocked.body.code).toBe('SEAT_TAKEN');
+      expect(await pagos(b.ofertaId)).toHaveLength(0); // nothing was authorised, so nothing to void
+
+      await seatPlan(second, b.ofertaId, [
+        pasajero('a1', 'ADULT', yearsBefore(35, b.out), { asientos: [{ trayectoId: b.ida.itinerarioId, asiento: '12D' }] }),
+        pasajero('c1', 'CHILD', yearsBefore(8, b.out)),
+      ]).expect(200);
+      await comprar(second, b.ofertaId).expect(201);
+    });
+
+    it('two purchases racing for one seat: exactly one is issued and the other is never captured', async () => {
+      const first = await guest();
+      const a = await ofertaConAsientos(first, { adulto: '15A' });
+      const second = await guest();
+      const b = await ofertaConAsientos(second, { adulto: '15A' }, mismasFechas(a.out));
+
+      const results = await Promise.all([comprar(first, a.ofertaId), comprar(second, b.ofertaId)]);
+      expect(results.filter((r) => r.status === 201)).toHaveLength(1);
+      expect(results.find((r) => r.status !== 201)!.status).toBeGreaterThanOrEqual(400);
+
+      const rows = await ds.getRepository(SeatAssignment).find({ where: { vueloId: a.ida.itinerarioId, seatNumber: '15A' } });
+      expect(rows).toHaveLength(1);
+
+      const loserOffer = results[0].status === 201 ? b.ofertaId : a.ofertaId;
+      expect((await pagos(loserOffer)).filter((p) => p.estado === 'CAPTURADO')).toHaveLength(0);
     });
   });
 

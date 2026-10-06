@@ -1,4 +1,4 @@
-import { Body, Delete, Get, Headers, HttpCode, HttpStatus, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Delete, Get, Headers, HttpCode, HttpStatus, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { IdempotencyKeyGuard } from '../../../../common/guards/idempotency-key.guard';
 import { CurrentAuth, JwtAuthGuard } from '../../auth/jwt-auth.guard';
@@ -10,6 +10,8 @@ import {
   AceptarPrecioDto,
   ArmarOfertaDto,
   FacturacionDto,
+  MapaAsientosQueryDto,
+  MapaAsientosViewDto,
   MedioPagoViewDto,
   OfertaParamDto,
   OfertaViewDto,
@@ -48,6 +50,17 @@ export class OfertasController {
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND)
   obtener(@CurrentAuth() auth: AuthClaims, @Param() params: OfertaParamDto) {
     return this.ofertas.obtener(auth, params.id);
+  }
+
+  @Get(':id/asientos')
+  @ApiOperation({
+    summary: 'Mapa de asientos de un trayecto de la oferta',
+    description: 'Asientos de un trayecto (economía) y cuáles están libres. Es solo orientativo: el asiento se reserva al emitir la compra y, si otra persona lo toma antes, la compra responde SEAT_TAKEN.',
+  })
+  @ApiResponse({ status: 200, type: MapaAsientosViewDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, GONE)
+  asientos(@CurrentAuth() auth: AuthClaims, @Param() params: OfertaParamDto, @Query() query: MapaAsientosQueryDto) {
+    return this.ofertas.mapaAsientos(auth, params.id, query.trayectoId);
   }
 
   @Delete(':id')

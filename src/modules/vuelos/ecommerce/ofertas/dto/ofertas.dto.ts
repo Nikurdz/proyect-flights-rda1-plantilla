@@ -99,6 +99,17 @@ class DocumentoDto {
   vencimiento?: string;
 }
 
+export class AsientoElegidoDto {
+  @ApiProperty({ format: 'uuid', description: 'itinerarioId del trayecto de la oferta donde se elige el asiento.' })
+  @IsUUID()
+  trayectoId: string;
+
+  @ApiProperty({ example: '12A' })
+  @ToUpperTrimmed()
+  @Matches(/^\d{1,3}[A-F]$/)
+  asiento: string;
+}
+
 export class PasajeroDto {
   @ApiProperty({ description: 'Identificador elegido por el cliente, único en la oferta.' })
   @Matches(/^[A-Za-z0-9_-]{1,100}$/)
@@ -153,6 +164,14 @@ export class PasajeroDto {
   @IsIn(NECESIDADES_ESPECIALES, { each: true })
   @IsOptional()
   necesidades?: string[];
+
+  @ApiPropertyOptional({ type: [AsientoElegidoDto], description: 'Asiento opcional por trayecto; los infantes en brazos no ocupan asiento.' })
+  @IsArray()
+  @ArrayMaxSize(4)
+  @ValidateNested({ each: true })
+  @Type(() => AsientoElegidoDto)
+  @IsOptional()
+  asientos?: AsientoElegidoDto[];
 }
 
 export class ContactoDto {
@@ -246,6 +265,30 @@ class PasajeroRegistradoDto {
   @ApiProperty() tipo: string;
   @ApiProperty() nombres: string;
   @ApiProperty() apellidos: string;
+  @ApiPropertyOptional({ type: [AsientoElegidoDto] }) asientos?: AsientoElegidoDto[];
+}
+
+export class MapaAsientosQueryDto {
+  @ApiProperty({ format: 'uuid', description: 'itinerarioId de uno de los trayectos de la oferta.' })
+  @IsUUID()
+  trayectoId: string;
+}
+
+class AsientoViewDto {
+  @ApiProperty({ example: '12A' }) seatNumber: string;
+  @ApiProperty() isAvailable: boolean;
+  @ApiProperty({ type: [String], example: ['WINDOW'] }) characteristics: string[];
+}
+
+class FilaAsientosViewDto {
+  @ApiProperty() rowNumber: number;
+  @ApiProperty({ type: [AsientoViewDto] }) seats: AsientoViewDto[];
+}
+
+export class MapaAsientosViewDto {
+  @ApiProperty({ format: 'uuid' }) trayectoId: string;
+  @ApiProperty() numeroVuelo: string;
+  @ApiProperty({ type: [FilaAsientosViewDto] }) filas: FilaAsientosViewDto[];
 }
 
 export class OfertaViewDto extends BaseResponseDto {

@@ -13,8 +13,10 @@ import { toIso } from '../../common/date.util';
 import { DomainEventBus } from '../../common/domain-event-bus';
 import { PASSENGER_TYPES, PassengerBreakdown, countFor } from '../../common/pricing.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
+import { seatExists, buildSeatGrid } from '../../common/seat-grid';
 import { VUELOS_CONFIG, VuelosConfig } from '../../common/vuelos-config';
 import { FareFamily } from '../../entities/fare-family.entity';
+import { SeatAssignment } from '../../entities/seat-assignment.entity';
 import { Vuelo } from '../../entities/vuelo.entity';
 import { IdempotencyService } from '../../services/idempotency.service';
 import { OffersService } from '../../services/offers.service';
@@ -31,6 +33,7 @@ import {
   AceptarPrecioDto,
   ArmarOfertaDto,
   FacturacionDto,
+  MapaAsientosViewDto,
   MedioPagoViewDto,
   OfertaViewDto,
   RegistrarPasajerosDto,
@@ -66,6 +69,7 @@ export class OfertasService implements OnModuleInit {
   constructor(
     @InjectRepository(Oferta) private readonly ofertas: Repository<Oferta>,
     @InjectRepository(Vuelo) private readonly vuelos: Repository<Vuelo>,
+    @InjectRepository(SeatAssignment) private readonly asientosTomados: Repository<SeatAssignment>,
     @InjectRepository(FareFamily) private readonly familias: Repository<FareFamily>,
     @InjectRepository(Localidad) private readonly localidades: Repository<Localidad>,
     @InjectDataSource() private readonly dataSource: DataSource,
@@ -318,6 +322,7 @@ export class OfertasService implements OnModuleInit {
         documento: { tipo: p.documento.tipo, numero: p.documento.numero.toUpperCase(), vencimiento: p.documento.vencimiento },
         numeroSocio: p.numeroSocio,
         necesidades: p.necesidades,
+        ...(p.asientos?.length ? { asientos: p.asientos.map((a) => ({ trayectoId: a.trayectoId, asiento: a.asiento })) } : {}),
       };
     });
 
@@ -347,10 +352,86 @@ export class OfertasService implements OnModuleInit {
       }
     }
 
+    // Optional seat picks: checked now so the customer hears about a problem before paying.
+    await this.verificarAsientos(oferta, pasajeros);
+
     const datos: DatosPasajeros = { pasajeros, contacto: { correo: dto.contacto.correo, telefono: dto.contacto.telefono } };
     oferta.datosPasajeros = datos;
     const guardada = await this.ofertas.save(oferta);
     return { ...this.vista(guardada), ...(advertencias.length ? { advertencias } : {}) };
+  }
+
+  // ---------------------------------------------------------------- seats
+
+  /** The seat map of one leg of the offer: which seats exist and which are already taken. */
+  async mapaAsientos(auth: AuthClaims, id: string, trayectoId: string): Promise<MapaAsientosViewDto> {
+    const oferta = await this.cargarVigente(auth, id);
+    const trayecto = oferta.trayectos.find((t) => t.itinerarioId === trayectoId);
+    if (!trayecto) {
+      throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Leg not part of the offer', `trayectoId ${trayectoId} does not belong to offer ${id}.`, [
+        { name: 'trayectoId', reason: 'does not belong to the offer' },
+      ]);
+    }
+    const vuelo = await this.vuelos.findOne({ where: { id: trayectoId } });
+    if (!vuelo) {
+      throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight no longer available', 'The flight behind this leg no longer exists.');
+    }
+    const ocupados = new Set((await this.asientosTomados.find({ where: { vueloId: vuelo.id } })).map((s) => s.seatNumber));
+    const filas = buildSeatGrid(vuelo.capacidadTotal).map((fila) => ({
+      rowNumber: fila.rowNumber,
+      seats: fila.seats.map((seat) => ({ seatNumber: seat.seatNumber, isAvailable: !ocupados.has(seat.seatNumber), characteristics: seat.characteristics })),
+    }));
+    return { trayectoId, numeroVuelo: trayecto.numeroVuelo, filas };
+  }
+
+  /**
+   * Checks the seats the passengers picked: they belong to a leg of the offer, exist in the cabin,
+   * are not for a lap infant, are not repeated, and are still free. The unique index on
+   * (flight, seat) stays the final guarantee when two purchases race for the same seat.
+   */
+  async verificarAsientos(oferta: Oferta, pasajeros: PasajeroDatos[]): Promise<void> {
+    const elegidos = pasajeros.flatMap((p) => (p.asientos ?? []).map((a) => ({ pasajero: p, ...a })));
+    if (elegidos.length === 0) return;
+
+    const vuelos = await this.vuelos.find({ where: { id: In(oferta.trayectos.map((t) => t.itinerarioId)) } });
+    const vistos = new Set<string>();
+    const porPasajeroYTrayecto = new Set<string>();
+
+    for (const e of elegidos) {
+      if (e.pasajero.tipo === 'INFANT') {
+        throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'INFANT_SEAT_NOT_ALLOWED', 'Infants cannot have a seat', `Passenger ${e.pasajero.id} is a lap infant.`, [
+          { name: 'pasajeros.asientos', reason: 'a lap infant has no seat' },
+        ]);
+      }
+      const vuelo = vuelos.find((v) => v.id === e.trayectoId);
+      if (!vuelo) {
+        throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Leg not part of the offer', `trayectoId ${e.trayectoId} does not belong to this offer.`, [
+          { name: 'pasajeros.asientos.trayectoId', reason: 'does not belong to the offer' },
+        ]);
+      }
+      if (!seatExists(vuelo.capacidadTotal, e.asiento)) {
+        throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'SEAT_CABIN_MISMATCH', 'Seat does not exist', `Seat ${e.asiento} does not exist on flight ${vuelo.codigoVuelo}.`, [
+          { name: 'pasajeros.asientos.asiento', reason: 'seat does not exist on this flight' },
+        ]);
+      }
+      const clavePasajero = `${e.pasajero.id}:${e.trayectoId}`;
+      if (porPasajeroYTrayecto.has(clavePasajero)) {
+        throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', 'Several seats on one leg', `Passenger ${e.pasajero.id} has more than one seat on a leg.`, [
+          { name: 'pasajeros.asientos', reason: 'one seat per passenger and leg' },
+        ]);
+      }
+      porPasajeroYTrayecto.add(clavePasajero);
+      const claveAsiento = `${e.trayectoId}:${e.asiento}`;
+      if (vistos.has(claveAsiento)) {
+        throw new ProblemDetailsException(HttpStatus.CONFLICT, 'SEAT_TAKEN', 'Seat requested twice', `Seat ${e.asiento} is assigned to more than one passenger.`);
+      }
+      vistos.add(claveAsiento);
+    }
+
+    const ocupados = await this.asientosTomados.find({ where: elegidos.map((e) => ({ vueloId: e.trayectoId, seatNumber: e.asiento })) });
+    if (ocupados.length > 0) {
+      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'SEAT_TAKEN', 'Seat already taken', `Seat ${ocupados.map((o) => o.seatNumber).join(', ')} was just taken by another booking. Choose another seat.`);
+    }
   }
 
   async registrarFacturacion(auth: AuthClaims, id: string, dto: FacturacionDto): Promise<OfertaViewDto> {
@@ -516,12 +597,13 @@ export class OfertasService implements OnModuleInit {
       venceEn: toIso(oferta.venceEn),
       segundosRestantes: activa ? Math.max(0, Math.floor((oferta.venceEn.getTime() - Date.now()) / 1000)) : 0,
       faltantes: this.faltantes(oferta),
-      ...(pasajeros ? { pasajerosRegistrados: pasajeros.map((p) => ({ id: p.id, tipo: p.tipo, nombres: p.nombres, apellidos: p.apellidos })) } : {}),
+      ...(pasajeros ? { pasajerosRegistrados: pasajeros.map((p) => ({ id: p.id, tipo: p.tipo, nombres: p.nombres, apellidos: p.apellidos, ...(p.asientos?.length ? { asientos: p.asientos } : {}) })) } : {}),
       ...(oferta.condicionesAceptadas ? { condicionesAceptadas: oferta.condicionesAceptadas } : {}),
       _links: {
         self: `/api/v1/ofertas/${oferta.ofertaId}`,
         revalidacion: `/api/v1/ofertas/${oferta.ofertaId}/revalidacion`,
         pasajeros: `/api/v1/ofertas/${oferta.ofertaId}/pasajeros`,
+        asientos: `/api/v1/ofertas/${oferta.ofertaId}/asientos`,
         compra: `/api/v1/ofertas/${oferta.ofertaId}/compra`,
       },
     };
