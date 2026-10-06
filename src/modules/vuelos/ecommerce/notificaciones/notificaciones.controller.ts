@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
+import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import { NotificacionesService } from './notificaciones.service';
 
 class NotificacionesQueryDto {
@@ -20,7 +21,7 @@ class NotificacionesQueryDto {
 }
 
 /** Read-only trace of what the platform sent (RF-NTF-008); in development it is also where a verification link can be read. */
-@ProblemController('admin', 'E-commerce · Back-office')
+@ProblemController('admin', SWAGGER_TAGS.admin)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 @ApiBearerAuth()

@@ -1,7 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
+import { buildVuelosSwaggerConfig, orderVuelosPaths, vuelosSwaggerUiOptions } from './modules/vuelos/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -42,15 +43,11 @@ async function bootstrap() {
     }),
   );
 
-  const config = new DocumentBuilder()
-    .setTitle('Booking Prototipo API')
-    .setDescription('API base para los dominios de Alojamientos, Autos, Atracciones y Vuelos.')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Only the Vuelos module is mounted in this deployment, so the documentation is Vuelos': sections in the
+  // order of a purchase, with what is unused or not implemented set apart (see modules/vuelos/swagger.ts).
+  const document = SwaggerModule.createDocument(app, buildVuelosSwaggerConfig());
+  orderVuelosPaths(document);
+  SwaggerModule.setup('api/docs', app, document, vuelosSwaggerUiOptions);
 
   await app.listen(process.env.PORT || 3000);
 }

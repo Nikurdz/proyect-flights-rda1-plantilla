@@ -22,6 +22,7 @@ import { ApiProblemResponses } from './common/api-problem-responses';
 import { CorrelationInterceptor } from './common/correlation';
 import { ProblemDetailsException } from './common/problem-details.exception';
 import { VuelosProblemDetailsFilter } from './common/problem-details.filter';
+import { SWAGGER_TAGS } from './common/swagger-tags';
 import {
   BookingDetailResponseDto,
   BookingListResponseDto,
@@ -70,7 +71,7 @@ export class VuelosController {
   // --- Búsqueda y Catálogo (público) ---
   @Post('search')
   @HttpCode(HttpStatus.OK)
-  @ApiTags('Búsqueda y Catálogo')
+  @ApiTags(SWAGGER_TAGS.nucleoBusqueda)
   @ApiOperation({
     summary: 'Búsqueda de vuelos (Multidestino)',
     description: 'Vuelos directos. Se devuelven como máximo OFFER_MAX_COMBINATIONS ofertas (por defecto 5), las más baratas primero.',
@@ -88,7 +89,7 @@ export class VuelosController {
   }
 
   @Get('offers/:offerId/seatmap')
-  @ApiTags('Búsqueda y Catálogo')
+  @ApiTags(SWAGGER_TAGS.nucleoBusqueda)
   @ApiOperation({ summary: 'Obtener mapa de asientos por segmento' })
   @ApiParam({ name: 'offerId', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Mapa de asientos' })
@@ -101,7 +102,7 @@ export class VuelosController {
   @Post('offers/hold')
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
-  @ApiTags('Bloqueo de Cupos (Hold)')
+  @ApiTags(SWAGGER_TAGS.nucleoHold)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Bloquear inventario', description: 'Scope de referencia: flights:hold. Descuenta los asientos del inventario hasta que el hold expire, se libere o se consuma.' })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
@@ -117,7 +118,7 @@ export class VuelosController {
 
   @Get('offers/hold/:holdId')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Bloqueo de Cupos (Hold)')
+  @ApiTags(SWAGGER_TAGS.nucleoHold)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Consultar estado de un hold', description: 'Scope de referencia: flights:read.' })
   @ApiParam({ name: 'holdId', type: 'string', format: 'uuid' })
@@ -130,7 +131,7 @@ export class VuelosController {
   @Delete('offers/hold/:holdId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Bloqueo de Cupos (Hold)')
+  @ApiTags(SWAGGER_TAGS.nucleoHold)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Liberar hold anticipadamente', description: 'Scope de referencia: flights:hold. Idempotente; devuelve los asientos al inventario.' })
   @ApiParam({ name: 'holdId', type: 'string', format: 'uuid' })
@@ -143,7 +144,7 @@ export class VuelosController {
   // --- Reservas y Emisión ---
   @Get('bookings')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Reservas y Emisión')
+  @ApiTags(SWAGGER_TAGS.nucleoReservas)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Listar reservas del usuario actual (Paginado)', description: 'Scope de referencia: flights:read. Paginación por cursor (limit máx. 50).' })
   @ApiResponse({ status: 200, description: 'Lista resumida', type: BookingListResponseDto })
@@ -155,7 +156,7 @@ export class VuelosController {
   @Post('bookings')
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
-  @ApiTags('Reservas y Emisión')
+  @ApiTags(SWAGGER_TAGS.nucleoReservas)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear reserva y gestionar emisión de ticket', description: 'Scope de referencia: flights:book. Atómico: reserva, pasajeros, asientos y tickets se confirman juntos o no se confirma nada.' })
   @ApiHeader({ name: 'Idempotency-Key', required: true })
@@ -171,7 +172,7 @@ export class VuelosController {
 
   @Get('bookings/:bookingId')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Reservas y Emisión')
+  @ApiTags(SWAGGER_TAGS.nucleoReservas)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Detalle completo de reserva', description: 'Scope de referencia: flights:read.' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -183,7 +184,7 @@ export class VuelosController {
 
   @Get('bookings/:bookingId/tickets')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Reservas y Emisión')
+  @ApiTags(SWAGGER_TAGS.nucleoReservas)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Consultar tickets de una reserva', description: 'Scope de referencia: flights:read.' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -195,7 +196,7 @@ export class VuelosController {
 
   @Get('bookings/:bookingId/tickets/:ticketId')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Reservas y Emisión')
+  @ApiTags(SWAGGER_TAGS.nucleoReservas)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Consultar un ticket', description: 'Scope de referencia: flights:read.' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -214,7 +215,7 @@ export class VuelosController {
   // En el contrato pero sin implementar en esta fase: responden 501, nunca un 200 vacío.
   @Get('bookings/:bookingId/baggage-options')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Postventa (Maletas, Fechas y Cancelaciones)')
+  @ApiTags(SWAGGER_TAGS.postventa)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Opciones de equipaje post-emisión (no implementado)' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -225,7 +226,7 @@ export class VuelosController {
 
   @Post('bookings/:bookingId/baggage')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Postventa (Maletas, Fechas y Cancelaciones)')
+  @ApiTags(SWAGGER_TAGS.postventa)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Agregar maleta extra post-emisión (no implementado)' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -236,7 +237,7 @@ export class VuelosController {
 
   @Post('bookings/:bookingId/date-change/search')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Postventa (Maletas, Fechas y Cancelaciones)')
+  @ApiTags(SWAGGER_TAGS.postventa)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Buscar disponibilidad para cambio de fecha (no implementado)' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -247,7 +248,7 @@ export class VuelosController {
 
   @Post('bookings/:bookingId/date-change')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Postventa (Maletas, Fechas y Cancelaciones)')
+  @ApiTags(SWAGGER_TAGS.postventa)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Confirmar cambio de fecha (no implementado)' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -258,7 +259,7 @@ export class VuelosController {
 
   @Get('bookings/:bookingId/cancellation-quote')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Postventa (Maletas, Fechas y Cancelaciones)')
+  @ApiTags(SWAGGER_TAGS.postventa)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cotizar reembolso por cancelación (no implementado)' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -269,7 +270,7 @@ export class VuelosController {
 
   @Post('bookings/:bookingId/cancel')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Postventa (Maletas, Fechas y Cancelaciones)')
+  @ApiTags(SWAGGER_TAGS.postventa)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cancelar reserva (no implementado)' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -281,7 +282,7 @@ export class VuelosController {
   // --- Check-in y Boarding Pass (no implementado) ---
   @Post('bookings/:bookingId/check-in')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Check-in y Boarding Pass')
+  @ApiTags(SWAGGER_TAGS.checkin)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Realizar check-in de la reserva (no implementado)' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -292,7 +293,7 @@ export class VuelosController {
 
   @Get('bookings/:bookingId/boarding-passes')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Check-in y Boarding Pass')
+  @ApiTags(SWAGGER_TAGS.checkin)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Consultar pases de abordar (no implementado)' })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -303,7 +304,7 @@ export class VuelosController {
 
   // --- Estado de Vuelos (público) ---
   @Get('flights/:flightNumber/status')
-  @ApiTags('Estado de Vuelos')
+  @ApiTags(SWAGGER_TAGS.nucleoEstado)
   @ApiOperation({ summary: 'Consultar estado de un vuelo' })
   @ApiResponse({ status: 200, description: 'Estado operativo del vuelo' })
   @ApiProblemResponses(BAD_REQUEST, NOT_FOUND)
@@ -314,7 +315,7 @@ export class VuelosController {
   // --- Webhooks (no implementado) ---
   @Get('webhooks')
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Webhooks')
+  @ApiTags(SWAGGER_TAGS.webhooks)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Listar suscripciones (no implementado)' })
   @ApiProblemResponses(UNAUTHORIZED, NOT_IMPLEMENTED)
@@ -325,7 +326,7 @@ export class VuelosController {
   @Post('webhooks')
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Webhooks')
+  @ApiTags(SWAGGER_TAGS.webhooks)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Registrar webhook (no implementado)' })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_IMPLEMENTED)
@@ -336,7 +337,7 @@ export class VuelosController {
   @Delete('webhooks/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard)
-  @ApiTags('Webhooks')
+  @ApiTags(SWAGGER_TAGS.webhooks)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Eliminar suscripción (no implementado)' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })

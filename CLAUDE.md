@@ -32,7 +32,7 @@ npm run migration:run:vuelos | migration:generate:vuelos | migration:check:vuelo
 npm run lint               # broken repo-wide (ESLint is not installed); pre-existing template gap, do not fix incidentally
 ```
 
-Swagger UI: `http://localhost:3000/api/docs` (Authorize with a token from `POST /api/v1/auth/login` or `/auth/invitado`). Every route is under the global prefix `api/v1` set once in `src/main.ts`, shared by all domains — it does **not** match the contracts' own `servers[].url`. `main.ts` registers the Bearer scheme for Swagger (the only shared-file change this module needed).
+Swagger UI: `http://localhost:3000/api/docs` (Authorize with a token from `POST /api/v1/auth/login` or `/auth/invitado`). Its sections are numbered in the order of a purchase and live in `src/modules/vuelos/common/swagger-tags.ts` (controllers use the `SWAGGER_TAGS` constants, never loose strings); the cover text, route ordering and UI options are in `src/modules/vuelos/swagger.ts`. Operations of the walkthrough carry `Paso N` in their summary — number a new one by hand. What is not implemented (501) sits under `⛔ No implementado`. Every route is under the global prefix `api/v1` set once in `src/main.ts`, shared by all domains — it does **not** match the contracts' own `servers[].url`. `main.ts` registers the Bearer scheme for Swagger (the only shared-file change this module needed).
 
 `.env` needs `JWT_SECRET` (>= 32 chars). Vuelos config is validated at boot by `common/vuelos-config.ts`; an invalid value stops the app with a readable message. `DATA_ENCRYPTION_KEY` is derived from `JWT_SECRET` in development and **required** in production.
 

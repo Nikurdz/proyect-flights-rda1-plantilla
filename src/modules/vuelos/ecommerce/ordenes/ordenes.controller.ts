@@ -6,6 +6,7 @@ import { CurrentAuth, JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import type { AuthClaims } from '../../auth/token.service';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
+import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import { ClienteParamDto } from '../identidad/dto/identidad.dto';
 import { OfertaParamDto } from '../ofertas/dto/ofertas.dto';
 import { ComprasService } from './compras.service';
@@ -14,13 +15,13 @@ import { OrdenesService } from './ordenes.service';
 
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, PAYMENT_REQUIRED, TOO_MANY_REQUESTS, BAD_GATEWAY, SERVICE_UNAVAILABLE } = HttpStatus;
 
-@ProblemController('tickets', 'E-commerce · Verificación de billetes')
+@ProblemController('tickets', SWAGGER_TAGS.viajes)
 export class VerificacionBilletesController {
   constructor(private readonly ordenes: OrdenesService) {}
 
   @Get('verificar')
   @ApiOperation({
-    summary: 'Verificar un billete a partir de su código QR',
+    summary: 'Paso 5C · Verificar un billete a partir de su código QR (público)',
     description:
       'Acceso público: quien escanea el QR de un pasajero ve si el billete es auténtico y está emitido, con el vuelo y el estado. La firma (HMAC) impide inventar o alterar códigos; no devuelve nombres ni contacto. Limita los intentos por IP.',
   })
@@ -31,7 +32,7 @@ export class VerificacionBilletesController {
   }
 }
 
-@ProblemController('ofertas', 'E-commerce · Compra y órdenes')
+@ProblemController('ofertas', SWAGGER_TAGS.pagar)
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ComprasController {
@@ -41,7 +42,7 @@ export class ComprasController {
   @UseGuards(IdempotencyKeyGuard)
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiOperation({
-    summary: 'Pagar y emitir la orden',
+    summary: 'Paso 4 · Pagar y emitir la orden',
     description:
       'SRS §8.4 (pagarYEmitirOrden): revalida el precio, autoriza el pago (antifraude + pasarela), crea la orden y emite la reserva y los billetes en una sola transacción, y captura el cobro. ' +
       'Si la emisión falla después de autorizar el pago, la autorización se anula automáticamente (RN-19). ' +
@@ -65,13 +66,13 @@ export class ComprasController {
   }
 }
 
-@ProblemController('ordenes', 'E-commerce · Compra y órdenes')
+@ProblemController('ordenes', SWAGGER_TAGS.viajes)
 export class OrdenesController {
   constructor(private readonly ordenes: OrdenesService) {}
 
   @Get()
   @ApiOperation({
-    summary: 'Recuperar un viaje con número de orden o PNR y apellido',
+    summary: 'Paso 5B · Recuperar un viaje con número de orden o PNR y apellido (público)',
     description: 'RF-ORD-010 / RF-CHK-001: acceso público para quien compró sin cuenta. No devuelve datos de contacto y limita los intentos por IP.',
   })
   @ApiResponse({ status: 200, type: OrdenViewDto })
@@ -83,7 +84,7 @@ export class OrdenesController {
   @Get(':numero')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Consultar una orden propia' })
+  @ApiOperation({ summary: 'Paso 5A · Consultar una orden propia' })
   @ApiResponse({ status: 200, type: OrdenViewDto })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_FOUND)
   obtener(@CurrentAuth() auth: AuthClaims, @Param() params: OrdenParamDto) {
@@ -91,7 +92,7 @@ export class OrdenesController {
   }
 }
 
-@ProblemController('clientes', 'E-commerce · Compra y órdenes')
+@ProblemController('clientes', SWAGGER_TAGS.viajes)
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class ClienteOrdenesController {

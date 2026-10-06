@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
+import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import { OrdenParamDto } from '../ordenes/dto/ordenes.dto';
 import { AdminAsientosVueloDto, AdminOrdenViewDto, AdminOrdenesPaginaDto, AdminOrdenesQueryDto, AdminVueloParamDto, AdminVuelosPaginaDto, AdminVuelosQueryDto } from './admin.dto';
 import { AdminService } from './admin.service';
@@ -14,7 +15,7 @@ const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND } = HttpStatus;
  * Back-office views across customers. Everything else in the API is owner-only; these routes are
  * the only ones that can read other people's orders, and they require the ADMIN role.
  */
-@ProblemController('admin', 'E-commerce · Back-office')
+@ProblemController('admin', SWAGGER_TAGS.admin)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 @ApiBearerAuth()
