@@ -1,4 +1,9 @@
-import { DataSource } from 'typeorm';
+import { randomInt, randomUUID } from 'node:crypto';
+import { DataSource, EntityManager } from 'typeorm';
+import { buildSeatGrid } from '../common/seat-grid';
+import { Booking } from '../entities/booking.entity';
+import { Passenger } from '../entities/passenger.entity';
+import { Ticket } from '../entities/ticket.entity';
 import { FareFamily } from '../entities/fare-family.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
@@ -255,10 +260,132 @@ export const DEMO_SCENARIOS: { codigoVuelo: string; dias: number[]; libres: numb
   { codigoVuelo: 'LA1412', dias: [6], libres: 0 }, // BOG -> UIO
 ];
 
+/** Owner of the synthetic bookings that occupy the seats of the demo flights (never a real customer). */
+export const DEMO_OWNER = 'demo-seed';
+
+const GROUP_SIZES = [2, 1, 3, 2, 4, 1, 2, 3];
+const FIRST_NAMES = ['Ana', 'Luis', 'María', 'Carlos', 'Lucía', 'Andrés', 'Sofía', 'Diego', 'Valentina', 'Mateo', 'Camila', 'Javier'];
+const LAST_NAMES = ['Pérez', 'Gómez', 'Rodríguez', 'Torres', 'Salazar', 'Vega', 'Mora', 'Cedeño', 'Andrade', 'Paredes'];
+const PNR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/** Deterministic order of the seats of a flight, so a re-run (or another machine) fills the same ones. */
+function shuffledSeats(vuelo: Vuelo): string[] {
+  const seats = buildSeatGrid(vuelo.capacidadTotal).flatMap((row) => row.seats.map((s) => s.seatNumber));
+  return seats
+    .map((seat) => ({ seat, key: hash01(`${vuelo.id}:${seat}`) }))
+    .sort((a, b) => a.key - b.key)
+    .map((x) => x.seat);
+}
+
+async function uniqueDigits(manager: EntityManager, taken: Set<string>): Promise<string> {
+  for (;;) {
+    let digits = '';
+    for (let i = 0; i < 13; i++) digits += randomInt(10).toString();
+    if (!taken.has(digits) && !(await manager.exists(Ticket, { where: { eTicketNumber: digits } }))) {
+      taken.add(digits);
+      return digits;
+    }
+  }
+}
+
+async function uniquePnr(manager: EntityManager, taken: Set<string>): Promise<string> {
+  for (;;) {
+    let pnr = '';
+    for (let i = 0; i < 6; i++) pnr += PNR_ALPHABET[randomInt(PNR_ALPHABET.length)];
+    if (!taken.has(pnr) && !(await manager.exists(Booking, { where: { pnr } }))) {
+      taken.add(pnr);
+      return pnr;
+    }
+  }
+}
+
+/**
+ * Occupies, with real confirmed bookings (hold, passengers, tickets and seat assignments), the seats a flight has
+ * already sold, so the seat map and the admin views agree with the open-seat counter. `ocupados` seats are assigned;
+ * the rest stay free. Personal data is synthetic and encrypted like any other (the field cipher must be configured).
+ */
+async function fillSeats(dataSource: DataSource, vuelo: Vuelo, ocupados: number, now: Date): Promise<number> {
+  const seats = shuffledSeats(vuelo).slice(0, ocupados);
+  const pnrs = new Set<string>();
+  const tickets = new Set<string>();
+  let nextSeat = 0;
+  let group = 0;
+  let sequence = 0;
+  const unit = Math.round(Number(vuelo.precioBase) * 1.15 * 1.15 * 100) / 100;
+
+  await dataSource.transaction(async (manager) => {
+    while (nextSeat < seats.length) {
+      const size = Math.min(GROUP_SIZES[group++ % GROUP_SIZES.length], seats.length - nextSeat);
+      const mine = seats.slice(nextSeat, nextSeat + size);
+      nextSeat += size;
+      // Booked some days ago, spread out, so the history does not look like one single instant.
+      const createdAt = new Date(now.getTime() - (1 + hash01(`${vuelo.id}:${group}`) * 9) * 86_400_000);
+      const total = (unit * size).toFixed(2);
+
+      const hold = await manager.save(
+        manager.create(FlightHold, {
+          offerId: randomUUID(),
+          ownerId: DEMO_OWNER,
+          status: 'CONSUMED',
+          lockedPrice: total,
+          lockedTaxesMinor: null,
+          currency: 'USD',
+          ttlMinutes: 15,
+          itinerarySelections: [{ itineraryId: randomUUID(), cabinClass: 'ECONOMY', fareBrand: 'LIGHT' }],
+          passengersBreakdown: { adults: size, youths: 0, children: 0, infants: 0 },
+          inventory: [{ vueloId: vuelo.id, seats: size }],
+          createdAt,
+          expiresAt: new Date(createdAt.getTime() + 15 * 60_000),
+        }),
+      );
+      const booking = await manager.save(
+        manager.create(Booking, {
+          pnr: await uniquePnr(manager, pnrs),
+          holdId: hold.holdId,
+          status: 'CONFIRMED',
+          ownerId: DEMO_OWNER,
+          grandTotal: total,
+          currency: 'USD',
+          paymentReference: `demo_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+          origin: vuelo.origenIATA,
+          destination: vuelo.destinoIATA,
+          departureAt: vuelo.fechaSalida,
+          createdAt,
+        }),
+      );
+      for (let i = 0; i < size; i++) {
+        sequence += 1;
+        const passenger = await manager.save(
+          manager.create(Passenger, {
+            bookingId: booking.bookingId,
+            clientPassengerId: `p${i + 1}`,
+            associatedAdultClientId: null,
+            passengerType: 'ADULT',
+            firstName: FIRST_NAMES[randomInt(FIRST_NAMES.length)],
+            lastName: LAST_NAMES[randomInt(LAST_NAMES.length)],
+            documentType: 'PASSPORT',
+            documentNumber: `DEMO${vuelo.id.slice(0, 4).toUpperCase()}${String(sequence).padStart(4, '0')}`,
+            nationality: 'EC',
+            birthDate: `${1960 + randomInt(40)}-0${1 + randomInt(9)}-1${randomInt(10)}`,
+            gender: randomInt(2) === 0 ? 'F' : 'M',
+            contactEmail: 'demo@example.com',
+            contactPhone: '+593999999999',
+          }),
+        );
+        await manager.save(manager.create(SeatAssignment, { vueloId: vuelo.id, seatNumber: mine[i], bookingId: booking.bookingId, passengerId: passenger.passengerId }));
+        await manager.save(manager.create(Ticket, { bookingId: booking.bookingId, passengerId: passenger.passengerId, eTicketNumber: await uniqueDigits(manager, tickets), status: 'ISSUED', issuedAt: createdAt }));
+      }
+    }
+  });
+  return seats.length;
+}
+
 /**
  * Idempotent and conservative: it only ever lowers a flight's open seats, and leaves alone any flight that already
  * has a hold or a booking on it, so it can run on every deploy without disturbing real activity. Not part of
- * `seedFlights` on purpose: the integration tests rely on that inventory.
+ * `seedFlights` on purpose: the integration tests rely on that inventory. After lowering the counter it occupies the
+ * sold seats with synthetic bookings (`fillSeats`), so the seat map matches; a flight already filled has holds on it
+ * and is skipped. Returns how many flights it changed. Needs the field cipher configured (passengers are encrypted).
  */
 export async function seedDemoScenarios(dataSource: DataSource, now: Date = new Date()): Promise<number> {
   let changed = 0;
@@ -267,7 +394,7 @@ export async function seedDemoScenarios(dataSource: DataSource, now: Date = new 
     if (!entry) throw new Error(`Demo scenario for ${scenario.codigoVuelo}: not a flight of the core schedule`);
     for (const day of scenario.dias) {
       const vuelo = await dataSource.getRepository(Vuelo).findOne({ where: { codigoVuelo: entry.codigoVuelo, fechaSalida: utcDateAtHour(day, entry.hour, now) } });
-      if (!vuelo || vuelo.asientosDisponibles <= scenario.libres) continue;
+      if (!vuelo) continue;
 
       const used =
         (await dataSource.getRepository(SeatAssignment).count({ where: { vueloId: vuelo.id } })) > 0 ||
@@ -279,13 +406,19 @@ export async function seedDemoScenarios(dataSource: DataSource, now: Date = new 
           .getCount()) > 0;
       if (used) continue;
 
-      const result = await dataSource
-        .createQueryBuilder()
-        .update(Vuelo)
-        .set({ asientosDisponibles: scenario.libres })
-        .where('id = :id AND "asientosDisponibles" > :libres', { id: vuelo.id, libres: scenario.libres })
-        .execute();
-      changed += result.affected ?? 0;
+      if (vuelo.asientosDisponibles > scenario.libres) {
+        await dataSource
+          .createQueryBuilder()
+          .update(Vuelo)
+          .set({ asientosDisponibles: scenario.libres })
+          .where('id = :id AND "asientosDisponibles" > :libres', { id: vuelo.id, libres: scenario.libres })
+          .execute();
+        vuelo.asientosDisponibles = scenario.libres;
+      }
+      // The sold seats are the capacity minus what is open now (the counter may already have been lowered by an earlier run).
+      const ocupados = vuelo.capacidadTotal - vuelo.asientosDisponibles;
+      if (ocupados > 0) await fillSeats(dataSource, vuelo, ocupados, now);
+      changed += 1;
     }
   }
   return changed;

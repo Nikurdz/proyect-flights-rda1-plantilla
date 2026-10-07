@@ -3,7 +3,10 @@ import { join } from 'node:path';
 import { config } from 'dotenv';
 config({ quiet: true });
 
+import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
+import { FieldCipher } from '../common/cifrado';
+import { loadVuelosConfig } from '../common/vuelos-config';
 import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
 import { seedDemoScenarios, seedFlights } from './flights.seed';
 
@@ -24,6 +27,8 @@ async function main(): Promise<void> {
 
   // Flights left full on purpose for the demo; SEED_DEMO_SCENARIOS=false turns it off.
   if (process.env.SEED_DEMO_SCENARIOS !== 'false') {
+    // The synthetic passengers are encrypted like real ones, with the same key the application derives at boot.
+    FieldCipher.configure(loadVuelosConfig(new ConfigService({ ...process.env })).dataEncryptionKey);
     console.log(`Demo scenarios: flights left sold out or nearly full this run: ${await seedDemoScenarios(dataSource)}.`);
   }
 

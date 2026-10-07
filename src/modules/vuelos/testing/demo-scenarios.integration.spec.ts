@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import request = require('supertest');
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
+import { Booking } from '../entities/booking.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
+import { SeatAssignment } from '../entities/seat-assignment.entity';
+import { Ticket } from '../entities/ticket.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import { Oferta } from '../ecommerce/ofertas/entities/oferta.entity';
 import { Pago } from '../ecommerce/pagos/entities/pago.entity';
 import { OffersService } from '../services/offers.service';
-import { DEMO_SCENARIOS, seedDemoScenarios, seedFlights } from '../seed/flights.seed';
+import { DEMO_OWNER, DEMO_SCENARIOS, seedDemoScenarios, seedFlights } from '../seed/flights.seed';
 import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
 import { IntegrationApp, createIntegrationApp, describeIntegration } from './integration-app';
 
@@ -57,6 +60,28 @@ describeIntegration('Demo scenarios: full flights and the seat hold, against a r
     expect((await flight('LA800', 4)).asientosDisponibles).toBeGreaterThan(2); // the days around are untouched
 
     expect(await seedDemoScenarios(ds)).toBe(0);
+  });
+
+  it('occupies the sold seats with real bookings, so the seat map agrees with the counter, and never twice', async () => {
+    const seats = (id: string) => ds.getRepository(SeatAssignment).count({ where: { vueloId: id } });
+    const full = await flight('LA800', 3);
+    const near = await flight('LA1500', 5);
+    expect(await seats(full.id)).toBe(full.capacidadTotal); // sold out: every seat taken
+    expect(await seats(near.id)).toBe(near.capacidadTotal - 2); // two seats left free
+
+    const bookings = await ds.getRepository(Booking).find({ where: { ownerId: DEMO_OWNER, departureAt: full.fechaSalida } });
+    const tickets = await ds.getRepository(Ticket).count({ where: { bookingId: In(bookings.map((b) => b.bookingId)) } });
+    expect(bookings.length).toBeGreaterThan(0);
+    expect(tickets).toBe(full.capacidadTotal); // one ticket per seat, nothing half-built
+    expect(bookings.every((b) => b.status === 'CONFIRMED')).toBe(true);
+
+    // The numbered seat map the traveller sees marks those seats as taken (here read through the admin back office).
+    const admin = (await api().post('/api/v1/auth/login').send({ correo: 'admin@example.com', contrasena: 'AdminPass-12345' }).expect(200)).body.accessToken;
+    const map = await api().get(`/api/v1/admin/vuelos/${near.id}/asientos`).set({ Authorization: `Bearer ${admin}` }).expect(200);
+    expect(map.body.reservados).toHaveLength(near.capacidadTotal - 2);
+
+    expect(await seedDemoScenarios(ds)).toBe(0);
+    expect(await seats(full.id)).toBe(full.capacidadTotal); // a second run adds nothing
   });
 
   it('shows a full flight as sold out (last, without badges) instead of hiding it', async () => {
