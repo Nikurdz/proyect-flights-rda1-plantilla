@@ -76,7 +76,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
       setDateError('La vuelta no puede ser antes de la ida.');
       invalid = true;
     }
-    if (invalid) return;
+    if (invalid) {
+      // Move the focus to the first invalid field once React has rendered the errors.
+      const form = e.currentTarget;
+      window.setTimeout(() => form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(), 0);
+      return;
+    }
 
     const params = new URLSearchParams();
     if (origin) params.set('origin', origin);
@@ -96,6 +101,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
   return (
     <form
       onSubmit={handleSearch}
+      noValidate
+      aria-label="Buscar vuelos"
       className={`bg-white rounded-3xl shadow-elevated border border-slate-200/90 p-5 sm:p-7 ${className}`}
     >
       {/* Top Options: Trip Type & Cabin */}
@@ -104,6 +111,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
           <button
             type="button"
             onClick={() => setTripType('RT')}
+            aria-pressed={tripType === 'RT'}
             className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
               tripType === 'RT'
                 ? 'bg-brand-black text-white border border-brand-gold/50 shadow-sm'
@@ -115,6 +123,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
           <button
             type="button"
             onClick={() => setTripType('OW')}
+            aria-pressed={tripType === 'OW'}
             className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
               tripType === 'OW'
                 ? 'bg-brand-black text-white border border-brand-gold/50 shadow-sm'
@@ -185,11 +194,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
         <div className="md:col-span-3 grid grid-cols-2 gap-2">
           {/* Outbound Date */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+            <label htmlFor="search-outbound" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
               Ida
             </label>
             <div className="relative">
               <input
+                id="search-outbound"
+                aria-invalid={Boolean(dateError)}
+                aria-describedby={dateError ? 'search-date-error' : undefined}
                 type="date"
                 min={today}
                 value={outbound}
@@ -207,11 +219,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
 
           {/* Inbound Date */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+            <label htmlFor="search-inbound" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
               Vuelta
             </label>
             <div className="relative">
               <input
+                id="search-inbound"
+                aria-invalid={Boolean(dateError) && tripType === 'RT'}
+                aria-describedby={dateError ? 'search-date-error' : undefined}
                 type="date"
                 min={outbound || today}
                 disabled={tripType === 'OW'}
@@ -229,7 +244,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
         </div>
 
         {dateError && (
-          <p className="md:col-span-12 text-xs font-medium text-red-600" role="alert">
+          <p id="search-date-error" className="md:col-span-12 text-xs font-medium text-red-600" role="alert">
             {dateError}
           </p>
         )}

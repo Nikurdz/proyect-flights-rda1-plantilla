@@ -2,7 +2,10 @@ import React from 'react';
 import { clsx } from 'clsx';
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
+  /** Obligatoria: cada campo necesita una etiqueta programática. */
+  label: string;
+  /** Oculta la etiqueta visualmente pero la conserva para lectores de pantalla. */
+  hideLabel?: boolean;
   error?: string;
   helperText?: string;
   leftIcon?: React.ReactNode;
@@ -10,22 +13,23 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, helperText, leftIcon, rightIcon, id, ...props }, ref) => {
-    const inputId = id || props.name || React.useId();
+  ({ className, label, hideLabel, error, helperText, leftIcon, rightIcon, id, ...props }, ref) => {
+    const generatedId = React.useId();
+    const inputId = id || generatedId;
 
     return (
       <div className="w-full">
-        {label && (
-          <label
-            htmlFor={inputId}
-            className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1"
-          >
-            {label}
-          </label>
-        )}
+        <label
+          htmlFor={inputId}
+          className={clsx(
+            hideLabel ? 'sr-only' : 'block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1'
+          )}
+        >
+          {label}
+        </label>
         <div className="relative flex items-center">
           {leftIcon && (
-            <div className="absolute left-3 pointer-events-none text-slate-400">
+            <div className="absolute left-3 pointer-events-none text-slate-400" aria-hidden="true">
               {leftIcon}
             </div>
           )}

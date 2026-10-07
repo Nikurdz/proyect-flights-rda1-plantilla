@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { Users, Plus, Minus } from 'lucide-react';
 
 export interface PassengerCounts {
@@ -18,8 +18,11 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
   onChange,
   maxTotal = 9,
 }) => {
+  const uid = useId();
+  const panelId = `${uid}-panel`;
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const totalPassengers = counts.adt + counts.chd + counts.inf;
 
@@ -77,41 +80,54 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="relative w-full">
-      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+    <div
+      ref={containerRef}
+      className="relative w-full"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && isOpen) {
+          e.stopPropagation();
+          setIsOpen(false);
+          triggerRef.current?.focus();
+        }
+      }}
+    >
+      <span id={`${uid}-label`} className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
         Pasajeros
-      </label>
+      </span>
 
       {/* Trigger Button */}
-      <div
-        role="button"
-        tabIndex={0}
+      <button
+        ref={triggerRef}
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') setIsOpen(!isOpen);
-        }}
-        className={`flex items-center justify-between w-full h-[54px] px-3.5 rounded-xl border bg-white cursor-pointer transition-all ${
+        className={`flex items-center justify-between w-full h-[54px] px-3.5 rounded-xl border bg-white cursor-pointer transition-all text-left ${
           isOpen
             ? 'border-airline-blue ring-2 ring-airline-blue/20 shadow-sm'
             : 'border-slate-300 hover:border-slate-400'
         }`}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
+        aria-controls={isOpen ? panelId : undefined}
+        aria-labelledby={`${uid}-label ${uid}-summary`}
       >
         <div className="flex items-center gap-3 overflow-hidden">
-          <Users className="w-5 h-5 text-airline-navy shrink-0" />
+          <Users className="w-5 h-5 text-airline-navy shrink-0" aria-hidden="true" />
           <div className="text-left truncate">
-            <span className="text-sm font-semibold text-slate-900 block truncate">
+            <span id={`${uid}-summary`} className="text-sm font-semibold text-slate-900 block truncate">
               {getSummaryLabel()}
             </span>
             <span className="text-xs text-slate-500">Cabina Economy</span>
           </div>
         </div>
-      </div>
+      </button>
 
       {/* Popover Controls */}
       {isOpen && (
-        <div className="absolute right-0 sm:left-0 top-full mt-2 z-50 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 p-4 space-y-4 animate-in fade-in-50 zoom-in-95">
+        <div
+          id={panelId}
+          role="dialog"
+          aria-label="Seleccionar pasajeros"
+          className="absolute right-0 sm:left-0 top-full mt-2 z-50 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 p-4 space-y-4 animate-in fade-in-50 zoom-in-95">
           {/* Adultos */}
           <div className="flex items-center justify-between">
             <div>
@@ -128,7 +144,7 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
-              <span className="w-4 text-center font-bold text-sm">{counts.adt}</span>
+              <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.adt} adultos`}>{counts.adt}</span>
               <button
                 type="button"
                 disabled={totalPassengers >= maxTotal}
@@ -157,7 +173,7 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
-              <span className="w-4 text-center font-bold text-sm">{counts.chd}</span>
+              <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.chd} niños`}>{counts.chd}</span>
               <button
                 type="button"
                 disabled={totalPassengers >= maxTotal}
@@ -186,7 +202,7 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
               >
                 <Minus className="w-3.5 h-3.5" />
               </button>
-              <span className="w-4 text-center font-bold text-sm">{counts.inf}</span>
+              <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.inf} bebés`}>{counts.inf}</span>
               <button
                 type="button"
                 disabled={counts.inf >= counts.adt || totalPassengers >= maxTotal}
@@ -205,7 +221,10 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
 
           <button
             type="button"
-            onClick={() => setIsOpen(false)}
+            onClick={() => {
+              setIsOpen(false);
+              triggerRef.current?.focus();
+            }}
             className="w-full py-2 bg-airline-navy text-white text-xs font-bold rounded-lg hover:bg-airline-navy-light transition-colors"
           >
             Listo

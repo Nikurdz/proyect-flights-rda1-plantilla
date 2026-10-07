@@ -7,6 +7,7 @@ import { registrarPasajeros } from '../../api/endpoints/offers';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { selectionsFromRegistered, toAsientosPayload, type SeatSelections } from '../../lib/seats';
 import { SeatSelector } from './SeatSelector';
+import { FieldError, FieldLabel, fieldA11y } from '../../components/ui/FormField';
 import type { OfertaViewDto, RegistrarPasajerosDto, PasajeroDto } from '../../api/types';
 
 const COUNTRIES = [
@@ -235,6 +236,8 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                     <span>Asignar adulto acompañante (viaja en brazos)</span>
                   </div>
                   <select
+                    id={`pax-${idx}-asociadoA`}
+                    aria-label={`Adulto acompañante del infante ${idx + 1}`}
                     {...register(`pasajeros.${idx}.asociadoA` as const)}
                     className="w-full text-xs rounded-lg border-amber-300 bg-white p-2 text-slate-800 focus:ring-amber-500 focus:border-amber-500"
                   >
@@ -250,12 +253,14 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
               {/* Names and Surnames */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <FieldLabel htmlFor={`pax-${idx}-nombres`}>
                     Nombres (tal como en el documento) *
-                  </label>
+                  </FieldLabel>
                   <input
                     type="text"
                     placeholder="Ej. Juan Carlos"
+                    autoComplete="given-name"
+                    {...fieldA11y(`pax-${idx}-nombres`, paxErrors?.nombres?.message)}
                     {...register(`pasajeros.${idx}.nombres` as const)}
                     className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
                       paxErrors?.nombres
@@ -263,18 +268,18 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                         : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
                     }`}
                   />
-                  {paxErrors?.nombres && (
-                    <p className="mt-1 text-[11px] text-red-600">{paxErrors.nombres.message}</p>
-                  )}
+                  <FieldError id={`pax-${idx}-nombres`} message={paxErrors?.nombres?.message} />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <FieldLabel htmlFor={`pax-${idx}-apellidos`}>
                     Apellidos (tal como en el documento) *
-                  </label>
+                  </FieldLabel>
                   <input
                     type="text"
                     placeholder="Ej. Pérez Gómez"
+                    autoComplete="family-name"
+                    {...fieldA11y(`pax-${idx}-apellidos`, paxErrors?.apellidos?.message)}
                     {...register(`pasajeros.${idx}.apellidos` as const)}
                     className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
                       paxErrors?.apellidos
@@ -282,20 +287,19 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                         : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
                     }`}
                   />
-                  {paxErrors?.apellidos && (
-                    <p className="mt-1 text-[11px] text-red-600">{paxErrors.apellidos.message}</p>
-                  )}
+                  <FieldError id={`pax-${idx}-apellidos`} message={paxErrors?.apellidos?.message} />
                 </div>
               </div>
 
               {/* Birthdate, Gender, Nationality */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <FieldLabel htmlFor={`pax-${idx}-nacimiento`}>
                     Fecha de Nacimiento *
-                  </label>
+                  </FieldLabel>
                   <input
                     type="date"
+                    {...fieldA11y(`pax-${idx}-nacimiento`, paxErrors?.fechaNacimiento?.message)}
                     {...register(`pasajeros.${idx}.fechaNacimiento` as const)}
                     className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
                       paxErrors?.fechaNacimiento
@@ -303,16 +307,13 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                         : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
                     }`}
                   />
-                  {paxErrors?.fechaNacimiento && (
-                    <p className="mt-1 text-[11px] text-red-600">
-                      {paxErrors.fechaNacimiento.message}
-                    </p>
-                  )}
+                  <FieldError id={`pax-${idx}-nacimiento`} message={paxErrors?.fechaNacimiento?.message} />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Género *</label>
+                  <FieldLabel htmlFor={`pax-${idx}-genero`}>Género *</FieldLabel>
                   <select
+                    id={`pax-${idx}-genero`}
                     {...register(`pasajeros.${idx}.genero` as const)}
                     className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
                   >
@@ -323,10 +324,11 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <FieldLabel htmlFor={`pax-${idx}-nacionalidad`}>
                     Nacionalidad *
-                  </label>
+                  </FieldLabel>
                   <select
+                    id={`pax-${idx}-nacionalidad`}
                     {...register(`pasajeros.${idx}.nacionalidad` as const)}
                     className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
                   >
@@ -342,10 +344,11 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
               {/* Identification Document */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <FieldLabel htmlFor={`pax-${idx}-doctipo`}>
                     Tipo Documento *
-                  </label>
+                  </FieldLabel>
                   <select
+                    id={`pax-${idx}-doctipo`}
                     {...register(`pasajeros.${idx}.documento.tipo` as const)}
                     className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
                   >
@@ -355,12 +358,13 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <FieldLabel htmlFor={`pax-${idx}-docnumero`}>
                     Número de Documento *
-                  </label>
+                  </FieldLabel>
                   <input
                     type="text"
                     placeholder="Ej. 1712345678"
+                    {...fieldA11y(`pax-${idx}-docnumero`, paxErrors?.documento?.numero?.message)}
                     {...register(`pasajeros.${idx}.documento.numero` as const)}
                     className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
                       paxErrors?.documento?.numero
@@ -368,18 +372,15 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                         : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
                     }`}
                   />
-                  {paxErrors?.documento?.numero && (
-                    <p className="mt-1 text-[11px] text-red-600">
-                      {paxErrors.documento.numero.message}
-                    </p>
-                  )}
+                  <FieldError id={`pax-${idx}-docnumero`} message={paxErrors?.documento?.numero?.message} />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <FieldLabel htmlFor={`pax-${idx}-docvence`}>
                     Fecha Vencimiento (opcional)
-                  </label>
+                  </FieldLabel>
                   <input
+                    id={`pax-${idx}-docvence`}
                     type="date"
                     {...register(`pasajeros.${idx}.documento.vencimiento` as const)}
                     className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
@@ -409,14 +410,16 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <FieldLabel htmlFor="contacto-correo">
               Correo Electrónico *
-            </label>
+            </FieldLabel>
             <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+              <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" aria-hidden="true" />
               <input
                 type="email"
                 placeholder="ejemplo@correo.com"
+                autoComplete="email"
+                {...fieldA11y('contacto-correo', errors.contacto?.correo?.message)}
                 {...register('contacto.correo')}
                 className={`w-full rounded-xl border pl-10 pr-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
                   errors.contacto?.correo
@@ -425,20 +428,20 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                 }`}
               />
             </div>
-            {errors.contacto?.correo && (
-              <p className="mt-1 text-[11px] text-red-600">{errors.contacto.correo.message}</p>
-            )}
+            <FieldError id="contacto-correo" message={errors.contacto?.correo?.message} />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <FieldLabel htmlFor="contacto-telefono">
               Teléfono (Formato internacional E.164) *
-            </label>
+            </FieldLabel>
             <div className="relative">
-              <Phone className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+              <Phone className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" aria-hidden="true" />
               <input
                 type="tel"
                 placeholder="+593999999999 o +573001234567"
+                autoComplete="tel"
+                {...fieldA11y('contacto-telefono', errors.contacto?.telefono?.message)}
                 {...register('contacto.telefono')}
                 className={`w-full rounded-xl border pl-10 pr-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
                   errors.contacto?.telefono
@@ -447,9 +450,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                 }`}
               />
             </div>
-            {errors.contacto?.telefono && (
-              <p className="mt-1 text-[11px] text-red-600">{errors.contacto.telefono.message}</p>
-            )}
+            <FieldError id="contacto-telefono" message={errors.contacto?.telefono?.message} />
           </div>
         </div>
       </div>

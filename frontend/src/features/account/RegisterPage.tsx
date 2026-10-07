@@ -17,6 +17,9 @@ import { registrationSchema, type RegistrationForm } from './registration-schema
 /** Only same-site paths are followed after signing up, so a crafted link cannot send people elsewhere. */
 const safeNext = (value: string | null): string => (value && value.startsWith('/') && !value.startsWith('//') ? value : '/');
 
+/** Stable callback ref: moves the focus to the success message when it appears. */
+const focusOnMount = (el: HTMLElement | null) => el?.focus();
+
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -88,7 +91,7 @@ export const RegisterPage: React.FC = () => {
   if (created) {
     return (
       <AuthShell title="Tu cuenta está lista">
-        <div className="text-center" role="status">
+        <div className="text-center focus:outline-none" role="status" tabIndex={-1} ref={focusOnMount}>
           <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" aria-hidden="true" />
           <p className="mt-4 text-sm leading-relaxed text-slate-700">
             Hola, <strong>{created.nombres}</strong>. Creamos tu cuenta{created.signedIn ? ' y ya iniciaste sesión' : ''}.
@@ -187,7 +190,7 @@ export const RegisterPage: React.FC = () => {
 
         <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
           <label className="flex cursor-pointer items-start gap-3 text-xs text-slate-700">
-            <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-black" aria-invalid={Boolean(errors.aceptaTerminos)} {...register('aceptaTerminos')} />
+            <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-black" aria-invalid={Boolean(errors.aceptaTerminos)} aria-describedby={errors.aceptaTerminos ? 'acepta-terminos-error' : undefined} {...register('aceptaTerminos')} />
             <span>
               Acepto los{' '}
               <Link to="/terminos" target="_blank" className="font-bold text-brand-gold-dark underline">
@@ -201,7 +204,7 @@ export const RegisterPage: React.FC = () => {
             </span>
           </label>
           {errors.aceptaTerminos && (
-            <p className="text-xs font-medium text-red-600" role="alert">
+            <p id="acepta-terminos-error" className="text-xs font-medium text-red-600" role="alert">
               {errors.aceptaTerminos.message}
             </p>
           )}

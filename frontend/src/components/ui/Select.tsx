@@ -3,26 +3,29 @@ import { clsx } from 'clsx';
 import { ChevronDown } from 'lucide-react';
 
 export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string;
+  /** Obligatoria: cada campo necesita una etiqueta programática. */
+  label: string;
+  hideLabel?: boolean;
   error?: string;
   helperText?: string;
   options?: { value: string; label: string }[];
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, label, error, helperText, options, children, id, ...props }, ref) => {
-    const selectId = id || props.name || React.useId();
+  ({ className, label, hideLabel, error, helperText, options, children, id, ...props }, ref) => {
+    const generatedId = React.useId();
+    const selectId = id || generatedId;
 
     return (
       <div className="w-full">
-        {label && (
-          <label
-            htmlFor={selectId}
-            className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1"
-          >
-            {label}
-          </label>
-        )}
+        <label
+          htmlFor={selectId}
+          className={clsx(
+            hideLabel ? 'sr-only' : 'block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1'
+          )}
+        >
+          {label}
+        </label>
         <div className="relative">
           <select
             ref={ref}
@@ -35,6 +38,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
               className
             )}
             aria-invalid={Boolean(error)}
+            aria-describedby={error ? `${selectId}-error` : helperText ? `${selectId}-helper` : undefined}
             {...props}
           >
             {options
@@ -45,16 +49,20 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
                 ))
               : children}
           </select>
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400" aria-hidden="true">
             <ChevronDown className="w-4 h-4" />
           </div>
         </div>
         {error && (
-          <p className="mt-1 text-xs text-red-600 font-medium" role="alert">
+          <p id={`${selectId}-error`} className="mt-1 text-xs text-red-600 font-medium" role="alert">
             {error}
           </p>
         )}
-        {!error && helperText && <p className="mt-1 text-xs text-slate-500">{helperText}</p>}
+        {!error && helperText && (
+          <p id={`${selectId}-helper`} className="mt-1 text-xs text-slate-500">
+            {helperText}
+          </p>
+        )}
       </div>
     );
   }

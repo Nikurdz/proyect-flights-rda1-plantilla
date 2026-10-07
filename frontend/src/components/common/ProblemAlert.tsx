@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { ProblemDetailsError } from '../../api/problem-details';
 
@@ -13,6 +13,13 @@ const GENERIC = 'No pudimos completar la operación. Intenta de nuevo en unos se
 
 export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, className = '', title = 'No pudimos completar la acción' }) => {
   const [copied, setCopied] = useState(false);
+  const alertRef = useRef<HTMLDivElement>(null);
+  const hasError = Boolean(error);
+
+  // Move the focus to the alert when an error appears, so it is read and the next Tab reaches "Reintentar".
+  useEffect(() => {
+    if (hasError) alertRef.current?.focus();
+  }, [hasError, error]);
 
   if (!error) return null;
 
@@ -33,7 +40,7 @@ export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, clas
   };
 
   return (
-    <div className={`rounded-xl border border-red-200 bg-red-50 p-4 text-red-900 shadow-sm ${className}`} role="alert" aria-live="assertive">
+    <div ref={alertRef} tabIndex={-1} className={`rounded-xl border border-red-200 bg-red-50 p-4 text-red-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${className}`} role="alert" aria-live="assertive">
       <div className="flex items-start gap-3">
         <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
         <div className="flex-1">

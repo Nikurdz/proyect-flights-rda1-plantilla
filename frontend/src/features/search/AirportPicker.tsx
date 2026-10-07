@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { MapPin, PlaneTakeoff, PlaneLanding, X, Search, Loader2 } from 'lucide-react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { MapPin, PlaneTakeoff, PlaneLanding, X, Loader2 } from 'lucide-react';
 import { useLocalidades } from '../../api/endpoints/catalog';
 import type { LocalidadViewDto } from '../../api/types';
 
@@ -12,6 +12,10 @@ export interface AirportPickerProps {
   error?: string;
 }
 
+/**
+ * Combobox ARIA (patrón "list autocomplete"): el input conserva el foco y las opciones se navegan
+ * con aria-activedescendant. Flechas mueven, Enter elige, Escape cierra, Tab cierra sin elegir.
+ */
 export const AirportPicker: React.FC<AirportPickerProps> = ({
   label,
   placeholder,
@@ -20,156 +24,247 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
   type,
   error,
 }) => {
+  const uid = useId();
+  const inputId = `${uid}-input`;
+  const listId = `${uid}-list`;
+  const errorId = `${uid}-error`;
+  const optionId = (index: number) => `${uid}-opt-${index}`;
+
   const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [selectedCity, setSelectedCity] = useState<string>('');
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data: localidades, isLoading, isError, refetch } = useLocalidades(searchQuery);
+  const { data: localidades, isLoading, isError, refetch } = useLocalidades(query);
+  const options = localidades ?? [];
 
-  // Find currently selected location
-  const selectedLocation = localidades?.find((l) => l.iata === value);
+  const cityOfValue = value
+    ? localidades?.find((l) => l.iata === value)?.ciudad ?? (selectedCity || '')
+    : '';
+  const displayValue = editing ? query : value ? `${value}${cityOfValue ? ` · ${cityOfValue}` : ''}` : '';
 
+  // Keep the active option inside range when the results change.
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    setActiveIndex((current) => (current >= options.length ? options.length - 1 : current));
+  }, [options.length]);
 
-  const handleSelect = (loc: LocalidadViewDto) => {
-    onChange(loc.iata, loc);
+  // Keep the active option visible while navigating with the arrows.
+  useEffect(() => {
+    if (activeIndex >= 0) document.getElementById(optionId(activeIndex))?.scrollIntoView?.({ block: 'nearest' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex]);
+
+  const close = () => {
     setIsOpen(false);
-    setSearchQuery('');
+    setEditing(false);
+    setQuery('');
+    setActiveIndex(-1);
   };
 
-  const handleClear = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleSelect = (loc: LocalidadViewDto) => {
+    setSelectedCity(loc.ciudad);
+    onChange(loc.iata, loc);
+    close();
+  };
+
+  const handleClear = () => {
     onChange('');
-    setSearchQuery('');
+    setSelectedCity('');
+    setQuery('');
+    setEditing(true);
+    setIsOpen(true);
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        if (!isOpen) {
+          setEditing(true);
+          setIsOpen(true);
+          setActiveIndex(options.length ? 0 : -1);
+        } else if (options.length) {
+          setActiveIndex((i) => (i + 1) % options.length);
+        }
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        if (!isOpen) {
+          setEditing(true);
+          setIsOpen(true);
+          setActiveIndex(options.length ? options.length - 1 : -1);
+        } else if (options.length) {
+          setActiveIndex((i) => (i <= 0 ? options.length - 1 : i - 1));
+        }
+        break;
+      case 'Home':
+        if (isOpen && options.length) {
+          e.preventDefault();
+          setActiveIndex(0);
+        }
+        break;
+      case 'End':
+        if (isOpen && options.length) {
+          e.preventDefault();
+          setActiveIndex(options.length - 1);
+        }
+        break;
+      case 'Enter':
+        if (isOpen) {
+          // Never submit the search form while the list is open.
+          e.preventDefault();
+          if (activeIndex >= 0 && options[activeIndex]) handleSelect(options[activeIndex]);
+        }
+        break;
+      case 'Escape':
+        if (isOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          close();
+        }
+        break;
+      case 'Tab':
+        close();
+        break;
+      default:
+        break;
+    }
   };
 
   const Icon = type === 'origin' ? PlaneTakeoff : PlaneLanding;
+  const hasActive = isOpen && activeIndex >= 0 && activeIndex < options.length;
 
   return (
-    <div ref={containerRef} className="relative w-full">
-      <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+    <div
+      ref={containerRef}
+      className="relative w-full"
+      onBlur={(e) => {
+        if (!containerRef.current?.contains(e.relatedTarget as Node | null)) close();
+      }}
+    >
+      <label htmlFor={inputId} className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
         {label}
       </label>
 
-      {/* Selector Trigger */}
       <div
-        role="button"
-        tabIndex={0}
-        onClick={() => {
-          setIsOpen(true);
-          setTimeout(() => inputRef.current?.focus(), 50);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            setIsOpen(true);
-            setTimeout(() => inputRef.current?.focus(), 50);
-          }
-        }}
-        className={`flex items-center justify-between w-full h-[54px] px-3.5 rounded-xl border bg-white cursor-pointer transition-all ${
+        className={`flex items-center w-full h-[54px] px-3.5 rounded-xl border bg-white transition-all ${
           isOpen
             ? 'border-airline-blue ring-2 ring-airline-blue/20 shadow-sm'
             : error
             ? 'border-red-400 bg-red-50/20'
             : 'border-slate-300 hover:border-slate-400'
         }`}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
       >
-        <div className="flex items-center gap-3 overflow-hidden">
-          <Icon className="w-5 h-5 text-airline-navy shrink-0" />
-          <div className="text-left truncate">
-            {value ? (
-              <div>
-                <span className="font-extrabold text-airline-navy text-base mr-2">{value}</span>
-                <span className="text-slate-700 text-sm font-medium">
-                  {selectedLocation ? selectedLocation.ciudad : value}
-                </span>
-              </div>
-            ) : (
-              <span className="text-slate-400 text-sm">{placeholder}</span>
-            )}
-          </div>
-        </div>
-
+        <Icon className="w-5 h-5 text-airline-navy shrink-0 mr-3" aria-hidden="true" />
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="text"
+          role="combobox"
+          autoComplete="off"
+          aria-autocomplete="list"
+          aria-expanded={isOpen}
+          aria-controls={listId}
+          aria-activedescendant={hasActive ? optionId(activeIndex) : undefined}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
+          value={displayValue}
+          placeholder={placeholder}
+          onFocus={() => {
+            setEditing(true);
+            setQuery('');
+            setIsOpen(true);
+          }}
+          onClick={() => {
+            setEditing(true);
+            setIsOpen(true);
+          }}
+          onChange={(e) => {
+            setEditing(true);
+            setQuery(e.target.value);
+            setIsOpen(true);
+            setActiveIndex(0);
+          }}
+          onKeyDown={handleKeyDown}
+          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 placeholder:font-normal placeholder:text-slate-500 focus:outline-none"
+        />
+        {isLoading && isOpen && <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" aria-hidden="true" />}
         {value && (
           <button
             type="button"
             onClick={handleClear}
-            className="p-1 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-            aria-label="Borrar selección"
+            className="ml-1 p-1 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            aria-label={`Borrar ${label.toLowerCase()}`}
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         )}
       </div>
 
-      {error && <p className="mt-1 text-xs text-red-600 font-medium">{error}</p>}
+      {error && (
+        <p id={errorId} className="mt-1 text-xs text-red-600 font-medium" role="alert">
+          {error}
+        </p>
+      )}
 
-      {/* Autocomplete Dropdown */}
       {isOpen && (
         <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in-50 zoom-in-95">
-          {/* Search Field */}
-          <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
-            <Search className="w-4 h-4 text-slate-400 shrink-0" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Escribe ciudad, aeropuerto o código IATA (ej. BOG, UIO)..."
-              className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
-            />
-            {isLoading && <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" />}
-          </div>
-
-          {/* Location List */}
-          <div className="max-h-64 overflow-y-auto divide-y divide-slate-100" role="listbox">
-            {localidades && localidades.length > 0 ? (
-              localidades.map((loc) => (
-                <div
-                  key={loc.iata}
-                  role="option"
-                  aria-selected={loc.iata === value}
-                  onClick={() => handleSelect(loc)}
-                  className={`flex items-center justify-between p-3.5 hover:bg-airline-blue-light/50 cursor-pointer transition-colors ${
-                    loc.iata === value ? 'bg-airline-blue-light/70 font-semibold' : ''
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <MapPin className="w-4 h-4 text-airline-blue shrink-0 mt-0.5" />
-                    <div>
-                      <div className="text-sm font-bold text-slate-900">
-                        {loc.ciudad}, {loc.paisNombre}
-                      </div>
-                      <div className="text-xs text-slate-500">{loc.nombre}</div>
+          <ul
+            id={listId}
+            role="listbox"
+            aria-label={`Aeropuertos para ${label.toLowerCase()}`}
+            className="max-h-64 overflow-y-auto divide-y divide-slate-100"
+          >
+            {options.map((loc, index) => (
+              <li
+                key={loc.iata}
+                id={optionId(index)}
+                role="option"
+                aria-selected={loc.iata === value}
+                // mousedown would blur the input before the click lands: keep the focus where it is.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => handleSelect(loc)}
+                onMouseMove={() => setActiveIndex(index)}
+                className={`flex items-center justify-between p-3.5 cursor-pointer transition-colors ${
+                  index === activeIndex ? 'bg-airline-blue-light/70' : 'hover:bg-airline-blue-light/50'
+                } ${loc.iata === value ? 'font-semibold' : ''}`}
+              >
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-4 h-4 text-airline-blue shrink-0 mt-0.5" aria-hidden="true" />
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">
+                      {loc.ciudad}, {loc.paisNombre}
                     </div>
+                    <div className="text-xs text-slate-500">{loc.nombre}</div>
                   </div>
-                  <span className="font-mono text-xs font-black px-2 py-1 rounded bg-slate-100 text-airline-navy border border-slate-200 shrink-0">
-                    {loc.iata}
-                  </span>
                 </div>
-              ))
-            ) : isError ? (
-              <div className="p-6 text-center text-xs text-slate-600">
-                No pudimos cargar los aeropuertos.{' '}
-                <button type="button" onClick={() => refetch()} className="font-bold text-brand-gold-dark underline">
-                  Reintentar
-                </button>
-              </div>
-            ) : !isLoading ? (
-              <div className="p-6 text-center text-xs text-slate-500">
-                No encontramos aeropuertos para &quot;{searchQuery}&quot;.
-              </div>
-            ) : null}
+                <span className="font-mono text-xs font-black px-2 py-1 rounded bg-slate-100 text-airline-navy border border-slate-200 shrink-0">
+                  {loc.iata}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {isError && (
+            <div className="p-6 text-center text-xs text-slate-600" role="alert">
+              No pudimos cargar los aeropuertos.{' '}
+              <button type="button" onClick={() => refetch()} className="font-bold text-brand-gold-dark underline">
+                Reintentar
+              </button>
+            </div>
+          )}
+          {!isError && !isLoading && options.length === 0 && (
+            <div className="p-6 text-center text-xs text-slate-500">
+              No encontramos aeropuertos para &quot;{query}&quot;.
+            </div>
+          )}
+
+          <div className="sr-only" role="status" aria-live="polite">
+            {isLoading ? 'Buscando aeropuertos' : `${options.length} resultados disponibles`}
           </div>
         </div>
       )}

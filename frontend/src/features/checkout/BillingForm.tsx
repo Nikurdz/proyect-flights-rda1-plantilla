@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { ArrowRight, ArrowLeft, Building2 } from 'lucide-react';
 import { useMercado } from '../../api/endpoints/markets';
 import { registrarFacturacion } from '../../api/endpoints/offers';
+import { FieldError, FieldLabel, fieldA11y } from '../../components/ui/FormField';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import type { OfertaViewDto, FacturacionDto } from '../../api/types';
 
@@ -94,10 +95,11 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <FieldLabel htmlFor="bill-tipo">
               Tipo de Identificación Fiscal *
-            </label>
+            </FieldLabel>
             <select
+              {...fieldA11y('bill-tipo', errors.tipoIdentificacion?.message)}
               {...register('tipoIdentificacion')}
               className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
             >
@@ -107,18 +109,17 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
                 </option>
               ))}
             </select>
-            {errors.tipoIdentificacion && (
-              <p className="mt-1 text-[11px] text-red-600">{errors.tipoIdentificacion.message}</p>
-            )}
+            <FieldError id="bill-tipo" message={errors.tipoIdentificacion?.message} />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <FieldLabel htmlFor="bill-numero">
               Número de Identificación (RUC / Cédula / NIT) *
-            </label>
+            </FieldLabel>
             <input
               type="text"
               placeholder="Ej. 1790012345001"
+              {...fieldA11y('bill-numero', errors.numeroIdentificacion?.message)}
               {...register('numeroIdentificacion')}
               className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
                 errors.numeroIdentificacion
@@ -126,19 +127,18 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
                   : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
               }`}
             />
-            {errors.numeroIdentificacion && (
-              <p className="mt-1 text-[11px] text-red-600">{errors.numeroIdentificacion.message}</p>
-            )}
+            <FieldError id="bill-numero" message={errors.numeroIdentificacion?.message} />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">
+          <FieldLabel htmlFor="bill-razon">
             Nombre / Razón Social *
-          </label>
+          </FieldLabel>
           <input
             type="text"
             placeholder="Ej. Juan Pérez o Corporación Ejemplo S.A."
+            {...fieldA11y('bill-razon', errors.razonSocial?.message)}
             {...register('razonSocial')}
             className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
               errors.razonSocial
@@ -146,19 +146,18 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
                 : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
             }`}
           />
-          {errors.razonSocial && (
-            <p className="mt-1 text-[11px] text-red-600">{errors.razonSocial.message}</p>
-          )}
+          <FieldError id="bill-razon" message={errors.razonSocial?.message} />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="sm:col-span-2">
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <FieldLabel htmlFor="bill-direccion">
               Dirección Fiscal Completa *
-            </label>
+            </FieldLabel>
             <input
               type="text"
               placeholder="Ej. Av. Amazonas 123 y Naciones Unidas"
+              {...fieldA11y('bill-direccion', errors.direccion?.message)}
               {...register('direccion')}
               className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
                 errors.direccion
@@ -166,14 +165,13 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
                   : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
               }`}
             />
-            {errors.direccion && (
-              <p className="mt-1 text-[11px] text-red-600">{errors.direccion.message}</p>
-            )}
+            <FieldError id="bill-direccion" message={errors.direccion?.message} />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">País *</label>
+            <FieldLabel htmlFor="bill-pais">País *</FieldLabel>
             <select
+              {...fieldA11y('bill-pais', errors.pais?.message)}
               {...register('pais')}
               className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
             >
@@ -186,6 +184,7 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
               <option value="CL">Chile (CL)</option>
               <option value="AR">Argentina (AR)</option>
             </select>
+            <FieldError id="bill-pais" message={errors.pais?.message} />
           </div>
         </div>
       </div>

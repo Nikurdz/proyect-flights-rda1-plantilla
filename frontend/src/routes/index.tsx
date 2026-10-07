@@ -34,7 +34,7 @@ const AppLayout: React.FC = () => {
       <RouteEffects />
       <Header />
       <WakeUpBanner />
-      <main id="contenido" className="flex-1">
+      <main id="contenido" tabIndex={-1} className="flex-1 focus:outline-none">
         <ErrorBoundary>
           <Outlet />
         </ErrorBoundary>
