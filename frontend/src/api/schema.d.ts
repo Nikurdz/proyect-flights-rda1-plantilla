@@ -1425,6 +1425,8 @@ export interface components {
             distintivos: ("RECOMENDADO" | "MAS_ECONOMICO" | "MAS_RAPIDO")[];
             /** @description RF-SHP-019: "Últimos asientos a este precio". */
             ultimosAsientos: boolean;
+            /** @description true cuando el vuelo no tiene asientos suficientes para el grupo buscado. */
+            agotado: boolean;
         };
         FechaAlternativaDto: {
             /** Format: date */

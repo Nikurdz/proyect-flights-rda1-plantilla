@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plane, ArrowRight, AlertTriangle, Sparkles, Zap, Award } from 'lucide-react';
+import { Plane, ArrowRight, AlertTriangle, Sparkles, Zap, Award, Ban } from 'lucide-react';
 import type { ItinerarioDto } from '../../api/types';
 import { formatTimeInTimeZone, formatDuration } from '../../lib/dates';
 import { MoneyText } from '../../components/common/MoneyText';
@@ -13,6 +13,8 @@ export interface FlightCardProps {
   destTimeZone?: string;
   onSelect: (itinerario: ItinerarioDto) => void;
   isSelected?: boolean;
+  /** Passengers that need a seat (adults + children), to word the sold-out notice. */
+  passengerCount?: number;
 }
 
 export const FlightCard: React.FC<FlightCardProps> = ({
@@ -21,15 +23,24 @@ export const FlightCard: React.FC<FlightCardProps> = ({
   destTimeZone = timeZoneOf(itinerario.destino.iata),
   onSelect,
   isSelected = false,
+  passengerCount = 1,
 }) => {
+  const soldOut = itinerario.agotado === true;
   const departureTime = formatTimeInTimeZone(itinerario.salida, originTimeZone);
   const arrivalTime = formatTimeInTimeZone(itinerario.llegada, destTimeZone);
   const duration = formatDuration(itinerario.duracionMinutos);
 
   return (
     <div
-      className={`rounded-2xl border bg-white p-5 sm:p-6 transition-all duration-200 ${
-        isSelected
+      aria-disabled={soldOut || undefined}
+      className={`rounded-2xl border p-5 sm:p-6 transition-all duration-200 ${
+        soldOut
+          ? 'bg-slate-50 border-slate-200 opacity-70'
+          : 'bg-white'
+      } ${
+        soldOut
+          ? ''
+          : isSelected
           ? 'border-brand-gold ring-2 ring-brand-gold shadow-card-hover'
           : 'border-slate-200/90 hover:border-slate-300 hover:shadow-card'
       }`}
@@ -55,7 +66,12 @@ export const FlightCard: React.FC<FlightCardProps> = ({
         </div>
 
         {/* Scarcity badge */}
-        {itinerario.ultimosAsientos && (
+        {soldOut && (
+          <span className="inline-flex items-center gap-1 text-xs font-extrabold uppercase tracking-wide text-white bg-slate-700 px-3 py-1 rounded-full">
+            <Ban className="w-3.5 h-3.5" aria-hidden="true" /> Agotado
+          </span>
+        )}
+        {!soldOut && itinerario.ultimosAsientos && (
           <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full">
             <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" /> Últimos asientos a este precio
           </span>
@@ -125,6 +141,16 @@ export const FlightCard: React.FC<FlightCardProps> = ({
         </div>
 
         {/* Price & Selection Action */}
+        {soldOut ? (
+          <div className="pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-200 text-left lg:text-right lg:min-w-[190px]">
+            <p className="text-sm font-bold text-slate-700">Agotado</p>
+            <p className="text-xs text-slate-600">
+              {passengerCount > 1
+                ? `Sin asientos para ${passengerCount} pasajeros en este vuelo.`
+                : 'Sin asientos disponibles en este vuelo.'}
+            </p>
+          </div>
+        ) : (
         <div className="flex items-center justify-between lg:flex-col lg:items-end gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
           <div className="text-left lg:text-right">
             <span className="text-xs text-slate-500 block">Precio por adulto desde</span>
@@ -147,6 +173,7 @@ export const FlightCard: React.FC<FlightCardProps> = ({
             <ArrowRight className="w-4 h-4 ml-1.5" aria-hidden="true" />
           </Button>
         </div>
+        )}
       </div>
     </div>
   );

@@ -121,15 +121,17 @@ export class CatalogoService {
 
     const trayectos: TrayectoDisponibleDto[] = [];
     for (const leg of legs) {
-      const flights = await this.search.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats);
-      const itinerarios = await this.construirItinerarios(flights, familias, mercado, query.sort ?? 'RECOMENDADO');
+      // A full flight is listed too (as sold out) so the traveller sees it exists; it is never offered for sale.
+      const flights = await this.search.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats, { includeSoldOut: true });
+      const itinerarios = await this.construirItinerarios(flights, familias, mercado, query.sort ?? 'RECOMENDADO', seats);
+      const reservables = itinerarios.filter((i) => !i.agotado).length;
       trayectos.push({
         sentido: leg.sentido,
         origen: leg.origin ?? null,
         destino: leg.destination ?? null,
         fecha: leg.departureDate,
         itinerarios,
-        ...(itinerarios.length === 0 && leg.origin && leg.destination
+        ...(reservables === 0 && leg.origin && leg.destination
           ? { fechasAlternativas: await this.fechasAlternativas(leg.origin!, leg.destination!, leg.departureDate, seats, familias, mercado) }
           : {}),
       });
@@ -139,7 +141,7 @@ export class CatalogoService {
       mercado: mercado.codigo,
       moneda: mercado.moneda,
       trayectos,
-      sinDisponibilidad: trayectos.some((t) => t.itinerarios.length === 0),
+      sinDisponibilidad: trayectos.some((t) => t.itinerarios.every((i) => i.agotado)),
     };
   }
 
@@ -193,7 +195,7 @@ export class CatalogoService {
     return { adults: query.adt ?? 1, youths: 0, children: query.chd ?? 0, infants: query.inf ?? 0 };
   }
 
-  private async construirItinerarios(flights: Vuelo[], familias: FareFamily[], mercado: Mercado, sort: Ordenamiento): Promise<ItinerarioDto[]> {
+  private async construirItinerarios(flights: Vuelo[], familias: FareFamily[], mercado: Mercado, sort: Ordenamiento, seats: number): Promise<ItinerarioDto[]> {
     if (flights.length === 0) return [];
 
     const codes = [...new Set(flights.flatMap((f) => [f.origenIATA, f.destinoIATA]))];
@@ -205,18 +207,20 @@ export class CatalogoService {
       return { vuelo, precio: desde.totalMinor, familia: desde.familia };
     });
 
-    // RF-SHP-018: badges can coexist on one itinerary.
-    const cheapest = Math.min(...scored.map((s) => s.precio));
-    const fastest = Math.min(...scored.map((s) => s.vuelo.durationMinutes));
-    const recommended = this.recomendado(scored);
+    // RF-SHP-018: badges can coexist on one itinerary. A sold-out flight never earns one (nor skews the others).
+    const sellable = scored.filter((s) => s.vuelo.asientosDisponibles >= seats);
+    const cheapest = Math.min(...sellable.map((s) => s.precio));
+    const fastest = Math.min(...sellable.map((s) => s.vuelo.durationMinutes));
+    const recommended = sellable.length > 0 ? this.recomendado(sellable) : '';
 
     const items = scored.map<ItinerarioDto>(({ vuelo, precio, familia }) => {
       const salida = new Date(vuelo.fechaSalida);
       const llegada = new Date(vuelo.fechaLlegada);
+      const agotado = vuelo.asientosDisponibles < seats;
       const distintivos: string[] = [];
-      if (vuelo.id === recommended) distintivos.push('RECOMENDADO');
-      if (precio === cheapest) distintivos.push('MAS_ECONOMICO');
-      if (vuelo.durationMinutes === fastest) distintivos.push('MAS_RAPIDO');
+      if (!agotado && vuelo.id === recommended) distintivos.push('RECOMENDADO');
+      if (!agotado && precio === cheapest) distintivos.push('MAS_ECONOMICO');
+      if (!agotado && vuelo.durationMinutes === fastest) distintivos.push('MAS_RAPIDO');
 
       return {
         itinerarioId: vuelo.id,
@@ -232,11 +236,14 @@ export class CatalogoService {
         precioDesde: money(precio, mercado.moneda),
         familiaDesde: familia.code,
         distintivos,
-        ultimosAsientos: vuelo.asientosDisponibles <= SCARCITY_THRESHOLD,
+        ultimosAsientos: !agotado && vuelo.asientosDisponibles <= SCARCITY_THRESHOLD,
+        agotado,
       };
     });
 
-    return this.ordenar(items, scored, sort, recommended);
+    // Whatever the sort, what can be bought comes first and the sold-out flights close the list.
+    const ordered = this.ordenar(items, scored, sort, recommended);
+    return [...ordered.filter((i) => !i.agotado), ...ordered.filter((i) => i.agotado)];
   }
 
   /**

@@ -5,7 +5,7 @@ config({ quiet: true });
 
 import { DataSource } from 'typeorm';
 import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
-import { seedFlights } from './flights.seed';
+import { seedDemoScenarios, seedFlights } from './flights.seed';
 
 // Entities are discovered by glob so every sub-domain of this module is covered without a
 // list to maintain. The same glob works for ts-node (.ts) and the compiled build (.js).
@@ -21,6 +21,11 @@ async function main(): Promise<void> {
 
   const flights = await seedFlights(dataSource);
   console.log(`Flights: ${flights.families} fare families; flights created this run: ${flights.flights}.`);
+
+  // Flights left full on purpose for the demo; SEED_DEMO_SCENARIOS=false turns it off.
+  if (process.env.SEED_DEMO_SCENARIOS !== 'false') {
+    console.log(`Demo scenarios: flights left sold out or nearly full this run: ${await seedDemoScenarios(dataSource)}.`);
+  }
 
   // An administrator is created only when explicitly configured; there is no default account.
   const adminCorreo = process.env.ADMIN_EMAIL;

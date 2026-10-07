@@ -166,6 +166,7 @@ export class ItinerarioDto {
   @ApiProperty({ example: 'BASIC' }) familiaDesde: string;
   @ApiProperty({ type: [String], enum: ['RECOMENDADO', 'MAS_ECONOMICO', 'MAS_RAPIDO'], description: 'RF-SHP-018: pueden coexistir.' }) distintivos: string[];
   @ApiProperty({ description: 'RF-SHP-019: "Últimos asientos a este precio".' }) ultimosAsientos: boolean;
+  @ApiProperty({ description: 'El vuelo no tiene asientos suficientes para el grupo buscado: se muestra pero no se puede reservar (crear la oferta responde 409 SEAT_TAKEN). Va al final de la lista y sin distintivos.' }) agotado: boolean;
 }
 
 export class FechaAlternativaDto {

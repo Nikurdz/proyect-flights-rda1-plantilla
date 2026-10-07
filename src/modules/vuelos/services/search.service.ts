@@ -123,7 +123,7 @@ export class SearchService {
   }
 
   /** Direct flights on one calendar day (UTC) that have not departed and can seat the whole party. */
-  async findDirectFlights(origin: string | undefined, destination: string | undefined, departureDate: string, seatsNeeded: number): Promise<Vuelo[]> {
+  async findDirectFlights(origin: string | undefined, destination: string | undefined, departureDate: string, seatsNeeded: number, options: { includeSoldOut?: boolean } = {}): Promise<Vuelo[]> {
     const { start, end } = utcDayRange(departureDate);
     const qb = this.vuelos.createQueryBuilder('v').where('1 = 1');
     // Omitted origin/destination mean "any": lets a visitor browse without knowing codes.
@@ -133,7 +133,8 @@ export class SearchService {
       .andWhere('v."fechaSalida" >= :start AND v."fechaSalida" < :end', { start, end })
       .andWhere('v."fechaSalida" > :now', { now: new Date() })
       .andWhere("v.estado = 'SCHEDULED'")
-      .andWhere('v."asientosDisponibles" >= :seatsNeeded', { seatsNeeded })
+      // The catalogue lists a full flight too (as sold out); every other caller wants only what can be sold.
+      .andWhere(options.includeSoldOut ? '1 = 1' : 'v."asientosDisponibles" >= :seatsNeeded', { seatsNeeded })
       .orderBy('v."fechaSalida"', 'ASC')
       .getMany();
   }

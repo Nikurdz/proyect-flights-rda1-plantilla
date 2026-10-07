@@ -238,6 +238,8 @@ Repite desde el **paso 3A** con una oferta nueva salvo que se indique otra cosa.
 | 9 | Pagar una oferta **a medias** (sin facturación o sin aceptar condiciones) | `422 OFFER_INCOMPLETE` con la lista de lo que falta. | "El servidor valida el estado, no confía en la interfaz." |
 | 10 | Esperar 15 min sin pagar y luego pagar | `410 OFFER_EXPIRED`; los asientos ya volvieron al inventario. | Retención con vencimiento. |
 | 11 | **Asiento ocupado:** arma **dos** ofertas para las mismas fechas y elige el mismo asiento (ej. `15A`); compra la primera; compra la segunda | `409 SEAT_TAKEN` **antes de cobrar** (no queda pago). Elige otro asiento (3B) y vuelve a comprar → `201`. | "El asiento se bloquea al emitir; la restricción única de la base lo garantiza aunque dos compras lleguen a la vez." |
+| 11b | **Vuelo lleno:** busca BOG→SCL a **+3 días** (`LA800` sale «Agotado», al final y sin distintivos) y crea la oferta con su `itinerarioId` (3A) | `409 SEAT_TAKEN`; no queda oferta, retención ni pago. | "El inventario es un `UPDATE` condicional: no se puede vender lo que no hay. El vuelo se muestra agotado en vez de esconderlo." |
+| 11c | **Grupo que no cabe:** BOG→SCL a **+5 días** con 3 adultos (`LA1500` tiene 2 libres) | `LA1500` sale «Agotado» para 3 y reservable para 2. | Casi lleno: depende del tamaño del grupo. |
 | 12 | Asiento inexistente (`999F`) | `422 SEAT_CABIN_MISMATCH`. | |
 | 13 | Bebé con asiento | `422 INFANT_SEAT_NOT_ALLOWED`. | |
 | 14 | Pasajero con tipo que no coincide con su edad (ADULT nacido en 2020) | `422 VALIDATION_FAILED`. | Regla de negocio RN-14. |

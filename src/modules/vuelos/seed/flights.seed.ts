@@ -1,5 +1,7 @@
 import { DataSource } from 'typeorm';
 import { FareFamily } from '../entities/fare-family.entity';
+import { FlightHold } from '../entities/flight-hold.entity';
+import { SeatAssignment } from '../entities/seat-assignment.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 
 export const FARE_FAMILIES = [
@@ -238,4 +240,53 @@ export async function seedFlights(dataSource: DataSource, now: Date = new Date()
   }
 
   return { families: FARE_FAMILIES.length, flights: created };
+}
+
+/**
+ * Flights left full (or nearly full) on purpose, to show what the system does without seats: they are listed as
+ * sold out and a booking attempt is refused with 409 SEAT_TAKEN. `dias` are days from the day the seed runs, `libres`
+ * the seats that stay open (0 = sold out). Only core-schedule flights can be named here (they have a fixed hour).
+ */
+export const DEMO_SCENARIOS: { codigoVuelo: string; dias: number[]; libres: number }[] = [
+  { codigoVuelo: 'LA800', dias: [3, 10, 17, 24], libres: 0 }, // BOG -> SCL, the SRS evidence route
+  { codigoVuelo: 'LA801', dias: [10, 17], libres: 0 }, // SCL -> BOG: the return of a full outbound
+  { codigoVuelo: 'LA1500', dias: [5, 12], libres: 2 }, // BOG -> SCL: seats for a couple, not for a group of three
+  { codigoVuelo: 'LA2402', dias: [4], libres: 0 }, // UIO -> GYE
+  { codigoVuelo: 'LA1412', dias: [6], libres: 0 }, // BOG -> UIO
+];
+
+/**
+ * Idempotent and conservative: it only ever lowers a flight's open seats, and leaves alone any flight that already
+ * has a hold or a booking on it, so it can run on every deploy without disturbing real activity. Not part of
+ * `seedFlights` on purpose: the integration tests rely on that inventory.
+ */
+export async function seedDemoScenarios(dataSource: DataSource, now: Date = new Date()): Promise<number> {
+  let changed = 0;
+  for (const scenario of DEMO_SCENARIOS) {
+    const entry = SCHEDULE.find((e) => e.codigoVuelo === scenario.codigoVuelo);
+    if (!entry) throw new Error(`Demo scenario for ${scenario.codigoVuelo}: not a flight of the core schedule`);
+    for (const day of scenario.dias) {
+      const vuelo = await dataSource.getRepository(Vuelo).findOne({ where: { codigoVuelo: entry.codigoVuelo, fechaSalida: utcDateAtHour(day, entry.hour, now) } });
+      if (!vuelo || vuelo.asientosDisponibles <= scenario.libres) continue;
+
+      const used =
+        (await dataSource.getRepository(SeatAssignment).count({ where: { vueloId: vuelo.id } })) > 0 ||
+        (await dataSource
+          .getRepository(FlightHold)
+          .createQueryBuilder('h')
+          .where('h."status" IN (:...states)', { states: ['HELD', 'CONSUMED'] })
+          .andWhere('h."inventory" @> :inventory::jsonb', { inventory: JSON.stringify([{ vueloId: vuelo.id }]) })
+          .getCount()) > 0;
+      if (used) continue;
+
+      const result = await dataSource
+        .createQueryBuilder()
+        .update(Vuelo)
+        .set({ asientosDisponibles: scenario.libres })
+        .where('id = :id AND "asientosDisponibles" > :libres', { id: vuelo.id, libres: scenario.libres })
+        .execute();
+      changed += result.affected ?? 0;
+    }
+  }
+  return changed;
 }

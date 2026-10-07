@@ -20,6 +20,7 @@ import { SortingBar } from './SortingBar';
 import { DateNavigator } from './DateNavigator';
 import { EmptyState } from './EmptyState';
 import { FareComparisonModal } from '../fares/FareComparisonModal';
+import { ProblemDetailsError } from '../../api/problem-details';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { getValidSearchDateString, addDaysToDate } from '../../lib/dates';
@@ -73,6 +74,7 @@ export const ResultsPage: React.FC = () => {
   const searchKey = `${outboundKey}|${inbound}`;
   useEffect(() => {
     setOfferError(null);
+    setSoldOutNotice(false);
   }, [searchKey]);
 
   // Fare modal state
@@ -82,6 +84,7 @@ export const ResultsPage: React.FC = () => {
   // Loading checkout creation
   const [isCreatingOffer, setIsCreatingOffer] = useState(false);
   const [offerError, setOfferError] = useState<unknown>(null);
+  const [soldOutNotice, setSoldOutNotice] = useState(false);
 
   // Handle Sort Change
   const handleSortChange = (newSort: Ordenamiento) => {
@@ -157,7 +160,16 @@ export const ResultsPage: React.FC = () => {
       // Navigate to Checkout with offerId
       navigate(`/checkout/${oferta.ofertaId}`);
     } catch (err) {
-      setOfferError(err);
+      if (err instanceof ProblemDetailsError && err.status === 409 && err.code === 'SEAT_TAKEN') {
+        // Someone else took the last seat while the list was on screen: back to a fresh list.
+        setSoldOutNotice(true);
+        setSelectedOutbound(null);
+        setActiveLegIndex(0);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        void refetch();
+      } else {
+        setOfferError(err);
+      }
       setIsCreatingOffer(false);
     }
   };
@@ -167,7 +179,12 @@ export const ResultsPage: React.FC = () => {
 
   // Only the leg on screen counts: the API flags the whole search when ANY leg is empty, which
   // would hide the outbound flights that do exist when only the return day has none.
-  const hasNoFlights = Boolean(currentTrayecto) && currentTrayecto.itinerarios.length === 0;
+  // Sold-out flights (agotado) come last and are shown, but they are not bookable: they count as "no flights".
+  const bookableFlights = (currentTrayecto?.itinerarios ?? []).filter((i) => !i.agotado);
+  const hasNoFlights = Boolean(currentTrayecto) && bookableFlights.length === 0 && (currentTrayecto?.itinerarios.length ?? 0) === 0;
+  const allSoldOut =
+    Boolean(currentTrayecto) && bookableFlights.length === 0 && (currentTrayecto?.itinerarios.length ?? 0) > 0;
+  const seatsNeeded = adt + chd;
 
   const minValidDate = getValidSearchDateString();
   const activeDate =
@@ -176,7 +193,7 @@ export const ResultsPage: React.FC = () => {
       : inbound || currentTrayecto?.fecha || addDaysToDate(outbound || minValidDate, 7);
 
   const minLegDate = activeLegIndex === 0 ? minValidDate : outbound || minValidDate;
-  const lowestPrice = currentTrayecto?.itinerarios?.[0]?.precioDesde;
+  const lowestPrice = bookableFlights[0]?.precioDesde;
 
   const handleNavigateDate = (newDate: string) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -296,6 +313,23 @@ export const ResultsPage: React.FC = () => {
             <ProblemAlert error={error} onRetry={() => refetch()} />
           </div>
         )}
+        {soldOutNotice && (
+          <div
+            role="alert"
+            className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+          >
+            <p>
+              <strong>Ese vuelo se quedó sin asientos.</strong> Elige otro vuelo o cambia las fechas.
+            </p>
+            <button
+              type="button"
+              onClick={() => setSoldOutNotice(false)}
+              className="text-xs font-bold underline hover:text-amber-950"
+            >
+              Cerrar
+            </button>
+          </div>
+        )}
         {offerError != null && (
           <div className="mb-6">
             <ProblemAlert error={offerError} />
@@ -323,7 +357,7 @@ export const ResultsPage: React.FC = () => {
               </div>
             ))}
           </div>
-        ) : hasNoFlights ? (
+        ) : hasNoFlights || allSoldOut ? (
           <EmptyState
             originLabel={currentTrayecto?.origen ?? origin}
             destinationLabel={currentTrayecto?.destino ?? destination}
@@ -341,7 +375,7 @@ export const ResultsPage: React.FC = () => {
             <SortingBar
               currentSort={sort}
               onSortChange={handleSortChange}
-              totalResults={currentTrayecto?.itinerarios.length || 0}
+              totalResults={bookableFlights.length}
             />
 
             {/* List of Flights */}
@@ -350,6 +384,7 @@ export const ResultsPage: React.FC = () => {
                 <FlightCard
                   key={itinerario.itinerarioId}
                   itinerario={itinerario}
+                  passengerCount={seatsNeeded}
                   onSelect={handleSelectFlight}
                 />
               ))}
