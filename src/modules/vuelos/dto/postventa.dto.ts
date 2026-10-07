@@ -17,10 +17,10 @@ export class AddBaggageRequestDto {
   @IsUUID()
   itineraryId: string;
 
-  @ApiProperty({ minimum: 1, maximum: 5 })
+  @ApiProperty({ minimum: 1, maximum: 10, description: 'El tope real lo fija POSTSALE_BAGGAGE_MAX_PER_LEG (409 BAGGAGE_LIMIT_EXCEEDED).' })
   @IsInt()
   @Min(1)
-  @Max(5)
+  @Max(10)
   quantity: number;
 
   @ApiProperty()

@@ -6,7 +6,9 @@ const MONEY_PATTERN = /^\d+(\.\d{1,2})?$/;
 
 export function toMinorUnits(amount: string | number): number {
   if (typeof amount === 'number') {
-    return Math.round(amount * 100);
+    // Columns of type numeric reach us as a JS number: settle it to two decimals first so a value such as
+    // 1.005 * 100 cannot land on either side of the half-cent by float drift, then round once.
+    return Math.round(Number(amount.toFixed(2)) * 100);
   }
   if (!MONEY_PATTERN.test(amount)) {
     throw new Error(`Invalid money amount "${amount}"`);

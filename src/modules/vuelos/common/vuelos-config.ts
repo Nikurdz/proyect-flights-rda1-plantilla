@@ -43,6 +43,8 @@ export interface PostSaleConfig {
   quoteTtlMinutes: number;
   checkInOpensHours: number;
   checkInClosesHours: number;
+  /** A flight reads BOARDING this many minutes before departure (flight status). */
+  boardingWindowMinutes: number;
 }
 
 export interface WebhooksConfig {
@@ -95,6 +97,7 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
     quoteTtlMinutes: parseNumber(config, 'POSTSALE_QUOTE_TTL_MINUTES', '15', errors, (v) => isPositiveInt(v) && v <= 1440, 'an integer in 1..1440'),
     checkInOpensHours: parseNumber(config, 'CHECKIN_OPENS_HOURS', '48', errors, (v) => isPositiveInt(v) && v <= 720, 'an integer in 1..720'),
     checkInClosesHours: parseNumber(config, 'CHECKIN_CLOSES_HOURS', '1', errors, (v) => Number.isInteger(v) && v >= 0 && v <= 48, 'an integer in 0..48'),
+    boardingWindowMinutes: parseNumber(config, 'BOARDING_WINDOW_MINUTES', '30', errors, (v) => isPositiveInt(v) && v <= 240, 'an integer in 1..240'),
   };
   if (Number.isFinite(postSale.checkInOpensHours) && postSale.checkInClosesHours >= postSale.checkInOpensHours) {
     errors.push('CHECKIN_CLOSES_HOURS must be smaller than CHECKIN_OPENS_HOURS');

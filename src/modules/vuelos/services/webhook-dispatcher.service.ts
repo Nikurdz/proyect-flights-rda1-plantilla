@@ -59,9 +59,9 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
         const outcome = await this.attempt(delivery, now);
         result[outcome] += 1;
       }
-      runtimeMetrics.recordJob('webhooks', { durationMs: Date.now() - startedAt, result: { ...result } });
+      runtimeMetrics.recordJob('webhook-dispatcher', { durationMs: Date.now() - startedAt, result: { ...result } });
     } catch (error) {
-      runtimeMetrics.recordJob('webhooks', { durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) });
+      runtimeMetrics.recordJob('webhook-dispatcher', { durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) });
       this.logger.error(`Webhook dispatch failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.running = false;

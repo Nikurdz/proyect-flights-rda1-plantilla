@@ -12,6 +12,7 @@ export const WEBHOOK_EVENTS = [
   'booking.cancelled',
   'booking.baggage_added',
   'hold.expired',
+  // flight.* are produced only by the back-office actions POST /admin/vuelos/:id/cancelar|reprogramar (ecommerce/admin), not by the GDS core.
   'flight.schedule_changed',
   'flight.cancelled',
   'booking.ticket_issuing',

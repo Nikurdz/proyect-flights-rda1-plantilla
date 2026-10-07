@@ -4,7 +4,8 @@ import { WEBHOOK_EVENTS } from './enums';
 
 export class WebhookSubscriptionDto {
   @ApiProperty({ format: 'uri' })
-  @IsUrl({ protocols: ['https'], require_protocol: true })
+  // http only passes here so the SSRF guard (resolveSafeTarget) decides: it refuses it unless private hosts are allowed.
+  @IsUrl({ protocols: ['https', 'http'], require_protocol: true, require_tld: false })
   @MaxLength(500)
   url: string;
 

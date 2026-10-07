@@ -11,7 +11,6 @@ const DESCRIPTIONS: Record<number, string> = {
   410: 'Recurso expirado (Hold o Cotización)',
   422: 'Entidad no procesable',
   429: 'Demasiadas peticiones',
-  501: 'No implementado',
   503: 'Servicio no disponible',
 };
 

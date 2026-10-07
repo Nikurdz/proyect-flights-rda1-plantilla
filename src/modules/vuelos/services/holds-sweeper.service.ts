@@ -65,9 +65,9 @@ export class HoldsSweeper implements OnModuleInit, OnModuleDestroy {
       await this.offers.expireDueHolds();
       await this.idempotency.purgeExpired();
       await this.purgeStaleOffers();
-      runtimeMetrics.recordJob('barredor-holds', { durationMs: Date.now() - startedAt });
+      runtimeMetrics.recordJob('holds-sweeper', { durationMs: Date.now() - startedAt });
     } catch (error) {
-      runtimeMetrics.recordJob('barredor-holds', { durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) });
+      runtimeMetrics.recordJob('holds-sweeper', { durationMs: Date.now() - startedAt, error: error instanceof Error ? error.message : String(error) });
       this.logger.error(`Sweep failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.running = false;

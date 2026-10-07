@@ -1,15 +1,17 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { toIso, todayUtc, utcDayRange } from '../common/date.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
+import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { Vuelo } from '../entities/vuelo.entity';
-
-const BOARDING_WINDOW_MS = 30 * 60_000;
 
 @Injectable()
 export class FlightStatusService {
-  constructor(@InjectRepository(Vuelo) private readonly vuelos: Repository<Vuelo>) {}
+  constructor(
+    @InjectRepository(Vuelo) private readonly vuelos: Repository<Vuelo>,
+    @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
+  ) {}
 
   /** Status of the flight that departs on `date` (a UTC calendar day), derived from its schedule. */
   async getStatus(flightNumber: string, requestedDate?: string) {
@@ -40,7 +42,7 @@ export class FlightStatusService {
     let status: string;
     if (vuelo.estado === 'CANCELLED') {
       status = 'CANCELLED';
-    } else if (now < departure.getTime() - BOARDING_WINDOW_MS) {
+    } else if (now < departure.getTime() - this.config.postSale.boardingWindowMinutes * 60_000) {
       status = 'SCHEDULED';
     } else if (now < departure.getTime()) {
       status = 'BOARDING';
