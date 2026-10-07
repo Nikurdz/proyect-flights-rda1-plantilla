@@ -7,11 +7,13 @@ export interface ProblemAlertProps {
   onRetry?: () => void;
   className?: string;
   title?: string;
+  /** Texto propio para un contexto concreto (reemplaza el mensaje genérico del código). */
+  message?: string;
 }
 
 const GENERIC = 'No pudimos completar la operación. Intenta de nuevo en unos segundos.';
 
-export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, className = '', title = 'No pudimos completar la acción' }) => {
+export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, className = '', title = 'No pudimos completar la acción', message: messageOverride }) => {
   const [copied, setCopied] = useState(false);
   const alertRef = useRef<HTMLDivElement>(null);
   const hasError = Boolean(error);
@@ -25,7 +27,7 @@ export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, clas
 
   // Only messages we wrote reach the screen: a raw Error (network, parsing) is never shown as is.
   const isProblem = error instanceof ProblemDetailsError;
-  const message = isProblem ? error.message : GENERIC;
+  const message = isProblem ? messageOverride ?? error.message : GENERIC;
   const fields = isProblem ? error.invalidParams : [];
   const supportCode = isProblem && error.correlationId ? `${error.code}·${error.correlationId}` : undefined;
 

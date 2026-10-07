@@ -23,6 +23,7 @@ import { HelpPage } from '../features/legal/HelpPage';
 import { AdminLayout } from '../features/admin/AdminLayout';
 import { AdminOrdersPage } from '../features/admin/AdminOrdersPage';
 import { AdminFlightsPage } from '../features/admin/AdminFlightsPage';
+import { AdminUsersPage } from '../features/admin/AdminUsersPage';
 import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
 import { AdminObservabilityPage } from '../features/admin/AdminObservabilityPage';
 import { RequireAdmin, RequireCustomer } from './guards';
@@ -70,6 +71,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="dashboard" element={<AdminDashboardPage />} />
             <Route path="ordenes" element={<AdminOrdersPage />} />
             <Route path="vuelos" element={<AdminFlightsPage />} />
+            <Route path="usuarios" element={<AdminUsersPage />} />
             <Route path="observabilidad" element={<AdminObservabilityPage />} />
           </Route>
         </Route>

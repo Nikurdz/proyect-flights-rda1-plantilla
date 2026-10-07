@@ -1,0 +1,6482 @@
+# GENERADO por scripts/export-openapi.js desde el /api/docs-json de la API en ejecución. No editar a mano:
+# cambia el código y vuelve a ejecutar `npm run contract:export`. Describe TODO el sistema actual de Vuelos:
+# núcleo GDS (contracts/vuelos-openapi.yaml), e-commerce y administración.
+openapi: 3.0.0
+info:
+  description: >-
+    Contrato del sistema de Vuelos tal como está implementado: núcleo GDS (búsqueda, retención de cupos, reservas, billetes, posventa,
+    check-in, webhooks), e-commerce (identidad, catálogo, ofertas, pagos simulados, órdenes) y administración (órdenes, vuelos, usuarios,
+    dashboard, observabilidad).
+
+
+    Convenciones comunes: prefijo /api/v1; autenticación Bearer JWT (HS256) y `ownerId` siempre igual al `sub` verificado; errores
+    `application/problem+json` con el campo `code`; las escrituras críticas exigen `Idempotency-Key` (UUID); los importes en el borde de la
+    API son cadenas decimales y en el sistema son enteros en unidades menores.
+  title: RAM Alliance · API de Vuelos (sistema completo)
+  version: '1.0'
+servers:
+  - description: Producción (Railway)
+    url: https://proyect-flights-rda1-plantilla-production.up.railway.app/api/v1
+  - description: Desarrollo local
+    url: http://localhost:3000/api/v1
+tags: []
+paths:
+  /admin/auditoria:
+    get:
+      operationId: AdminMercadosController_auditoria
+      parameters:
+        - in: query
+          name: entidad
+          required: false
+          schema:
+            default: mercado
+            example: mercado
+            type: string
+        - description: Si se omite, todos.
+          in: query
+          name: id
+          required: false
+          schema:
+            example: ec
+            type: string
+      responses:
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Historial de cambios de configuración (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/dashboard:
+    get:
+      description: >-
+        Indicadores (ingresos, órdenes, ticket promedio, conversión, cancelación, reembolsos, ocupación futura), una serie diaria para
+        graficar, el embudo oferta→pago→emisión, el reparto por estado, las rutas con más reservas, la ocupación por ruta y la actividad de
+        posventa y webhooks. Todo son agregados calculados desde la base de datos (sin datos personales); se guarda en caché unos segundos.
+      operationId: DashboardController_resumen
+      parameters:
+        - description: Días hacia atrás, contando hoy (UTC).
+          in: query
+          name: dias
+          required: false
+          schema:
+            default: 30
+            enum:
+              - 7
+              - 30
+              - 90
+            type: number
+      responses:
+        '200':
+          description: Cifras agregadas para el panel.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: 'Dashboard de gestión: ventas, conversión, rutas y ocupación (ADMIN)'
+      tags:
+        - E-commerce · Observabilidad
+  /admin/mercados/{codigo}:
+    put:
+      description: 'RF-ADM-001: control optimista por versión y registro en auditoría (RF-ADM-006).'
+      operationId: AdminMercadosController_actualizar
+      parameters:
+        - description: Código de mercado (ruta del portal)
+          in: path
+          name: codigo
+          required: true
+          schema:
+            example: ec
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarMercadoDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MercadoViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Editar la configuración de un mercado (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/notificaciones:
+    get:
+      description: Sin filtros devuelve los 50 más recientes; filtre por referencia o destinatario. El cuerpo se descifra solo para este rol.
+      operationId: AdminNotificacionesController_listar
+      parameters:
+        - description: Número de orden o id de cliente al que se refiere el mensaje.
+          in: query
+          name: referencia
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: destinatario
+          required: false
+          schema:
+            type: string
+      responses:
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Mensajes enviados (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/observabilidad/resumen:
+    get:
+      description: >-
+        Órdenes por estado, ingresos por moneda, pagos y tasas (rechazo, antifraude, compensación), pendientes de reconciliación,
+        notificaciones, reservas temporales, ocupación del inventario y últimos cambios auditados. Se calcula sobre la ventana pedida (24h o
+        7d) y se guarda en caché unos segundos; sobrevive a los reinicios porque sale de la base.
+      operationId: ObservabilidadController_resumen
+      parameters:
+        - description: Ventana de tiempo de las cifras.
+          in: query
+          name: ventana
+          required: false
+          schema:
+            default: 24h
+            enum:
+              - 24h
+              - 7d
+            type: string
+      responses:
+        '200':
+          description: Cifras agregadas, sin datos personales.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Resumen operativo calculado desde la base de datos (ADMIN)
+      tags:
+        - E-commerce · Observabilidad
+  /admin/observabilidad/runtime:
+    get:
+      description: >-
+        Peticiones, errores y latencia por ruta, códigos de error, eventos de dominio, límites de tasa y la última ejecución del
+        reconciliador y del barredor de reservas. Son contadores en memoria de ESTE proceso: parten de cero en cada reinicio.
+      operationId: ObservabilidadController_runtime
+      parameters: []
+      responses:
+        '200':
+          description: Contadores desde el arranque del proceso.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Métricas en vivo del proceso (ADMIN)
+      tags:
+        - E-commerce · Observabilidad
+  /admin/ordenes:
+    get:
+      description: Más recientes primero, paginado por cursor; filtros por estado, número, PNR y fechas.
+      operationId: AdminController_ordenes
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            default: 25
+            maximum: 100
+            minimum: 1
+            type: number
+        - description: Cursor opaco de la página anterior (nextCursor).
+          in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: estado
+          required: false
+          schema:
+            enum:
+              - PENDIENTE_PAGO
+              - PAGO_EN_VERIFICACION
+              - PAGADA
+              - EMITIDA
+              - FALLIDA_COMPENSADA
+              - MODIFICADA
+              - DEVOLUCION_EN_CURSO
+              - REEMBOLSADA
+              - EN_VIAJE
+              - COMPLETADA
+              - EXPIRADA
+            type: string
+        - in: query
+          name: numero
+          required: false
+          schema:
+            example: ORD-7K3M9PQ2XA
+            type: string
+        - in: query
+          name: pnr
+          required: false
+          schema:
+            example: ABC123
+            type: string
+        - description: Creadas desde este día (UTC).
+          in: query
+          name: desde
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: Creadas hasta este día (UTC, inclusive).
+          in: query
+          name: hasta
+          required: false
+          schema:
+            format: date
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrdenesPaginaDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Listar órdenes de todos los clientes (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/ordenes/{numero}:
+    get:
+      description: Incluye el contacto del comprador.
+      operationId: AdminController_orden
+      parameters:
+        - description: Número de orden
+          in: path
+          name: numero
+          required: true
+          schema:
+            example: ORD-7K3M9PQ2XA
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrdenViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Detalle completo de una orden (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/usuarios:
+    get:
+      description: Más recientes primero, con búsqueda por correo o nombre y filtro por rol. Nunca incluye contraseñas ni tokens.
+      operationId: UsuariosController_listar
+      parameters:
+        - description: Texto a buscar en el correo, los nombres o los apellidos.
+          in: query
+          name: q
+          required: false
+          schema:
+            type: string
+        - description: Solo los usuarios que tienen este rol.
+          in: query
+          name: rol
+          required: false
+          schema:
+            enum:
+              - CUSTOMER
+              - ADMIN
+            type: string
+        - in: query
+          name: pagina
+          required: false
+          schema:
+            default: 1
+            minimum: 1
+            type: number
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 25
+            maximum: 100
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsuariosPaginaDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Listar usuarios (ADMIN)
+      tags:
+        - E-commerce · Back-office
+    post:
+      description: >-
+        Crea la cuenta con el correo ya verificado. Con roles ["CUSTOMER","ADMIN"] se crea un administrador. Queda registrado en la
+        auditoría.
+      operationId: UsuariosController_crear
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCrearUsuarioDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsuarioViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Crear un usuario (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/usuarios/{clienteId}:
+    get:
+      operationId: UsuariosController_obtener
+      parameters:
+        - in: path
+          name: clienteId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsuarioViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Detalle de un usuario (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/usuarios/{clienteId}/roles:
+    put:
+      description: >-
+        Ascender a administrador (roles ["CUSTOMER","ADMIN"]) o quitarle el rol (["CUSTOMER"]). No se puede quitar el rol a uno mismo ni al
+        último administrador (409 LAST_ADMIN). El rol viaja en el token: el cambio se aplica al siguiente inicio de sesión del usuario.
+      operationId: UsuariosController_cambiarRoles
+      parameters:
+        - in: path
+          name: clienteId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCambiarRolesDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsuarioViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Cambiar los roles de un usuario (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/vuelos:
+    get:
+      description: Por salida ascendente, desde hoy si no se indica fecha; filtros por ruta, día y número de vuelo.
+      operationId: AdminController_vuelos
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            default: 25
+            maximum: 100
+            minimum: 1
+            type: number
+        - description: Cursor opaco de la página anterior (nextCursor).
+          in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: origen
+          required: false
+          schema:
+            example: BOG
+            type: string
+        - in: query
+          name: destino
+          required: false
+          schema:
+            example: SCL
+            type: string
+        - description: 'Día de salida (UTC). Sin fecha: desde hoy.'
+          in: query
+          name: fecha
+          required: false
+          schema:
+            format: date
+            type: string
+        - in: query
+          name: vuelo
+          required: false
+          schema:
+            example: LA800
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminVuelosPaginaDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Listar vuelos con su inventario (ADMIN)
+      tags:
+        - E-commerce · Back-office
+    post:
+      description: >-
+        Agrega un vuelo al calendario: todos sus asientos quedan disponibles y aparece en la búsqueda. El código lleva la aerolínea en sus
+        dos primeros caracteres; origen y destino deben existir en el catálogo; la salida debe ser futura. 409 si ese código ya sale a esa
+        hora.
+      operationId: AdminController_crearVuelo
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCrearVueloDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminVueloViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Crear un vuelo (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/vuelos/{vueloId}:
+    delete:
+      description: >-
+        Borra un vuelo que nunca tuvo retenciones, reservas ni asientos asignados. Si tiene historial responde 409 FLIGHT_IN_USE: cancélalo
+        en su lugar (cierra la venta y reembolsa las reservas).
+      operationId: AdminController_eliminarVuelo
+      parameters:
+        - in: path
+          name: vueloId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '204':
+          description: Eliminado
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Eliminar un vuelo (ADMIN)
+      tags:
+        - E-commerce · Back-office
+    patch:
+      description: >-
+        Cambia aerolínea, tarifa base, duración (recalcula la llegada) o capacidad. Solo vuelos programados que no han salido. La capacidad
+        no puede bajar de los asientos ya vendidos ni dejar asientos numerados fuera de la cabina. Para mover la salida usa reprogramar.
+      operationId: AdminController_actualizarVuelo
+      parameters:
+        - in: path
+          name: vueloId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminActualizarVueloDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminVueloViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Editar un vuelo (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/vuelos/{vueloId}/asientos:
+    get:
+      description: >-
+        Mapa de la cabina con la disponibilidad de cada asiento y la lista de reservados con su código de reserva y orden. No muestra
+        nombres de pasajeros.
+      operationId: AdminController_asientos
+      parameters:
+        - in: path
+          name: vueloId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAsientosVueloDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Asientos reservados de un vuelo (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/vuelos/{vueloId}/cancelar:
+    post:
+      description: >-
+        La aerolínea cancela el vuelo: se cierra a la venta, cada reserva confirmada que lo tenía se cancela con reembolso total (sin
+        penalidad, sea cual sea la tarifa) y se emiten los eventos de webhook flight.cancelled y booking.cancelled. El reembolso llega a la
+        pasarela y a la orden por esos eventos.
+      operationId: AdminController_cancelarVuelo
+      parameters:
+        - in: path
+          name: vueloId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCancelarVueloDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccionVueloViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Cancelar un vuelo (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/vuelos/{vueloId}/reprogramar:
+    post:
+      description: >-
+        La aerolínea mueve la salida (la duración se conserva): las reservas confirmadas con ese vuelo se actualizan y se emiten los eventos
+        de webhook flight.schedule_changed y booking.changed. Responde 409 si otro vuelo con el mismo número ya sale a esa hora.
+      operationId: AdminController_reprogramarVuelo
+      parameters:
+        - in: path
+          name: vueloId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminReprogramarVueloDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccionVueloViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Reprogramar un vuelo (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /auth/invitado:
+    post:
+      description: 'RF-CHK-001: comprar sin cuenta. El viaje se recupera luego con número de orden y apellido.'
+      operationId: AuthController_invitado
+      parameters: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenViewDto'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Demasiadas peticiones
+      summary: Sesión de invitado
+      tags:
+        - E-commerce · Identidad
+  /auth/login:
+    post:
+      description: RF-IAM-003. Bloqueo temporal tras 5 intentos fallidos consecutivos.
+      operationId: AuthController_login
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '423':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Error
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Demasiadas peticiones
+      summary: Iniciar sesión
+      tags:
+        - E-commerce · Identidad
+  /auth/verificar-correo:
+    post:
+      description: RF-IAM-001.
+      operationId: AuthController_verificarCorreo
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificarCorreoDto'
+        required: true
+      responses:
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Demasiadas peticiones
+      summary: Confirmar el correo con el token recibido
+      tags:
+        - E-commerce · Identidad
+  /bookings:
+    get:
+      description: 'Scope de referencia: flights:read. Paginación por cursor (limit máx. 50).'
+      operationId: VuelosController_listBookings
+      parameters:
+        - in: query
+          name: pnr
+          required: false
+          schema:
+            example: ABC123
+            type: string
+        - in: query
+          name: status
+          required: false
+          schema:
+            enum:
+              - PENDING
+              - PENDING_PAYMENT
+              - TICKET_ISSUING
+              - CONFIRMED
+              - FAILED
+              - CHANGE_PENDING
+              - CANCELLATION_PENDING
+              - CANCELLED
+            type: string
+        - in: query
+          name: createdFrom
+          required: false
+          schema:
+            format: date
+            type: string
+        - in: query
+          name: createdTo
+          required: false
+          schema:
+            format: date
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            default: 10
+            maximum: 50
+            minimum: 1
+            type: number
+        - description: Opaque cursor from a previous page (nextCursor).
+          in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingListResponseDto'
+          description: Lista resumida
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+      security:
+        - bearer: []
+      summary: Listar reservas del usuario actual (Paginado)
+      tags:
+        - Reservas y Emisión
+    post:
+      description: 'Scope de referencia: flights:book. Atómico: reserva, pasajeros, asientos y tickets se confirman juntos o no se confirma nada.'
+      operationId: VuelosController_createBooking
+      parameters:
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequestDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetailResponseDto'
+          description: Reserva creada y ticket emitido correctamente.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      security:
+        - bearer: []
+      summary: Crear reserva y gestionar emisión de ticket
+      tags:
+        - Reservas y Emisión
+  /bookings/{bookingId}:
+    get:
+      description: 'Scope de referencia: flights:read.'
+      operationId: VuelosController_getBookingDetail
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetailResponseDto'
+          description: Detalle de reserva
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Detalle completo de reserva
+      tags:
+        - Reservas y Emisión
+  /bookings/{bookingId}/baggage:
+    post:
+      description: >-
+        Scope de referencia: flights:book. Hasta 3 h antes de la salida, máximo 2 maletas extra por pasajero y tramo. La referencia de pago
+        es de un solo uso. Una sola transacción; con la misma Idempotency-Key devuelve el mismo resultado.
+      operationId: VuelosController_addBaggage
+      parameters:
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddBaggageRequestDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaggageAddedResponseDto'
+          description: Maleta agregada
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      security:
+        - bearer: []
+      summary: Agregar equipaje extra
+      tags:
+        - Postventa (Maletas, Fechas y Cancelaciones)
+  /bookings/{bookingId}/baggage-options:
+    get:
+      description: >-
+        Scope de referencia: flights:read. Por pasajero y tramo: precio de una maleta, máximo permitido y las ya compradas. Los bebés en
+        brazos no compran equipaje.
+      operationId: VuelosController_getBaggageOptions
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/BaggageOptionDto'
+                type: array
+          description: Tarifas y límites de maletas
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Opciones y precio del equipaje extra
+      tags:
+        - Postventa (Maletas, Fechas y Cancelaciones)
+  /bookings/{bookingId}/boarding-passes:
+    get:
+      description: >-
+        Scope de referencia: flights:read. Uno por pasajero con asiento y tramo, con su grupo y posición de embarque y un código QR firmado
+        (sin datos personales). Antes del check-in responde 404 BOARDING_PASS_NOT_AVAILABLE.
+      operationId: VuelosController_getBoardingPasses
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardingPassListResponseDto'
+          description: Pases de abordar disponibles
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Pases de abordar
+      tags:
+        - Check-in y Boarding Pass
+  /bookings/{bookingId}/cancel:
+    post:
+      description: >-
+        Scope de referencia: flights:cancel. Una sola transacción: la reserva pasa a CANCELLED, los billetes a REFUNDED (o VOIDED si no hay
+        nada que devolver), los asientos y cupos vuelven al inventario. El reembolso se ejecuta en la pasarela y la orden del e-commerce
+        pasa a REEMBOLSADA.
+      operationId: VuelosController_cancelBooking
+      parameters:
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequestDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelBookingResponseDto'
+          description: Cancelación exitosa
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+      security:
+        - bearer: []
+      summary: Cancelar la reserva
+      tags:
+        - Postventa (Maletas, Fechas y Cancelaciones)
+  /bookings/{bookingId}/cancellation-quote:
+    get:
+      description: >-
+        Scope de referencia: flights:read. Tarifa reembolsable (FULL): el total menos 10 % de penalidad; no reembolsable (BASIC/LIGHT): solo
+        los impuestos; el equipaje extra se devuelve completo. La cotización vive 15 minutos. No se cancela un vuelo que ya salió ni a menos
+        de 3 h de la salida.
+      operationId: VuelosController_getCancellationQuote
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancellationQuoteResponseDto'
+          description: Cotización de cancelación
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Cotizar la cancelación
+      tags:
+        - Postventa (Maletas, Fechas y Cancelaciones)
+  /bookings/{bookingId}/check-in:
+    post:
+      description: >-
+        Scope de referencia: flights:book. Abre 48 h y cierra 1 h antes de la salida de cada tramo. Usa el asiento elegido o asigna el
+        primero libre; los bebés en brazos no llevan asiento. Repetirlo no cambia nada (no necesita Idempotency-Key).
+      operationId: VuelosController_checkIn
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInResponseDto'
+          description: Check-in realizado
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Hacer el check-in
+      tags:
+        - Check-in y Boarding Pass
+  /bookings/{bookingId}/date-change:
+    post:
+      description: >-
+        Scope de referencia: flights:book. Una sola transacción: toma los cupos del vuelo nuevo, devuelve los del viejo y actualiza la
+        reserva. Si hay algo que pagar, hay que enviar payment.paymentReference (de un solo uso). Los asientos se asignan a los pasajeros
+        que ocupan asiento en orden ascendente de passengerId.
+      operationId: VuelosController_confirmDateChange
+      parameters:
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DateChangeRequestDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetailResponseDto'
+          description: Cambio confirmado
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      security:
+        - bearer: []
+      summary: Confirmar el cambio de fecha
+      tags:
+        - Postventa (Maletas, Fechas y Cancelaciones)
+  /bookings/{bookingId}/date-change/search:
+    post:
+      description: >-
+        Scope de referencia: flights:read. Solo tarifas que permiten cambios. Devuelve vuelos directos de la misma ruta con cupo, con la
+        diferencia de tarifa e impuestos más el cargo de cambio; cada opción vive 15 minutos.
+      operationId: VuelosController_searchDateChange
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DateChangeSearchRequestDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/DateChangeOptionDto'
+                type: array
+          description: Opciones de cambio
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Buscar opciones de cambio de fecha
+      tags:
+        - Postventa (Maletas, Fechas y Cancelaciones)
+  /bookings/{bookingId}/tickets:
+    get:
+      description: 'Scope de referencia: flights:read.'
+      operationId: VuelosController_getBookingTickets
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TicketResponseDto'
+                type: array
+          description: Tickets asociados a la reserva
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Consultar tickets de una reserva
+      tags:
+        - Reservas y Emisión
+  /bookings/{bookingId}/tickets/{ticketId}:
+    get:
+      description: 'Scope de referencia: flights:read.'
+      operationId: VuelosController_getTicketDetail
+      parameters:
+        - in: path
+          name: bookingId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: path
+          name: ticketId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponseDto'
+          description: Detalle del ticket
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Consultar un ticket
+      tags:
+        - Reservas y Emisión
+  /clientes:
+    post:
+      description: 'RF-IAM-001/002: cuenta gratuita vinculada a un número LATAM Pass; se envía un correo de verificación.'
+      operationId: ClientesController_registrar
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroClienteDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      summary: Registrar una cuenta
+      tags:
+        - E-commerce · Identidad
+  /clientes/{id}:
+    get:
+      description: Use "me" como id para la cuenta de la sesión.
+      operationId: ClientesController_obtener
+      parameters:
+        - description: Id del cliente o el alias "me".
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Perfil del cliente
+      tags:
+        - E-commerce · Identidad
+  /clientes/{id}/ordenes:
+    get:
+      description: 'RF-ORD-011: más recientes primero, paginado por cursor. Use "me" como id.'
+      operationId: ClienteOrdenesController_historial
+      parameters:
+        - description: Id del cliente o el alias "me".
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            default: 20
+            maximum: 50
+            minimum: 1
+            type: number
+        - description: Cursor opaco de la página anterior.
+          in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrdenesPaginaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Historial de órdenes del cliente
+      tags:
+        - E-commerce · Compra y órdenes
+    post:
+      description: >-
+        Con el número de orden o el código de reserva y un apellido de los pasajeros. Solo se puede reclamar un viaje que aún no pertenece a
+        ninguna cuenta; a partir de ahí aparece en el historial.
+      operationId: ClienteOrdenesController_vincular
+      parameters:
+        - description: Id del cliente o el alias "me".
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VincularOrdenDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrdenViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Demasiadas peticiones
+      security:
+        - bearer: []
+      summary: Agregar a mi cuenta un viaje comprado como invitado
+      tags:
+        - E-commerce · Compra y órdenes
+  /clientes/{id}/preferencias:
+    put:
+      description: RF-IAM-009, RN-35.
+      operationId: ClientesController_actualizarPreferencias
+      parameters:
+        - description: Id del cliente o el alias "me".
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferenciasDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClienteViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      security:
+        - bearer: []
+      summary: Preferencias de notificación, idioma, mercado y consentimiento
+      tags:
+        - E-commerce · Identidad
+  /disponibilidad:
+    get:
+      description: >-
+        RF-SHP-004..024. Los criterios son los parámetros del enlace profundo (origin, destination, outbound, inbound, adt, chd, inf, trip,
+        cabin, sort). Un trayecto sin vuelos se devuelve vacío con fechas alternativas, no como error. Solo vuelos directos en cabina
+        económica.
+      operationId: CatalogoController_disponibilidad
+      parameters:
+        - description: Origen. Si se omite, cualquier origen.
+          in: query
+          name: origin
+          required: false
+          schema:
+            example: BOG
+            type: string
+        - description: Destino. Si se omite, cualquier destino.
+          in: query
+          name: destination
+          required: false
+          schema:
+            example: SCL
+            type: string
+        - description: Fecha de ida. Si se omite, mañana.
+          in: query
+          name: outbound
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: Fecha de vuelta (ida y vuelta)
+          in: query
+          name: inbound
+          required: false
+          schema:
+            format: date
+            type: string
+        - in: query
+          name: adt
+          required: false
+          schema:
+            default: 1
+            maximum: 50
+            minimum: 1
+            type: number
+        - description: Niños
+          in: query
+          name: chd
+          required: false
+          schema:
+            default: 0
+            maximum: 50
+            minimum: 0
+            type: number
+        - description: Infantes sin asiento
+          in: query
+          name: inf
+          required: false
+          schema:
+            default: 0
+            maximum: 50
+            minimum: 0
+            type: number
+        - description: RT ida y vuelta; OW solo ida. Se infiere de `inbound` si se omite.
+          in: query
+          name: trip
+          required: false
+          schema:
+            enum:
+              - RT
+              - OW
+            type: string
+        - in: query
+          name: cabin
+          required: false
+          schema:
+            default: ECONOMY
+            enum:
+              - ECONOMY
+              - PREMIUM_ECONOMY
+              - BUSINESS
+              - FIRST
+            type: string
+        - in: query
+          name: sort
+          required: false
+          schema:
+            default: RECOMENDADO
+            enum:
+              - RECOMENDADO
+              - MAS_BARATOS
+              - MAS_RAPIDOS
+              - SALIDA_TEMPRANO
+              - SALIDA_TARDE
+              - LLEGADA_TEMPRANO
+              - LLEGADA_TARDE
+            type: string
+        - in: query
+          name: mercado
+          required: false
+          schema:
+            default: ec
+            example: ec
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisponibilidadViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Servicio no disponible
+      summary: Buscar vuelos disponibles
+      tags:
+        - E-commerce · Búsqueda
+  /flights/{flightNumber}/status:
+    get:
+      operationId: VuelosController_getFlightStatus
+      parameters:
+        - in: path
+          name: flightNumber
+          required: true
+          schema:
+            example: LA800
+            pattern: ^[A-Z0-9]{2}\d{1,4}$
+            type: string
+        - description: 'Departure day. If omitted: today, or the next departure of that flight.'
+          in: query
+          name: date
+          required: false
+          schema:
+            format: date
+            type: string
+      responses:
+        '200':
+          description: Estado operativo del vuelo
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      summary: Consultar estado de un vuelo
+      tags:
+        - Estado de Vuelos
+  /health:
+    get:
+      description: 200 si la API alcanza su base de datos; 503 si no.
+      operationId: HealthController_salud
+      parameters: []
+      responses:
+        '200':
+          description: UP
+        '503':
+          description: DOWN
+      summary: Estado del servicio
+      tags:
+        - Sistema
+  /itinerarios/{id}/tarifas:
+    get:
+      description: 'RF-PRC-002/003/005/009: precios con impuestos por pasajero, condiciones estructuradas y vigencia.'
+      operationId: CatalogoController_tarifas
+      parameters:
+        - description: itinerarioId devuelto por /disponibilidad
+          in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: query
+          name: mercado
+          required: false
+          schema:
+            default: ec
+            example: ec
+            type: string
+        - in: query
+          name: adt
+          required: false
+          schema:
+            default: 1
+            maximum: 50
+            minimum: 1
+            type: number
+        - in: query
+          name: chd
+          required: false
+          schema:
+            default: 0
+            maximum: 50
+            minimum: 0
+            type: number
+        - in: query
+          name: inf
+          required: false
+          schema:
+            default: 0
+            maximum: 50
+            minimum: 0
+            type: number
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TarifasViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Servicio no disponible
+      summary: Comparar las familias tarifarias de un itinerario
+      tags:
+        - E-commerce · Búsqueda
+  /localidades:
+    get:
+      description: 'RF-SHP-001/002: prefijo sobre código, ciudad y aeropuerto, sin distinguir acentos ni mayúsculas.'
+      operationId: CatalogoController_sugerir
+      parameters:
+        - description: Prefijo del código IATA, la ciudad o el aeropuerto (sin distinguir acentos ni mayúsculas). Si se omite, lista todas.
+          in: query
+          name: q
+          required: false
+          schema:
+            example: bog
+            type: string
+        - in: query
+          name: mercado
+          required: false
+          schema:
+            example: ec
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/LocalidadViewDto'
+                type: array
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+      summary: Sugerir ciudades y aeropuertos
+      tags:
+        - E-commerce · Búsqueda
+  /mercados/{codigo}:
+    get:
+      description: 'RF-MKT-001/005/006/008: moneda, idiomas, productos del buscador, medios de pago y textos legales del portal.'
+      operationId: MercadosController_obtener
+      parameters:
+        - description: Código de mercado (ruta del portal)
+          in: path
+          name: codigo
+          required: true
+          schema:
+            example: ec
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MercadoViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      summary: Configuración vigente del mercado
+      tags:
+        - E-commerce · Mercados
+  /ofertas:
+    post:
+      description: >-
+        RF-CRT-001: consolida los trayectos elegidos (ida y, si aplica, vuelta), su familia y la composición de pasajeros, fija el mercado y
+        la moneda (RN-01) y retiene el inventario hasta `venceEn`. Requiere sesión: de cliente o de invitado (POST /auth/invitado).
+      operationId: OfertasController_armar
+      parameters:
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArmarOfertaDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Demasiadas peticiones
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Servicio no disponible
+      security:
+        - bearer: []
+      summary: Armar una oferta de viaje
+      tags:
+        - E-commerce · Ofertas y checkout
+  /ofertas/{id}:
+    delete:
+      operationId: OfertasController_cancelar
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Descartar la oferta y liberar el inventario
+      tags:
+        - E-commerce · Ofertas y checkout
+    get:
+      description: 'RF-CRT-004/006: resumen con total persistente, vigencia y lo que falta antes de pagar.'
+      operationId: OfertasController_obtener
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Consultar una oferta vigente
+      tags:
+        - E-commerce · Ofertas y checkout
+  /ofertas/{id}/aceptacion-precio:
+    post:
+      operationId: OfertasController_aceptarPrecio
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AceptarPrecioDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+      security:
+        - bearer: []
+      summary: Aceptar el nuevo precio tras una revalidación
+      tags:
+        - E-commerce · Ofertas y checkout
+  /ofertas/{id}/asientos:
+    get:
+      description: >-
+        Asientos de un trayecto (economía) y cuáles están libres. Es solo orientativo: el asiento se reserva al emitir la compra y, si otra
+        persona lo toma antes, la compra responde SEAT_TAKEN.
+      operationId: OfertasController_asientos
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: itinerarioId de uno de los trayectos de la oferta.
+          in: query
+          name: trayectoId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapaAsientosViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+      security:
+        - bearer: []
+      summary: Mapa de asientos de un trayecto de la oferta
+      tags:
+        - E-commerce · Ofertas y checkout
+  /ofertas/{id}/compra:
+    post:
+      description: >-
+        SRS §8.4 (pagarYEmitirOrden): revalida el precio, autoriza el pago (antifraude + pasarela), crea la orden y emite la reserva y los
+        billetes en una sola transacción, y captura el cobro. Si la emisión falla después de autorizar el pago, la autorización se anula
+        automáticamente (RN-19). Un reintento con la misma Idempotency-Key devuelve el resultado original y nunca cobra dos veces
+        (RF-PAY-008). Un pago rechazado devuelve 402 y la oferta sigue vigente para probar otro medio (RF-PAY-009).
+      operationId: ComprasController_comprar
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompraDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrdenViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '402':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Error
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Demasiadas peticiones
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Error
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Servicio no disponible
+      security:
+        - bearer: []
+      summary: Pagar y emitir la orden
+      tags:
+        - E-commerce · Compra y órdenes
+  /ofertas/{id}/condiciones:
+    post:
+      description: 'RF-CHK-012: se registra la versión aceptada y la fecha; debe ser la vigente del mercado.'
+      operationId: OfertasController_condiciones
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AceptarCondicionesDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+      security:
+        - bearer: []
+      summary: Aceptar las condiciones
+      tags:
+        - E-commerce · Ofertas y checkout
+  /ofertas/{id}/facturacion:
+    put:
+      description: 'RF-CHK-011: los tipos de identificación y su formato salen de la configuración del mercado.'
+      operationId: OfertasController_facturacion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FacturacionDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      security:
+        - bearer: []
+      summary: Registrar los datos de facturación
+      tags:
+        - E-commerce · Ofertas y checkout
+  /ofertas/{id}/medios-pago:
+    get:
+      description: 'RF-PAY-001/002: según el mercado y el producto.'
+      operationId: OfertasController_medios
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MedioPagoViewDto'
+                type: array
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Medios de pago habilitados para la oferta
+      tags:
+        - E-commerce · Ofertas y checkout
+  /ofertas/{id}/pasajeros:
+    put:
+      description: >-
+        RF-CHK-002..010: valida la composición, normaliza los nombres, comprueba el tipo según la edad el día del primer vuelo (RN-14),
+        duplicados, infantes y el vencimiento del documento. Los datos personales se guardan cifrados.
+      operationId: OfertasController_pasajeros
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarPasajerosDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfertaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      security:
+        - bearer: []
+      summary: Registrar pasajeros y contacto
+      tags:
+        - E-commerce · Ofertas y checkout
+  /ofertas/{id}/revalidacion:
+    post:
+      description: 'RF-CRT-003 / RN-12: si el precio cambió, la oferta queda en revisión hasta que el cliente acepte el nuevo total.'
+      operationId: OfertasController_revalidar
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevalidacionViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+      security:
+        - bearer: []
+      summary: Revalidar precio y disponibilidad
+      tags:
+        - E-commerce · Ofertas y checkout
+  /offers/hold:
+    post:
+      description: 'Scope de referencia: flights:hold. Descuenta los asientos del inventario hasta que el hold expire, se libere o se consuma.'
+      operationId: VuelosController_holdOffer
+      parameters:
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HoldRequestDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldResponseDto'
+          description: Inventario retenido. Devuelve precio congelado.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      security:
+        - bearer: []
+      summary: Bloquear inventario
+      tags:
+        - Bloqueo de Cupos (Hold)
+  /offers/hold/{holdId}:
+    delete:
+      description: 'Scope de referencia: flights:hold. Idempotente; devuelve los asientos al inventario.'
+      operationId: VuelosController_releaseHold
+      parameters:
+        - in: path
+          name: holdId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '204':
+          description: Liberado exitosamente
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+      security:
+        - bearer: []
+      summary: Liberar hold anticipadamente
+      tags:
+        - Bloqueo de Cupos (Hold)
+    get:
+      description: 'Scope de referencia: flights:read.'
+      operationId: VuelosController_getHoldStatus
+      parameters:
+        - in: path
+          name: holdId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldStatusResponseDto'
+          description: Estado del hold
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Consultar estado de un hold
+      tags:
+        - Bloqueo de Cupos (Hold)
+  /offers/{offerId}/seatmap:
+    get:
+      description: >-
+        Muestra los asientos ya emitidos (reservados por una reserva confirmada). Un hold no fija asientos concretos: dos clientes pueden
+        elegir el mismo asiento libre y el perdedor recibe 409 `SEAT_TAKEN` al confirmar la reserva, sin cobro. Es un mapa de cabina, no una
+        reserva de inventario.
+      operationId: VuelosController_getSeatmap
+      parameters:
+        - in: path
+          name: offerId
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - description: 'segmentId of one of the offer itineraries. If omitted: the first one.'
+          in: query
+          name: segmentId
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Mapa de asientos
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '410':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Recurso expirado (Hold o Cotización)
+      summary: Obtener mapa de asientos por segmento
+      tags:
+        - Búsqueda y Catálogo
+  /ordenes:
+    get:
+      description: 'RF-ORD-010 / RF-CHK-001: acceso público para quien compró sin cuenta. No devuelve datos de contacto y limita los intentos por IP.'
+      operationId: OrdenesController_recuperar
+      parameters:
+        - in: query
+          name: numero
+          required: false
+          schema:
+            example: ORD-7K3M9PQ2XA
+            type: string
+        - description: Código de reserva (PNR)
+          in: query
+          name: pnr
+          required: false
+          schema:
+            example: ABC123
+            type: string
+        - description: Apellido de cualquier pasajero.
+          in: query
+          name: apellido
+          required: true
+          schema:
+            example: Tapia
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrdenViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Demasiadas peticiones
+      summary: Recuperar un viaje con número de orden o PNR y apellido
+      tags:
+        - E-commerce · Compra y órdenes
+  /ordenes/{numero}:
+    get:
+      operationId: OrdenesController_obtener
+      parameters:
+        - description: Número de orden
+          in: path
+          name: numero
+          required: true
+          schema:
+            example: ORD-7K3M9PQ2XA
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrdenViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Consultar una orden propia
+      tags:
+        - E-commerce · Compra y órdenes
+  /search:
+    post:
+      description: Vuelos directos. Se devuelven como máximo OFFER_MAX_COMBINATIONS ofertas (por defecto 5), las más baratas primero.
+      operationId: VuelosController_search
+      parameters:
+        - in: header
+          name: x-device-fingerprint
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Device-Fingerprint
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequestDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponseDto'
+          description: Ofertas de vuelos encontradas
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Servicio no disponible
+      summary: Búsqueda de vuelos (Multidestino)
+      tags:
+        - Búsqueda y Catálogo
+  /tickets/verificar:
+    get:
+      description: >-
+        Acceso público: quien escanea el QR de un pasajero ve si el billete es auténtico y está emitido, con el vuelo y el estado. La firma
+        (HMAC) impide inventar o alterar códigos; no devuelve nombres ni contacto. Limita los intentos por IP.
+      operationId: VerificacionBilletesController_verificar
+      parameters:
+        - description: Texto del código QR de un billete.
+          in: query
+          name: codigo
+          required: true
+          schema:
+            example: v1.1234567890123.ABC234.abcdefghijklmnopqrstuv
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificacionBilleteViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Demasiadas peticiones
+      summary: Verificar un billete a partir de su código QR
+      tags:
+        - E-commerce · Verificación de billetes
+  /webhooks:
+    get:
+      description: 'Scope de referencia: flights:webhooks. El secreto nunca se devuelve.'
+      operationId: VuelosController_listWebhooks
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/WebhookSubscriptionViewDto'
+                type: array
+          description: Suscripciones activas
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+      security:
+        - bearer: []
+      summary: Listar mis suscripciones
+      tags:
+        - Webhooks
+    post:
+      description: >-
+        Scope de referencia: flights:webhooks. Solo URLs https que resuelvan a direcciones públicas (se rechazan localhost y redes
+        privadas). Cada entrega es un POST con X-Webhook-Id, X-Webhook-Event, X-Webhook-Timestamp y X-Webhook-Signature =
+        sha256=HMAC(secret, timestamp.cuerpo); se reintenta 5 veces (1 min, 5 min, 30 min, 2 h, 6 h). Máximo 10 por cuenta.
+      operationId: VuelosController_registerWebhook
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSubscriptionDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscriptionViewDto'
+          description: Webhook registrado
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      security:
+        - bearer: []
+      summary: Registrar un webhook
+      tags:
+        - Webhooks
+  /webhooks/{id}:
+    delete:
+      description: 'Scope de referencia: flights:webhooks. Las entregas pendientes de esa suscripción se descartan.'
+      operationId: VuelosController_deleteWebhook
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '204':
+          description: Eliminado
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Eliminar un webhook
+      tags:
+        - Webhooks
+components:
+  schemas:
+    AceptarCondicionesDto:
+      properties:
+        versionCondicionesTransporte:
+          example: 2026-10
+          type: string
+        versionTerminos:
+          description: Versión de los términos que el comprador vio (debe ser la vigente del mercado).
+          example: 2026-10
+          type: string
+      required:
+        - versionTerminos
+        - versionCondicionesTransporte
+      type: object
+    AceptarPrecioDto:
+      properties:
+        totalAceptado:
+          description: El nuevo total, tal como lo devolvió la revalidación.
+          example: '1371000'
+          type: string
+      required:
+        - totalAceptado
+      type: object
+    ActualizarMercadoDto:
+      properties:
+        activo:
+          type: boolean
+        identificacionesFiscales:
+          items:
+            $ref: '#/components/schemas/IdentificacionFiscalDto'
+          type: array
+        mediosPago:
+          items:
+            $ref: '#/components/schemas/MedioPagoDto'
+          type: array
+        nombre:
+          type: string
+        productosBuscador:
+          example:
+            - VUELOS
+            - ALOJAMIENTOS
+          items:
+            type: string
+          type: array
+        reglasRegulatorias:
+          $ref: '#/components/schemas/ReglasRegulatoriasDto'
+        textosLegales:
+          $ref: '#/components/schemas/TextosLegalesDto'
+        tipoCambioDesdeUsd:
+          description: Unidades de la moneda del mercado por 1 USD.
+          type: number
+        versionEsperada:
+          description: Versión del mercado sobre la que se basa la edición (control optimista).
+          type: number
+      required:
+        - versionEsperada
+      type: object
+    AddBaggageRequestDto:
+      properties:
+        itineraryId:
+          description: itineraryId of the leg the bags travel on.
+          format: uuid
+          type: string
+        passengerId:
+          description: passengerId chosen in the booking request.
+          type: string
+        payment:
+          $ref: '#/components/schemas/PaymentReferenceDto'
+        quantity:
+          description: El tope real lo fija POSTSALE_BAGGAGE_MAX_PER_LEG (409 BAGGAGE_LIMIT_EXCEEDED).
+          maximum: 10
+          minimum: 1
+          type: number
+      required:
+        - passengerId
+        - itineraryId
+        - quantity
+        - payment
+      type: object
+    AdminAccionVueloViewDto:
+      properties:
+        codigoVuelo:
+          example: LA800
+          type: string
+        estado:
+          enum:
+            - SCHEDULED
+            - CANCELLED
+          type: string
+        eventos:
+          description: Eventos de webhook emitidos.
+          items:
+            type: string
+          type: array
+        reservasAfectadas:
+          description: Reservas confirmadas que tenían este vuelo y fueron actualizadas o canceladas.
+          type: number
+        salida:
+          type: string
+        vueloId:
+          format: uuid
+          type: string
+      required:
+        - vueloId
+        - codigoVuelo
+        - estado
+        - salida
+        - reservasAfectadas
+        - eventos
+      type: object
+    AdminActualizarVueloDto:
+      properties:
+        aerolinea:
+          example: LATAM Airlines
+          type: string
+        capacidadTotal:
+          description: No puede ser menor que los asientos ya vendidos ni dejar asientos numerados fuera de la cabina.
+          maximum: 400
+          minimum: 1
+          type: number
+        duracionMinutos:
+          description: Recalcula la llegada conservando la salida.
+          maximum: 1500
+          minimum: 20
+          type: number
+        precioBaseUsd:
+          description: Tarifa base por adulto en USD. No afecta a las reservas ya hechas.
+          example: 340
+          type: number
+      type: object
+    AdminAsientoMapaDto:
+      properties:
+        characteristics:
+          items:
+            type: string
+          type: array
+        isAvailable:
+          type: boolean
+        seatNumber:
+          example: 12A
+          type: string
+      required:
+        - seatNumber
+        - isAvailable
+        - characteristics
+      type: object
+    AdminAsientoReservadoDto:
+      properties:
+        asiento:
+          example: 12A
+          type: string
+        numeroOrden:
+          description: Orden del e-commerce, si la reserva salió de una.
+          example: ORD-7K3M9PQ2XA
+          nullable: true
+          type: string
+        pnr:
+          description: Código de reserva que lo tiene (sin nombres).
+          example: ABC234
+          type: string
+      required:
+        - asiento
+        - pnr
+      type: object
+    AdminAsientosVueloDto:
+      properties:
+        capacidadTotal:
+          type: number
+        codigoVuelo:
+          example: LA800
+          type: string
+        destino:
+          example: SCL
+          type: string
+        filas:
+          description: Mapa completo de la cabina con la disponibilidad de cada asiento.
+          items:
+            $ref: '#/components/schemas/AdminFilaMapaDto'
+          type: array
+        origen:
+          example: BOG
+          type: string
+        reservados:
+          description: Asientos reservados, por número.
+          items:
+            $ref: '#/components/schemas/AdminAsientoReservadoDto'
+          type: array
+        salida:
+          type: string
+        vueloId:
+          format: uuid
+          type: string
+      required:
+        - vueloId
+        - codigoVuelo
+        - origen
+        - destino
+        - salida
+        - capacidadTotal
+        - reservados
+        - filas
+      type: object
+    AdminCambiarRolesDto:
+      properties:
+        roles:
+          description: Roles que debe tener el usuario. CUSTOMER siempre se conserva.
+          example:
+            - CUSTOMER
+            - ADMIN
+          items:
+            enum:
+              - CUSTOMER
+              - ADMIN
+            type: string
+          type: array
+      required:
+        - roles
+      type: object
+    AdminCancelarVueloDto:
+      properties:
+        motivo:
+          example: Falla técnica de la aeronave
+          type: string
+      type: object
+    AdminCrearUsuarioDto:
+      properties:
+        apellidos:
+          type: string
+        contrasena:
+          description: Mínimo 10 caracteres, con al menos una letra y un número.
+          minLength: 10
+          type: string
+        correo:
+          format: email
+          type: string
+        fechaNacimiento:
+          format: date
+          type: string
+        nombres:
+          type: string
+        roles:
+          default:
+            - CUSTOMER
+          description: Todo usuario conserva CUSTOMER; agrega ADMIN para crear un administrador.
+          items:
+            enum:
+              - CUSTOMER
+              - ADMIN
+            type: string
+          type: array
+        telefono:
+          description: E.164
+          example: '+593999999999'
+          type: string
+      required:
+        - correo
+        - contrasena
+        - nombres
+        - apellidos
+        - fechaNacimiento
+      type: object
+    AdminCrearVueloDto:
+      properties:
+        aerolinea:
+          example: LATAM Airlines
+          type: string
+        capacidad:
+          default: 180
+          description: Asientos de la cabina; todos quedan disponibles.
+          example: 180
+          maximum: 400
+          minimum: 1
+          type: number
+        codigoVuelo:
+          description: Dos caracteres de aerolínea y 1 a 4 dígitos. Los dos primeros son el código de la aerolínea.
+          example: LA900
+          type: string
+        destino:
+          example: SCL
+          type: string
+        duracionMinutos:
+          example: 300
+          maximum: 1500
+          minimum: 20
+          type: number
+        origen:
+          description: Código IATA, debe existir en el catálogo de localidades.
+          example: BOG
+          type: string
+        precioBaseUsd:
+          description: Tarifa base por adulto en USD, antes de familia e impuestos.
+          example: 320
+          type: number
+        salida:
+          description: Salida (UTC), en el futuro.
+          example: '2026-11-20T14:30:00.000Z'
+          type: string
+      required:
+        - codigoVuelo
+        - aerolinea
+        - origen
+        - destino
+        - salida
+        - duracionMinutos
+        - precioBaseUsd
+      type: object
+    AdminFilaMapaDto:
+      properties:
+        rowNumber:
+          type: number
+        seats:
+          items:
+            $ref: '#/components/schemas/AdminAsientoMapaDto'
+          type: array
+      required:
+        - rowNumber
+        - seats
+      type: object
+    AdminOrdenViewDto:
+      properties:
+        _links:
+          additionalProperties:
+            format: uri
+            type: string
+          description: HATEOAS links (Richardson Maturity Model Level 3)
+          type: object
+        bookingId:
+          description: >-
+            Reserva del núcleo de vuelos tras la emisión: es el `bookingId` de las rutas de equipaje, cambio, cancelación, check-in y pases.
+            Solo en la vista del propietario.
+          format: uuid
+          type: string
+        canal:
+          type: string
+        clienteId:
+          description: Cuenta del comprador; null si compró como invitado.
+          format: uuid
+          nullable: true
+          type: string
+        comprador:
+          enum:
+            - cliente
+            - invitado
+          type: string
+        contacto:
+          description: Solo en la vista del propietario; la recuperación pública lo enmascara.
+          type: object
+        creadaEn:
+          type: string
+        estado:
+          enum:
+            - PENDIENTE_PAGO
+            - PAGO_EN_VERIFICACION
+            - PAGADA
+            - EMITIDA
+            - FALLIDA_COMPENSADA
+            - MODIFICADA
+            - DEVOLUCION_EN_CURSO
+            - REEMBOLSADA
+            - EN_VIAJE
+            - COMPLETADA
+            - EXPIRADA
+          type: string
+        historial:
+          items:
+            type: string
+          type: array
+        itinerarios:
+          items:
+            $ref: '#/components/schemas/ItinerarioOrdenDto'
+          type: array
+        mercado:
+          type: string
+        numeroOrden:
+          example: ORD-7K3M9PQ2XA
+          type: string
+        ordenId:
+          format: uuid
+          type: string
+        pago:
+          type: object
+        pasajeros:
+          items:
+            $ref: '#/components/schemas/PasajeroOrdenViewDto'
+          type: array
+        pnr:
+          description: Localizador de la reserva (RN-20).
+          nullable: true
+          type: string
+        total:
+          $ref: '#/components/schemas/MontoDto'
+      required:
+        - ordenId
+        - numeroOrden
+        - estado
+        - mercado
+        - total
+        - itinerarios
+        - pasajeros
+        - pago
+        - creadaEn
+        - historial
+        - comprador
+        - canal
+      type: object
+    AdminOrdenesPaginaDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AdminOrdenViewDto'
+          type: array
+        nextCursor:
+          type: string
+      required:
+        - items
+      type: object
+    AdminReprogramarVueloDto:
+      properties:
+        motivo:
+          example: Cambio de franja operativa
+          type: string
+        nuevaSalida:
+          description: Nueva hora de salida (UTC), en el futuro. La llegada se recalcula conservando la duración.
+          example: '2026-11-20T14:30:00.000Z'
+          type: string
+      required:
+        - nuevaSalida
+      type: object
+    AdminUsuarioViewDto:
+      properties:
+        apellidos:
+          type: string
+        bloqueada:
+          description: La cuenta está bloqueada temporalmente por intentos fallidos de inicio de sesión.
+          type: boolean
+        clienteId:
+          format: uuid
+          type: string
+        correo:
+          type: string
+        correoVerificado:
+          type: boolean
+        creadoEn:
+          type: string
+        nombres:
+          type: string
+        roles:
+          items:
+            enum:
+              - CUSTOMER
+              - ADMIN
+            type: string
+          type: array
+      required:
+        - clienteId
+        - correo
+        - nombres
+        - apellidos
+        - roles
+        - correoVerificado
+        - bloqueada
+        - creadoEn
+      type: object
+    AdminUsuariosPaginaDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AdminUsuarioViewDto'
+          type: array
+        limite:
+          type: number
+        pagina:
+          type: number
+        total:
+          type: number
+      required:
+        - items
+        - total
+        - pagina
+        - limite
+      type: object
+    AdminVueloViewDto:
+      properties:
+        aerolinea:
+          type: string
+        asientosDisponibles:
+          type: number
+        asientosReservados:
+          description: Asientos con número ya reservados (los pasajeros que no eligieron asiento no cuentan).
+          type: number
+        capacidadTotal:
+          type: number
+        codigoVuelo:
+          example: LA800
+          type: string
+        destino:
+          example: SCL
+          type: string
+        duracionMinutos:
+          type: number
+        estado:
+          description: Un vuelo cancelado está cerrado a la venta y ya no admite ediciones.
+          enum:
+            - SCHEDULED
+            - CANCELLED
+          type: string
+        llegada:
+          type: string
+        origen:
+          example: BOG
+          type: string
+        precioBaseUsd:
+          description: Tarifa base por adulto en USD, antes de familia e impuestos.
+          type: number
+        salida:
+          type: string
+        vueloId:
+          format: uuid
+          type: string
+      required:
+        - vueloId
+        - codigoVuelo
+        - aerolinea
+        - origen
+        - destino
+        - salida
+        - llegada
+        - duracionMinutos
+        - precioBaseUsd
+        - asientosDisponibles
+        - capacidadTotal
+        - asientosReservados
+        - estado
+      type: object
+    AdminVuelosPaginaDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AdminVueloViewDto'
+          type: array
+        nextCursor:
+          type: string
+      required:
+        - items
+      type: object
+    ArmarOfertaDto:
+      properties:
+        mercado:
+          description: Mercado fijado al iniciar la transacción (RN-01).
+          example: ec
+          type: string
+        pasajeros:
+          $ref: '#/components/schemas/ComposicionDto'
+        selecciones:
+          description: Ida, y vuelta si es ida y vuelta, en ese orden.
+          items:
+            $ref: '#/components/schemas/SeleccionTrayectoDto'
+          maxItems: 2
+          minItems: 1
+          type: array
+      required:
+        - mercado
+        - selecciones
+        - pasajeros
+      type: object
+    AsientoElegidoDto:
+      properties:
+        asiento:
+          example: 12A
+          type: string
+        trayectoId:
+          description: itinerarioId del trayecto de la oferta donde se elige el asiento.
+          format: uuid
+          type: string
+      required:
+        - trayectoId
+        - asiento
+      type: object
+    AsientoOrdenViewDto:
+      properties:
+        asiento:
+          example: 12A
+          type: string
+        numeroVuelo:
+          example: LA800
+          type: string
+      required:
+        - numeroVuelo
+        - asiento
+      type: object
+    AsientoViewDto:
+      properties:
+        characteristics:
+          example:
+            - WINDOW
+          items:
+            type: string
+          type: array
+        isAvailable:
+          type: boolean
+        seatNumber:
+          example: 12A
+          type: string
+      required:
+        - seatNumber
+        - isAvailable
+        - characteristics
+      type: object
+    BaggageAddedResponseDto:
+      properties:
+        itineraryId:
+          format: uuid
+          type: string
+        passengerId:
+          type: string
+        totalBaggage:
+          description: Extra bags the passenger now has on this leg.
+          type: number
+      required:
+        - passengerId
+        - itineraryId
+        - totalBaggage
+      type: object
+    BaggageAllowanceDto:
+      properties:
+        carryOnIncluded:
+          type: number
+        checkedBaggageIncluded:
+          type: number
+        personalItemIncluded:
+          type: boolean
+      required:
+        - personalItemIncluded
+        - carryOnIncluded
+        - checkedBaggageIncluded
+      type: object
+    BaggageOptionDto:
+      properties:
+        alreadyPurchased:
+          type: number
+        itineraryId:
+          format: uuid
+          type: string
+        maxAllowed:
+          description: Most extra bags the passenger can have on this leg; equals alreadyPurchased when the sale is closed.
+          type: number
+        passengerId:
+          type: string
+        price:
+          allOf:
+            - $ref: '#/components/schemas/MoneyAmountDto'
+          description: Price of one extra bag on this leg.
+      required:
+        - passengerId
+        - itineraryId
+        - price
+        - maxAllowed
+        - alreadyPurchased
+      type: object
+    BoardingPassDto:
+      properties:
+        barcode:
+          description: Signed text (bp1.<e-ticket>.<PNR>.<flight>.<seat>.<signature>); carries no personal data.
+          type: string
+        barcodeType:
+          enum:
+            - AZTEC
+            - PDF417
+            - QR
+          type: string
+        boardingGroup:
+          example: A
+          nullable: true
+          type: string
+        boardingPosition:
+          example: '7'
+          nullable: true
+          type: string
+        passengerId:
+          type: string
+        seat:
+          example: 12A
+          type: string
+        segmentId:
+          format: uuid
+          type: string
+      required:
+        - passengerId
+        - segmentId
+        - seat
+        - barcode
+        - barcodeType
+      type: object
+    BoardingPassListResponseDto:
+      properties:
+        boardingPasses:
+          items:
+            $ref: '#/components/schemas/BoardingPassDto'
+          type: array
+        bookingId:
+          format: uuid
+          type: string
+      required:
+        - bookingId
+        - boardingPasses
+      type: object
+    BookingDetailResponseDto:
+      properties:
+        bookingId:
+          format: uuid
+          type: string
+        changes:
+          description: History of changes (date changes, flight reschedules, cancellation).
+          items:
+            type: string
+          type: array
+        createdAt:
+          type: string
+        grandTotal:
+          $ref: '#/components/schemas/MoneyAmountDto'
+        pnr:
+          type: string
+        status:
+          enum:
+            - PENDING
+            - PENDING_PAYMENT
+            - TICKET_ISSUING
+            - CONFIRMED
+            - FAILED
+            - CHANGE_PENDING
+            - CANCELLATION_PENDING
+            - CANCELLED
+          type: string
+        tickets:
+          items:
+            $ref: '#/components/schemas/TicketResponseDto'
+          type: array
+        updatedAt:
+          type: string
+      required:
+        - bookingId
+        - pnr
+        - status
+        - grandTotal
+        - createdAt
+        - updatedAt
+      type: object
+    BookingListItemDto:
+      properties:
+        bookingId:
+          format: uuid
+          type: string
+        departureDate:
+          format: date
+          type: string
+        destination:
+          example: SCL
+          type: string
+        grandTotal:
+          $ref: '#/components/schemas/MoneyAmountDto'
+        origin:
+          example: BOG
+          type: string
+        pnr:
+          type: string
+        status:
+          enum:
+            - PENDING
+            - PENDING_PAYMENT
+            - TICKET_ISSUING
+            - CONFIRMED
+            - FAILED
+            - CHANGE_PENDING
+            - CANCELLATION_PENDING
+            - CANCELLED
+          type: string
+      required:
+        - bookingId
+        - pnr
+        - status
+        - origin
+        - destination
+        - departureDate
+        - grandTotal
+      type: object
+    BookingListResponseDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/BookingListItemDto'
+          type: array
+        nextCursor:
+          description: Present when another page exists.
+          type: string
+      required:
+        - items
+      type: object
+    BookingRequestDto:
+      properties:
+        holdId:
+          format: uuid
+          type: string
+        passengers:
+          items:
+            $ref: '#/components/schemas/PassengerItemDto'
+          type: array
+        payment:
+          $ref: '#/components/schemas/PaymentReferenceDto'
+      required:
+        - holdId
+        - passengers
+        - payment
+      type: object
+    CabinPricingDto:
+      properties:
+        availableSeats:
+          type: number
+        baggageAllowance:
+          $ref: '#/components/schemas/BaggageAllowanceDto'
+        cabinClass:
+          enum:
+            - ECONOMY
+            - PREMIUM_ECONOMY
+            - BUSINESS
+            - FIRST
+          type: string
+        fareBrand:
+          example: BASIC
+          type: string
+        fareRules:
+          $ref: '#/components/schemas/FareRulesDto'
+        pricePerPassengerType:
+          description: Unit price for every passenger type present in the request.
+          items:
+            $ref: '#/components/schemas/PricePerPassengerTypeDto'
+          type: array
+      required:
+        - cabinClass
+        - fareBrand
+        - availableSeats
+        - fareRules
+        - baggageAllowance
+        - pricePerPassengerType
+      type: object
+    CancelBookingRequestDto:
+      properties:
+        quoteId:
+          description: quoteId of a live cancellation quote of this booking.
+          format: uuid
+          type: string
+        reason:
+          type: string
+      required:
+        - quoteId
+      type: object
+    CancelBookingResponseDto:
+      properties:
+        bookingId:
+          format: uuid
+          type: string
+        currency:
+          example: USD
+          type: string
+        penaltyAmount:
+          example: '35.00'
+          type: string
+        refundAmount:
+          example: '315.00'
+          type: string
+        status:
+          example: CANCELLED
+          type: string
+      required:
+        - bookingId
+        - status
+        - refundAmount
+        - penaltyAmount
+        - currency
+      type: object
+    CancellationQuoteResponseDto:
+      properties:
+        currency:
+          example: USD
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        isRefundable:
+          description: 'The fare rule: false for a non-refundable fare (only the taxes come back).'
+          type: boolean
+        penaltyAmount:
+          example: '35.00'
+          type: string
+        quoteId:
+          format: uuid
+          type: string
+        refundAmount:
+          example: '315.00'
+          type: string
+      required:
+        - quoteId
+        - isRefundable
+        - refundAmount
+        - penaltyAmount
+        - currency
+        - expiresAt
+      type: object
+    CheckInResponseDto:
+      properties:
+        bookingId:
+          format: uuid
+          type: string
+        checkedInPassengers:
+          items:
+            $ref: '#/components/schemas/CheckedInPassengerDto'
+          type: array
+        status:
+          enum:
+            - NOT_ELIGIBLE
+            - AVAILABLE
+            - IN_PROGRESS
+            - COMPLETED
+            - FAILED
+          type: string
+      required:
+        - bookingId
+        - status
+        - checkedInPassengers
+      type: object
+    CheckInSegmentDto:
+      properties:
+        seat:
+          description: null for a lap infant.
+          example: 12A
+          nullable: true
+          type: string
+        segmentId:
+          format: uuid
+          type: string
+        status:
+          enum:
+            - CHECKED_IN
+            - NOT_CHECKED_IN
+            - FAILED
+          type: string
+      required:
+        - segmentId
+        - status
+      type: object
+    CheckedInPassengerDto:
+      properties:
+        passengerId:
+          type: string
+        segments:
+          items:
+            $ref: '#/components/schemas/CheckInSegmentDto'
+          type: array
+        status:
+          enum:
+            - CHECKED_IN
+            - NOT_CHECKED_IN
+            - FAILED
+          type: string
+      required:
+        - passengerId
+        - status
+        - segments
+      type: object
+    ClienteViewDto:
+      properties:
+        _links:
+          additionalProperties:
+            format: uri
+            type: string
+          description: HATEOAS links (Richardson Maturity Model Level 3)
+          type: object
+        apellidos:
+          type: string
+        canalNotificacion:
+          enum:
+            - EMAIL
+            - SMS
+            - PUSH
+            - WHATSAPP
+          type: string
+        clienteId:
+          format: uuid
+          type: string
+        consentimientoMarketing:
+          type: boolean
+        correo:
+          type: string
+        correoVerificado:
+          type: boolean
+        idioma:
+          type: string
+        mercado:
+          type: string
+        nombres:
+          type: string
+        numeroSocio:
+          description: Número LATAM Pass vinculado a la cuenta.
+          type: string
+      required:
+        - clienteId
+        - correo
+        - correoVerificado
+        - nombres
+        - apellidos
+        - numeroSocio
+        - mercado
+        - idioma
+        - canalNotificacion
+        - consentimientoMarketing
+      type: object
+    ComposicionDto:
+      properties:
+        adultos:
+          example: 1
+          maximum: 50
+          minimum: 1
+          type: number
+        infantes:
+          default: 0
+          description: Infantes sin asiento (no más que adultos).
+          maximum: 50
+          minimum: 0
+          type: number
+        jovenes:
+          default: 0
+          maximum: 50
+          minimum: 0
+          type: number
+        ninos:
+          default: 0
+          maximum: 50
+          minimum: 0
+          type: number
+      required:
+        - adultos
+      type: object
+    CompraDto:
+      properties:
+        cuotas:
+          default: 1
+          description: 'RF-PAY-010: cuotas, si el mercado las permite para pasajes.'
+          maximum: 36
+          minimum: 1
+          type: number
+        medio:
+          $ref: '#/components/schemas/MedioCompraDto'
+      required:
+        - medio
+      type: object
+    ContactoDto:
+      properties:
+        correo:
+          format: email
+          type: string
+        telefono:
+          description: E.164, con código de país (RF-CHK-005).
+          example: '+593999999999'
+          type: string
+      required:
+        - correo
+        - telefono
+      type: object
+    DateChangeOptionDto:
+      properties:
+        changeOfferId:
+          format: uuid
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+        priceDifference:
+          $ref: '#/components/schemas/PriceDifferenceDto'
+        segments:
+          items:
+            $ref: '#/components/schemas/FlightSegmentDto'
+          type: array
+      required:
+        - changeOfferId
+        - expiresAt
+        - segments
+        - priceDifference
+      type: object
+    DateChangeRequestDto:
+      properties:
+        assignedSeats:
+          description: Seats on the new flight; without them the passengers keep none (check-in assigns one).
+          items:
+            $ref: '#/components/schemas/SeatAssignmentDto'
+          type: array
+        changeOfferId:
+          format: uuid
+          type: string
+        payment:
+          allOf:
+            - $ref: '#/components/schemas/PaymentReferenceDto'
+          description: Required when the change has an amount to pay (totalToPay > 0). The reference is single-use.
+      required:
+        - changeOfferId
+      type: object
+    DateChangeSearchItemDto:
+      properties:
+        itineraryId:
+          format: uuid
+          type: string
+        newDepartureDate:
+          format: date
+          type: string
+      required:
+        - itineraryId
+        - newDepartureDate
+      type: object
+    DateChangeSearchRequestDto:
+      properties:
+        changes:
+          items:
+            $ref: '#/components/schemas/DateChangeSearchItemDto'
+          type: array
+      required:
+        - changes
+      type: object
+    DesistimientoDto:
+      properties: {}
+      type: object
+    DisponibilidadViewDto:
+      properties:
+        mercado:
+          type: string
+        moneda:
+          type: string
+        sinDisponibilidad:
+          description: 'RF-SHP-024: resultado vacío, distinto de un error.'
+          type: boolean
+        trayectos:
+          items:
+            $ref: '#/components/schemas/TrayectoDisponibleDto'
+          type: array
+      required:
+        - mercado
+        - moneda
+        - trayectos
+        - sinDisponibilidad
+      type: object
+    DocumentoDto:
+      properties:
+        numero:
+          type: string
+        tipo:
+          enum:
+            - PASSPORT
+            - NATIONAL_ID
+          type: string
+        vencimiento:
+          description: Obligatorio cuando algún trayecto cruza fronteras.
+          format: date
+          type: string
+      required:
+        - tipo
+        - numero
+      type: object
+    DocumentoLegalDto:
+      properties:
+        url:
+          format: uri
+          type: string
+        version:
+          example: 2026-10
+          type: string
+      required:
+        - version
+        - url
+      type: object
+    ExtraBaggageDto:
+      properties:
+        itineraryId:
+          format: uuid
+          type: string
+        quantity:
+          description: El tope real lo fija POSTSALE_BAGGAGE_MAX_PER_LEG (409 BAGGAGE_LIMIT_EXCEEDED).
+          maximum: 10
+          minimum: 1
+          type: number
+      required:
+        - itineraryId
+        - quantity
+      type: object
+    FacturacionDto:
+      properties:
+        direccion:
+          type: string
+        numeroIdentificacion:
+          example: '1712345678'
+          type: string
+        pais:
+          example: EC
+          type: string
+        razonSocial:
+          type: string
+        tipoIdentificacion:
+          description: Uno de los tipos del mercado (ver GET /mercados/{pais}).
+          example: CEDULA
+          type: string
+      required:
+        - tipoIdentificacion
+        - numeroIdentificacion
+        - razonSocial
+        - direccion
+        - pais
+      type: object
+    FamiliaTarifariaDto:
+      properties:
+        asientosDisponibles:
+          type: number
+        cabina:
+          example: ECONOMY
+          type: string
+        codigo:
+          example: LIGHT
+          type: string
+        condiciones:
+          description: 'RF-PRC-003: condiciones estructuradas, no texto libre.'
+          type: object
+        nombre:
+          type: string
+        precioPorPasajero:
+          description: Unitario por tipo de pasajero presente en la búsqueda.
+          items:
+            type: string
+          type: array
+        totalGrupo:
+          allOf:
+            - $ref: '#/components/schemas/MontoDto'
+          description: Total del grupo en este tramo.
+      required:
+        - codigo
+        - nombre
+        - cabina
+        - precioPorPasajero
+        - totalGrupo
+        - condiciones
+        - asientosDisponibles
+      type: object
+    FareRulesDto:
+      properties:
+        isChangeable:
+          type: boolean
+        isRefundable:
+          type: boolean
+      required:
+        - isRefundable
+        - isChangeable
+      type: object
+    FechaAlternativaDto:
+      properties:
+        fecha:
+          format: date
+          type: string
+        precioDesde:
+          $ref: '#/components/schemas/MontoDto'
+      required:
+        - fecha
+        - precioDesde
+      type: object
+    FilaAsientosViewDto:
+      properties:
+        rowNumber:
+          type: number
+        seats:
+          items:
+            $ref: '#/components/schemas/AsientoViewDto'
+          type: array
+      required:
+        - rowNumber
+        - seats
+      type: object
+    FlightEndpointDto:
+      properties:
+        at:
+          example: '2026-10-15T08:00:00.000Z'
+          type: string
+        iataCode:
+          example: BOG
+          type: string
+        terminal:
+          nullable: true
+          type: string
+      required:
+        - iataCode
+        - at
+      type: object
+    FlightOfferDto:
+      properties:
+        airline:
+          type: object
+        grandTotal:
+          allOf:
+            - $ref: '#/components/schemas/MoneyAmountDto'
+          description: Cheapest fare per itinerary, for the whole party.
+        itineraries:
+          items:
+            $ref: '#/components/schemas/ItineraryOptionDto'
+          type: array
+        offerId:
+          format: uuid
+          type: string
+      required:
+        - offerId
+        - airline
+        - itineraries
+        - grandTotal
+      type: object
+    FlightSegmentDto:
+      properties:
+        aircraft:
+          nullable: true
+          type: string
+        arrival:
+          $ref: '#/components/schemas/FlightEndpointDto'
+        departure:
+          $ref: '#/components/schemas/FlightEndpointDto'
+        durationMinutes:
+          nullable: true
+          type: number
+        flightNumber:
+          example: AV123
+          type: string
+        marketingCarrier:
+          type: string
+        operatingCarrier:
+          type: string
+        segmentId:
+          type: string
+        status:
+          enum:
+            - SCHEDULED
+            - BOARDING
+            - DEPARTED
+            - DELAYED
+            - ARRIVED
+            - CANCELLED
+            - DIVERTED
+          nullable: true
+          type: string
+      required:
+        - segmentId
+        - flightNumber
+        - departure
+        - arrival
+        - marketingCarrier
+        - operatingCarrier
+      type: object
+    HoldRequestDto:
+      properties:
+        itinerarySelections:
+          items:
+            $ref: '#/components/schemas/ItinerarySelectionDto'
+          maxItems: 6
+          minItems: 1
+          type: array
+        offerId:
+          format: uuid
+          type: string
+        passengersBreakdown:
+          $ref: '#/components/schemas/PassengerBreakdownDto'
+      required:
+        - offerId
+        - itinerarySelections
+        - passengersBreakdown
+      type: object
+    HoldResponseDto:
+      properties:
+        expiresAt:
+          type: string
+        holdId:
+          format: uuid
+          type: string
+        lockedPrice:
+          $ref: '#/components/schemas/MoneyAmountDto'
+        status:
+          enum:
+            - HELD
+          type: string
+        ttlMinutes:
+          type: number
+      required:
+        - holdId
+        - status
+        - expiresAt
+        - ttlMinutes
+        - lockedPrice
+      type: object
+    HoldStatusResponseDto:
+      properties:
+        expiresAt:
+          type: string
+        lockedPrice:
+          $ref: '#/components/schemas/MoneyAmountDto'
+        remainingSeconds:
+          type: number
+        status:
+          enum:
+            - HELD
+            - RELEASED
+            - EXPIRED
+            - CONSUMED
+          type: string
+      required:
+        - status
+        - expiresAt
+        - remainingSeconds
+        - lockedPrice
+      type: object
+    IdentificacionFiscalDto:
+      properties:
+        etiqueta:
+          example: RUC (13 dígitos)
+          type: string
+        patron:
+          description: Expresión regular que debe cumplir el número completo.
+          example: ^d{13}$
+          type: string
+        tipo:
+          example: RUC
+          type: string
+      required:
+        - tipo
+        - etiqueta
+        - patron
+      type: object
+    InvalidParamDto:
+      properties:
+        name:
+          type: string
+        reason:
+          type: string
+      required:
+        - name
+        - reason
+      type: object
+    ItinerarioDto:
+      properties:
+        agotado:
+          description: >-
+            El vuelo no tiene asientos suficientes para el grupo buscado: se muestra pero no se puede reservar (crear la oferta responde 409
+            SEAT_TAKEN). Va al final de la lista y sin distintivos.
+          type: boolean
+        cruceDeDia:
+          description: La llegada es en un día distinto de la salida (UTC).
+          type: boolean
+        destino:
+          type: object
+        distintivos:
+          description: 'RF-SHP-018: pueden coexistir.'
+          items:
+            enum:
+              - RECOMENDADO
+              - MAS_ECONOMICO
+              - MAS_RAPIDO
+            type: string
+          type: array
+        duracionMinutos:
+          type: number
+        escalas:
+          description: Siempre 0 en esta fase (solo vuelos directos).
+          type: number
+        familiaDesde:
+          example: BASIC
+          type: string
+        itinerarioId:
+          format: uuid
+          type: string
+        llegada:
+          type: string
+        numeroVuelo:
+          example: LA800
+          type: string
+        operador:
+          description: 'RF-SHP-016: aerolínea que opera el tramo.'
+          type: object
+        origen:
+          type: object
+        precioDesde:
+          allOf:
+            - $ref: '#/components/schemas/MontoDto'
+          description: 'RF-PRC-010: menor precio por adulto entre las familias, con impuestos.'
+        salida:
+          type: string
+        ultimosAsientos:
+          description: 'RF-SHP-019: "Últimos asientos a este precio".'
+          type: boolean
+      required:
+        - itinerarioId
+        - numeroVuelo
+        - operador
+        - origen
+        - destino
+        - salida
+        - llegada
+        - duracionMinutos
+        - escalas
+        - cruceDeDia
+        - precioDesde
+        - familiaDesde
+        - distintivos
+        - ultimosAsientos
+        - agotado
+      type: object
+    ItinerarioOrdenDto:
+      properties:
+        destino:
+          type: string
+        familia:
+          type: string
+        llegada:
+          type: string
+        numeroVuelo:
+          type: string
+        operador:
+          type: object
+        origen:
+          type: string
+        salida:
+          type: string
+      required:
+        - numeroVuelo
+        - operador
+        - origen
+        - destino
+        - salida
+        - llegada
+        - familia
+      type: object
+    ItinerarioVerificadoDto:
+      properties:
+        destino:
+          type: string
+        numeroVuelo:
+          type: string
+        origen:
+          type: string
+        salida:
+          type: string
+      required:
+        - numeroVuelo
+        - origen
+        - destino
+        - salida
+      type: object
+    ItineraryOptionDto:
+      properties:
+        itineraryId:
+          type: string
+        pricingOptions:
+          items:
+            $ref: '#/components/schemas/CabinPricingDto'
+          type: array
+        segments:
+          items:
+            $ref: '#/components/schemas/FlightSegmentDto'
+          type: array
+        stopsCount:
+          description: Always 0 in this phase — direct flights only
+          type: number
+        totalDurationMinutes:
+          type: number
+      required:
+        - itineraryId
+        - totalDurationMinutes
+        - stopsCount
+        - segments
+        - pricingOptions
+      type: object
+    ItinerarySearchDto:
+      properties:
+        departureDate:
+          example: '2026-12-01'
+          format: date
+          type: string
+        destination:
+          example: JFK
+          pattern: ^[A-Z]{3}$
+          type: string
+        origin:
+          example: UIO
+          pattern: ^[A-Z]{3}$
+          type: string
+      required:
+        - origin
+        - destination
+        - departureDate
+      type: object
+    ItinerarySelectionDto:
+      properties:
+        cabinClass:
+          enum:
+            - ECONOMY
+            - PREMIUM_ECONOMY
+            - BUSINESS
+            - FIRST
+          type: string
+        fareBrand:
+          example: LIGHT
+          type: string
+        itineraryId:
+          format: uuid
+          type: string
+      required:
+        - itineraryId
+        - cabinClass
+        - fareBrand
+      type: object
+    LocalidadViewDto:
+      properties:
+        ciudad:
+          example: Bogotá
+          type: string
+        iata:
+          example: BOG
+          type: string
+        nombre:
+          example: El Dorado
+          type: string
+        pais:
+          example: CO
+          type: string
+        paisNombre:
+          example: Colombia
+          type: string
+        zonaHoraria:
+          example: America/Bogota
+          type: string
+      required:
+        - iata
+        - ciudad
+        - nombre
+        - pais
+        - paisNombre
+        - zonaHoraria
+      type: object
+    LoginDto:
+      properties:
+        contrasena:
+          type: string
+        correo:
+          format: email
+          type: string
+      required:
+        - correo
+        - contrasena
+      type: object
+    MapaAsientosViewDto:
+      properties:
+        filas:
+          items:
+            $ref: '#/components/schemas/FilaAsientosViewDto'
+          type: array
+        numeroVuelo:
+          type: string
+        trayectoId:
+          format: uuid
+          type: string
+      required:
+        - trayectoId
+        - numeroVuelo
+        - filas
+      type: object
+    MedioCompraDto:
+      properties:
+        marca:
+          example: VISA
+          type: string
+        tipo:
+          enum:
+            - TARJETA
+          type: string
+        token:
+          description: >-
+            Token de la pasarela (nunca el número de tarjeta, RN-18). Pasarela simulada: tok_<marca>_ok aprueba; tok_declined,
+            tok_insufficient, tok_expired, tok_3ds, tok_fraud, tok_review, tok_<marca>_capture_fail fuerzan otros resultados.
+          example: tok_visa_ok
+          type: string
+      required:
+        - tipo
+        - token
+        - marca
+      type: object
+    MedioPagoDto:
+      properties:
+        cuotasPermitidas:
+          example:
+            - 1
+            - 3
+            - 6
+          items:
+            type: string
+          type: array
+        marcas:
+          example:
+            - VISA
+            - MASTERCARD
+            - AMEX
+            - DINERS
+          items:
+            type: string
+          type: array
+        productos:
+          example:
+            - PASAJE
+          items:
+            type: string
+          type: array
+        tipo:
+          enum:
+            - TARJETA
+          type: string
+      required:
+        - tipo
+        - marcas
+        - cuotasPermitidas
+        - productos
+      type: object
+    MedioPagoViewDto:
+      properties:
+        cuotasPermitidas:
+          items:
+            type: number
+          type: array
+        marcas:
+          items:
+            type: string
+          type: array
+        tipo:
+          example: TARJETA
+          type: string
+      required:
+        - tipo
+        - marcas
+        - cuotasPermitidas
+      type: object
+    MercadoViewDto:
+      properties:
+        activo:
+          type: boolean
+        codigo:
+          type: string
+        decimalesMoneda:
+          description: Decimales de la moneda (COP y CLP no usan decimales).
+          type: number
+        identificacionesFiscales:
+          items:
+            $ref: '#/components/schemas/IdentificacionFiscalDto'
+          type: array
+        idiomaPorDefecto:
+          type: string
+        idiomas:
+          items:
+            type: string
+          type: array
+        mediosPago:
+          items:
+            $ref: '#/components/schemas/MedioPagoDto'
+          type: array
+        moneda:
+          example: USD
+          type: string
+        nombre:
+          type: string
+        pais:
+          type: string
+        productosBuscador:
+          items:
+            type: string
+          type: array
+        reglasRegulatorias:
+          $ref: '#/components/schemas/ReglasRegulatoriasDto'
+        textosLegales:
+          $ref: '#/components/schemas/TextosLegalesDto'
+        version:
+          type: number
+      required:
+        - codigo
+        - pais
+        - nombre
+        - idiomas
+        - idiomaPorDefecto
+        - moneda
+        - decimalesMoneda
+        - productosBuscador
+        - mediosPago
+        - reglasRegulatorias
+        - textosLegales
+        - identificacionesFiscales
+        - activo
+        - version
+      type: object
+    MoneyAmountDto:
+      properties:
+        baseFare:
+          example: '100.00'
+          pattern: ^\d+\.\d{2}$
+          type: string
+        currency:
+          example: USD
+          pattern: ^[A-Z]{3}$
+          type: string
+        taxes:
+          example: '20.00'
+          pattern: ^\d+\.\d{2}$
+          type: string
+        total:
+          example: '120.00'
+          pattern: ^\d+\.\d{2}$
+          type: string
+      required:
+        - currency
+        - total
+      type: object
+    MontoDto:
+      properties:
+        moneda:
+          example: USD
+          type: string
+        monto:
+          description: Importe con los decimales de la moneda del mercado.
+          example: '345.00'
+          type: string
+      required:
+        - moneda
+        - monto
+      type: object
+    OfertaViewDto:
+      properties:
+        _links:
+          additionalProperties:
+            format: uri
+            type: string
+          description: HATEOAS links (Richardson Maturity Model Level 3)
+          type: object
+        advertencias:
+          description: Ajustes aplicados a los datos, p. ej. nombres normalizados (RF-CHK-003).
+          items:
+            type: string
+          type: array
+        condicionesAceptadas:
+          type: object
+        estado:
+          enum:
+            - ABIERTA
+            - EN_REVISION_PRECIO
+            - EN_PAGO
+            - PAGADA
+            - VENCIDA
+            - CANCELADA
+          type: string
+        faltantes:
+          description: Lo que falta antes de poder pagar.
+          items:
+            enum:
+              - PASAJEROS
+              - FACTURACION
+              - CONDICIONES
+              - ACEPTAR_PRECIO
+            type: string
+          type: array
+        mercado:
+          type: string
+        moneda:
+          type: string
+        ofertaId:
+          format: uuid
+          type: string
+        pasajeros:
+          type: object
+        pasajerosRegistrados:
+          items:
+            $ref: '#/components/schemas/PasajeroRegistradoDto'
+          type: array
+        precioPendienteDeAceptar:
+          allOf:
+            - $ref: '#/components/schemas/MontoDto'
+          description: 'RN-12: nuevo precio en espera de aceptación.'
+        segundosRestantes:
+          type: number
+        total:
+          allOf:
+            - $ref: '#/components/schemas/MontoDto'
+          description: 'RF-CRT-004: total persistente, con impuestos.'
+        trayectos:
+          items:
+            $ref: '#/components/schemas/TrayectoViewDto'
+          type: array
+        venceEn:
+          description: 'RF-CRT-005: vigencia; al vencer se libera el inventario.'
+          type: string
+      required:
+        - ofertaId
+        - estado
+        - mercado
+        - moneda
+        - trayectos
+        - pasajeros
+        - total
+        - venceEn
+        - segundosRestantes
+        - faltantes
+      type: object
+    OrdenViewDto:
+      properties:
+        _links:
+          additionalProperties:
+            format: uri
+            type: string
+          description: HATEOAS links (Richardson Maturity Model Level 3)
+          type: object
+        bookingId:
+          description: >-
+            Reserva del núcleo de vuelos tras la emisión: es el `bookingId` de las rutas de equipaje, cambio, cancelación, check-in y pases.
+            Solo en la vista del propietario.
+          format: uuid
+          type: string
+        contacto:
+          description: Solo en la vista del propietario; la recuperación pública lo enmascara.
+          type: object
+        creadaEn:
+          type: string
+        estado:
+          enum:
+            - PENDIENTE_PAGO
+            - PAGO_EN_VERIFICACION
+            - PAGADA
+            - EMITIDA
+            - FALLIDA_COMPENSADA
+            - MODIFICADA
+            - DEVOLUCION_EN_CURSO
+            - REEMBOLSADA
+            - EN_VIAJE
+            - COMPLETADA
+            - EXPIRADA
+          type: string
+        historial:
+          items:
+            type: string
+          type: array
+        itinerarios:
+          items:
+            $ref: '#/components/schemas/ItinerarioOrdenDto'
+          type: array
+        mercado:
+          type: string
+        numeroOrden:
+          example: ORD-7K3M9PQ2XA
+          type: string
+        ordenId:
+          format: uuid
+          type: string
+        pago:
+          type: object
+        pasajeros:
+          items:
+            $ref: '#/components/schemas/PasajeroOrdenViewDto'
+          type: array
+        pnr:
+          description: Localizador de la reserva (RN-20).
+          nullable: true
+          type: string
+        total:
+          $ref: '#/components/schemas/MontoDto'
+      required:
+        - ordenId
+        - numeroOrden
+        - estado
+        - mercado
+        - total
+        - itinerarios
+        - pasajeros
+        - pago
+        - creadaEn
+        - historial
+      type: object
+    OrdenesPaginaViewDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/OrdenViewDto'
+          type: array
+        nextCursor:
+          type: string
+      required:
+        - items
+      type: object
+    PasajeroDto:
+      properties:
+        apellidos:
+          type: string
+        asientos:
+          description: Asiento opcional por trayecto; los infantes en brazos no ocupan asiento.
+          items:
+            $ref: '#/components/schemas/AsientoElegidoDto'
+          type: array
+        asociadoA:
+          description: id del adulto con el que viaja un infante.
+          type: string
+        documento:
+          $ref: '#/components/schemas/DocumentoDto'
+        fechaNacimiento:
+          format: date
+          type: string
+        genero:
+          enum:
+            - M
+            - F
+            - X
+          type: string
+        id:
+          description: Identificador elegido por el cliente, único en la oferta.
+          type: string
+        nacionalidad:
+          description: ISO 3166-1 alpha-2
+          example: EC
+          type: string
+        necesidades:
+          items:
+            enum:
+              - MOVILIDAD_REDUCIDA
+              - MENOR_NO_ACOMPANADO
+              - ALIMENTACION_ESPECIAL
+              - MASCOTA
+            type: string
+          type: array
+        nombres:
+          description: Debe coincidir con el documento de viaje (RN-15).
+          type: string
+        numeroSocio:
+          description: 'RF-CHK-006: número LATAM Pass del pasajero.'
+          type: string
+        tipo:
+          enum:
+            - ADULT
+            - YOUTH
+            - CHILD
+            - INFANT
+          type: string
+      required:
+        - id
+        - tipo
+        - nombres
+        - apellidos
+        - fechaNacimiento
+        - genero
+        - nacionalidad
+        - documento
+      type: object
+    PasajeroOrdenViewDto:
+      properties:
+        apellidos:
+          type: string
+        asientos:
+          description: Asientos elegidos, uno por trayecto.
+          items:
+            $ref: '#/components/schemas/AsientoOrdenViewDto'
+          type: array
+        eTicket:
+          description: Billete electrónico de 13 dígitos (RF-ORD-003).
+          nullable: true
+          type: string
+        id:
+          type: string
+        nombres:
+          type: string
+        qr:
+          description: Texto firmado del código QR del pasajero (v1.<billete>.<PNR>.<firma>); sin datos personales.
+          type: string
+        tipo:
+          type: string
+      required:
+        - id
+        - tipo
+        - nombres
+        - apellidos
+      type: object
+    PasajeroRegistradoDto:
+      properties:
+        apellidos:
+          type: string
+        asientos:
+          items:
+            $ref: '#/components/schemas/AsientoElegidoDto'
+          type: array
+        id:
+          type: string
+        nombres:
+          type: string
+        tipo:
+          type: string
+      required:
+        - id
+        - tipo
+        - nombres
+        - apellidos
+      type: object
+    PassengerBreakdownDto:
+      properties:
+        adults:
+          default: 1
+          example: 1
+          maximum: 50
+          minimum: 1
+          type: number
+        children:
+          default: 0
+          example: 0
+          maximum: 50
+          minimum: 0
+          type: number
+        infants:
+          default: 0
+          example: 0
+          maximum: 50
+          minimum: 0
+          type: number
+        youths:
+          default: 0
+          example: 0
+          maximum: 50
+          minimum: 0
+          type: number
+      type: object
+    PassengerContactDto:
+      properties:
+        email:
+          format: email
+          type: string
+        phone:
+          description: E.164 phone number
+          example: '+593999999999'
+          type: string
+      required:
+        - email
+        - phone
+      type: object
+    PassengerItemDto:
+      properties:
+        assignedSeats:
+          items:
+            $ref: '#/components/schemas/SeatAssignmentDto'
+          type: array
+        associatedAdultId:
+          description: passengerId of the adult an INFANT travels with
+          type: string
+        birthDate:
+          format: date
+          type: string
+        contact:
+          $ref: '#/components/schemas/PassengerContactDto'
+        documentExpiryDate:
+          format: date
+          type: string
+        documentNumber:
+          type: string
+        documentType:
+          enum:
+            - PASSPORT
+            - NATIONAL_ID
+          type: string
+        extraBaggage:
+          items:
+            $ref: '#/components/schemas/ExtraBaggageDto'
+          type: array
+        firstName:
+          type: string
+        gender:
+          enum:
+            - M
+            - F
+            - X
+          type: string
+        lastName:
+          type: string
+        nationality:
+          description: ISO 3166-1 alpha-2
+          example: EC
+          type: string
+        passengerId:
+          description: Caller-chosen id, unique within the booking
+          type: string
+        passengerType:
+          enum:
+            - ADULT
+            - YOUTH
+            - CHILD
+            - INFANT
+          type: string
+      required:
+        - passengerId
+        - passengerType
+        - firstName
+        - lastName
+        - documentType
+        - documentNumber
+        - nationality
+        - birthDate
+        - gender
+        - contact
+      type: object
+    PaymentReferenceDto:
+      properties:
+        paymentReference:
+          description: Referencia a un pago gestionado por la Payment API
+          pattern: ^[A-Za-z0-9._:-]{8,100}$
+          type: string
+      required:
+        - paymentReference
+      type: object
+    PreferenciasDto:
+      properties:
+        canalNotificacion:
+          enum:
+            - EMAIL
+            - SMS
+            - PUSH
+            - WHATSAPP
+          type: string
+        consentimientoMarketing:
+          type: boolean
+        idioma:
+          example: es
+          type: string
+        mercado:
+          example: ec
+          type: string
+      type: object
+    PriceDifferenceDto:
+      properties:
+        changeFee:
+          example: '30.00'
+          type: string
+        fareDifference:
+          description: Negative when the new flight is cheaper; it is never refunded.
+          example: '40.00'
+          type: string
+        taxDifference:
+          example: '6.00'
+          type: string
+        totalToPay:
+          description: 'What has to be paid: the difference (never below zero) plus the fee.'
+          example: '76.00'
+          type: string
+      required:
+        - fareDifference
+        - taxDifference
+        - changeFee
+        - totalToPay
+      type: object
+    PricePerPassengerTypeDto:
+      properties:
+        passengerType:
+          enum:
+            - ADULT
+            - YOUTH
+            - CHILD
+            - INFANT
+          type: string
+        price:
+          $ref: '#/components/schemas/MoneyAmountDto'
+      required:
+        - passengerType
+        - price
+      type: object
+    ProblemDetailsDto:
+      properties:
+        code:
+          description: >-
+            The contract's ProblemDetails.code enum, plus
+            UNAUTHORIZED/FORBIDDEN/NOT_FOUND/CONFLICT/INTERNAL_ERROR/NOT_IMPLEMENTED/SERVICE_UNAVAILABLE for statuses the contract does not
+            define.
+          example: SEAT_TAKEN
+          type: string
+        detail:
+          type: string
+        invalidParams:
+          items:
+            $ref: '#/components/schemas/InvalidParamDto'
+          type: array
+        status:
+          example: 409
+          type: number
+        title:
+          type: string
+        type:
+          example: https://api.booking-hub.com/errors/seat-taken
+          type: string
+      required:
+        - type
+        - title
+        - status
+        - code
+      type: object
+    RegistrarPasajerosDto:
+      properties:
+        contacto:
+          $ref: '#/components/schemas/ContactoDto'
+        pasajeros:
+          items:
+            $ref: '#/components/schemas/PasajeroDto'
+          type: array
+      required:
+        - pasajeros
+        - contacto
+      type: object
+    RegistroClienteDto:
+      properties:
+        aceptaTerminos:
+          description: 'Debe ser true: aceptación de términos y política de datos.'
+          type: boolean
+        apellidos:
+          type: string
+        consentimientoMarketing:
+          default: false
+          description: 'Consentimiento de marketing: separado y no obligatorio.'
+          type: boolean
+        contrasena:
+          description: Mínimo 10 caracteres, con al menos una letra y un número.
+          minLength: 10
+          type: string
+        correo:
+          format: email
+          type: string
+        fechaNacimiento:
+          format: date
+          type: string
+        mercado:
+          default: ec
+          example: ec
+          type: string
+        nombres:
+          type: string
+        telefono:
+          description: E.164
+          example: '+593999999999'
+          type: string
+      required:
+        - correo
+        - contrasena
+        - nombres
+        - apellidos
+        - fechaNacimiento
+        - aceptaTerminos
+      type: object
+    ReglasRegulatoriasDto:
+      properties:
+        desistimiento:
+          $ref: '#/components/schemas/DesistimientoDto'
+        retracto:
+          allOf:
+            - $ref: '#/components/schemas/RetractoDto'
+          example:
+            diasHabiles: 5
+        traspaso:
+          $ref: '#/components/schemas/TraspasoDto'
+      type: object
+    RetractoDto:
+      properties: {}
+      type: object
+    RevalidacionViewDto:
+      properties:
+        cambioDePrecio:
+          description: 'RF-CRT-003: si el precio cambió, el flujo se detiene hasta que el cliente acepte.'
+          type: boolean
+        precioAnterior:
+          $ref: '#/components/schemas/MontoDto'
+        precioNuevo:
+          $ref: '#/components/schemas/MontoDto'
+        venceEn:
+          type: string
+        vigente:
+          type: boolean
+      required:
+        - vigente
+        - cambioDePrecio
+        - precioAnterior
+        - precioNuevo
+        - venceEn
+      type: object
+    SearchRequestDto:
+      properties:
+        itineraries:
+          items:
+            $ref: '#/components/schemas/ItinerarySearchDto'
+          maxItems: 6
+          minItems: 1
+          type: array
+        passengers:
+          $ref: '#/components/schemas/PassengerBreakdownDto'
+      required:
+        - itineraries
+        - passengers
+      type: object
+    SearchResponseDto:
+      properties:
+        offers:
+          items:
+            $ref: '#/components/schemas/FlightOfferDto'
+          type: array
+        totalOffers:
+          type: number
+      required:
+        - totalOffers
+        - offers
+      type: object
+    SeatAssignmentDto:
+      properties:
+        seatNumber:
+          example: 14C
+          pattern: ^\d{1,3}[A-F]$
+          type: string
+        segmentId:
+          description: segmentId as returned by /search (the flight segment).
+          format: uuid
+          type: string
+      required:
+        - segmentId
+        - seatNumber
+      type: object
+    SeleccionTrayectoDto:
+      properties:
+        familia:
+          example: LIGHT
+          type: string
+        itinerarioId:
+          description: itinerarioId devuelto por /disponibilidad
+          format: uuid
+          type: string
+      required:
+        - itinerarioId
+        - familia
+      type: object
+    TarifasViewDto:
+      properties:
+        familias:
+          items:
+            $ref: '#/components/schemas/FamiliaTarifariaDto'
+          type: array
+        itinerarioId:
+          format: uuid
+          type: string
+        mercado:
+          type: string
+        moneda:
+          type: string
+        vigenteHasta:
+          description: 'RF-PRC-009: la cotización vale hasta este instante.'
+          type: string
+      required:
+        - itinerarioId
+        - mercado
+        - moneda
+        - vigenteHasta
+        - familias
+      type: object
+    TextosLegalesDto:
+      properties:
+        condicionesTransporte:
+          $ref: '#/components/schemas/DocumentoLegalDto'
+        privacidad:
+          $ref: '#/components/schemas/DocumentoLegalDto'
+        razonSocial:
+          type: string
+        terminos:
+          $ref: '#/components/schemas/DocumentoLegalDto'
+      required:
+        - razonSocial
+        - terminos
+        - privacidad
+        - condicionesTransporte
+      type: object
+    TicketResponseDto:
+      properties:
+        bookingId:
+          format: uuid
+          type: string
+        eTicketNumber:
+          nullable: true
+          type: string
+        issuedAt:
+          nullable: true
+          type: string
+        passengerId:
+          type: string
+        qrPayload:
+          description: Texto firmado para el código QR del pasajero (v1.<billete>.<PNR>.<firma>); no contiene datos personales.
+          nullable: true
+          readOnly: true
+          type: string
+        status:
+          enum:
+            - PENDING
+            - ISSUING
+            - ISSUED
+            - FAILED
+            - VOIDED
+            - REFUNDED
+          type: string
+        ticketId:
+          type: string
+      required:
+        - ticketId
+        - bookingId
+        - passengerId
+        - status
+      type: object
+    TokenViewDto:
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          description: Segundos de vigencia.
+          type: number
+        tokenType:
+          example: Bearer
+          type: string
+      required:
+        - accessToken
+        - tokenType
+        - expiresIn
+      type: object
+    TraspasoDto:
+      properties: {}
+      type: object
+    TrayectoDisponibleDto:
+      properties:
+        destino:
+          description: null si la búsqueda no fijó destino.
+          nullable: true
+          type: string
+        fecha:
+          format: date
+          type: string
+        fechasAlternativas:
+          description: 'RF-SHP-024: fechas cercanas con vuelos cuando este trayecto no tiene disponibilidad.'
+          items:
+            $ref: '#/components/schemas/FechaAlternativaDto'
+          type: array
+        itinerarios:
+          items:
+            $ref: '#/components/schemas/ItinerarioDto'
+          type: array
+        origen:
+          description: null si la búsqueda no fijó origen.
+          nullable: true
+          type: string
+        sentido:
+          enum:
+            - IDA
+            - VUELTA
+          type: string
+      required:
+        - sentido
+        - fecha
+        - itinerarios
+      type: object
+    TrayectoViewDto:
+      properties:
+        destino:
+          type: string
+        familia:
+          type: string
+        itinerarioId:
+          type: string
+        llegada:
+          type: string
+        numeroVuelo:
+          type: string
+        origen:
+          type: string
+        salida:
+          type: string
+        total:
+          $ref: '#/components/schemas/MontoDto'
+      required:
+        - itinerarioId
+        - numeroVuelo
+        - origen
+        - destino
+        - salida
+        - llegada
+        - familia
+        - total
+      type: object
+    VerificacionBilleteViewDto:
+      properties:
+        estado:
+          example: ISSUED
+          type: string
+        itinerarios:
+          description: Sin nombres ni datos de contacto.
+          items:
+            $ref: '#/components/schemas/ItinerarioVerificadoDto'
+          type: array
+        pnr:
+          type: string
+        valido:
+          description: false si el código no es auténtico o no corresponde a un billete emitido.
+          type: boolean
+      required:
+        - valido
+      type: object
+    VerificarCorreoDto:
+      properties:
+        token:
+          description: Token de un solo uso recibido por correo.
+          type: string
+      required:
+        - token
+      type: object
+    VincularOrdenDto:
+      properties:
+        apellido:
+          description: Apellido de cualquier pasajero.
+          example: Tapia
+          type: string
+        numero:
+          example: ORD-7K3M9PQ2XA
+          type: string
+        pnr:
+          description: Código de reserva (PNR)
+          example: ABC123
+          type: string
+      required:
+        - apellido
+      type: object
+    WebhookSubscriptionDto:
+      properties:
+        events:
+          items:
+            enum:
+              - booking.confirmed
+              - booking.failed
+              - booking.changed
+              - booking.cancelled
+              - booking.baggage_added
+              - hold.expired
+              - flight.schedule_changed
+              - flight.cancelled
+              - booking.ticket_issuing
+              - booking.ticket_issued
+              - booking.ticket_failed
+              - booking.checked_in
+            type: string
+          type: array
+        secret:
+          description: Shared secret used to sign deliveries (HMAC-SHA256).
+          minLength: 16
+          type: string
+        url:
+          format: uri
+          type: string
+      required:
+        - url
+        - events
+        - secret
+      type: object
+    WebhookSubscriptionViewDto:
+      properties:
+        events:
+          items:
+            enum:
+              - booking.confirmed
+              - booking.failed
+              - booking.changed
+              - booking.cancelled
+              - booking.baggage_added
+              - hold.expired
+              - flight.schedule_changed
+              - flight.cancelled
+              - booking.ticket_issuing
+              - booking.ticket_issued
+              - booking.ticket_failed
+              - booking.checked_in
+            type: string
+          type: array
+        id:
+          format: uuid
+          type: string
+        url:
+          format: uri
+          type: string
+      required:
+        - id
+        - url
+        - events
+      type: object
+  securitySchemes:
+    bearer:
+      bearerFormat: JWT
+      scheme: bearer
+      type: http

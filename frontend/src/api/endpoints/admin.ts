@@ -1,5 +1,6 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../client';
+import { generateUUID } from '../../lib/uuid';
 import type { Schemas } from '../types';
 
 export type AdminOrdenView = Schemas['AdminOrdenViewDto'];
@@ -186,5 +187,168 @@ export function useAdminVuelos(filters: AdminFlightsFilters, ownerId?: string) {
     getNextPageParam: (last) => last.nextCursor,
     enabled: Boolean(ownerId),
     retry: false,
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Users (ADMIN). Types are declared by hand: they mirror `usuarios.controller.ts`.
+// ---------------------------------------------------------------------------------------------
+
+export type RolUsuario = 'ADMIN' | 'CUSTOMER';
+
+export interface AdminUsuario {
+  clienteId: string;
+  correo: string;
+  nombres: string;
+  apellidos: string;
+  roles: string[];
+  correoVerificado: boolean;
+  bloqueada: boolean;
+  creadoEn: string;
+}
+
+export interface AdminUsuariosPagina {
+  items: AdminUsuario[];
+  total: number;
+  pagina: number;
+  limite: number;
+}
+
+export interface AdminUsuariosFilters {
+  q?: string;
+  rol?: RolUsuario | '';
+  pagina?: number;
+  limite?: number;
+}
+
+export interface CrearUsuarioInput {
+  correo: string;
+  contrasena: string;
+  nombres: string;
+  apellidos: string;
+  fechaNacimiento: string;
+  telefono?: string;
+  roles?: RolUsuario[];
+}
+
+export function esAdministrador(usuario: Pick<AdminUsuario, 'roles'>): boolean {
+  return usuario.roles.includes('ADMIN');
+}
+
+export function useAdminUsuarios(filters: AdminUsuariosFilters, ownerId?: string) {
+  const params = { ...filters, limite: filters.limite ?? 25, pagina: filters.pagina ?? 1 };
+  return useQuery({
+    queryKey: ['admin-usuarios', ownerId, params],
+    queryFn: () => apiClient<AdminUsuariosPagina>(`admin/usuarios${toQuery(params)}`),
+    enabled: Boolean(ownerId),
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+}
+
+export function useCrearUsuario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CrearUsuarioInput) =>
+      apiClient<AdminUsuario>('admin/usuarios', { method: 'POST', body: JSON.stringify(body), idempotencyKey: generateUUID() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-usuarios'] }),
+  });
+}
+
+/** PUT /admin/usuarios/{id}/roles. The new roles apply the next time that person signs in. */
+export function useCambiarRoles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clienteId, roles }: { clienteId: string; roles: RolUsuario[] }) =>
+      apiClient<AdminUsuario>(`admin/usuarios/${clienteId}/roles`, { method: 'PUT', body: JSON.stringify({ roles }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-usuarios'] }),
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Flight management (ADMIN).
+// ---------------------------------------------------------------------------------------------
+
+export interface CrearVueloInput {
+  codigoVuelo: string;
+  aerolinea: string;
+  origen: string;
+  destino: string;
+  salida: string;
+  duracionMinutos: number;
+  precioBaseUsd: number;
+  capacidad?: number;
+}
+
+export interface EditarVueloInput {
+  aerolinea?: string;
+  precioBaseUsd?: number;
+  duracionMinutos?: number;
+  capacidadTotal?: number;
+}
+
+export interface AdminAccionVuelo {
+  vueloId: string;
+  codigoVuelo: string;
+  estado: 'SCHEDULED' | 'CANCELLED';
+  salida: string;
+  reservasAfectadas: number;
+  eventos: string[];
+}
+
+function useRefreshVuelos() {
+  const qc = useQueryClient();
+  return () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-vuelos'] }),
+      qc.invalidateQueries({ queryKey: ['admin-asientos-vuelo'] }),
+      qc.invalidateQueries({ queryKey: ['admin-dashboard'] }),
+    ]);
+}
+
+export function useCrearVuelo() {
+  const refresh = useRefreshVuelos();
+  return useMutation({
+    mutationFn: (body: CrearVueloInput) =>
+      apiClient<AdminVueloView>('admin/vuelos', { method: 'POST', body: JSON.stringify(body), idempotencyKey: generateUUID() }),
+    onSuccess: refresh,
+  });
+}
+
+export function useEditarVuelo() {
+  const refresh = useRefreshVuelos();
+  return useMutation({
+    mutationFn: ({ vueloId, cambios }: { vueloId: string; cambios: EditarVueloInput }) =>
+      apiClient<AdminVueloView>(`admin/vuelos/${vueloId}`, { method: 'PATCH', body: JSON.stringify(cambios) }),
+    onSuccess: refresh,
+  });
+}
+
+export function useEliminarVuelo() {
+  const refresh = useRefreshVuelos();
+  return useMutation({
+    mutationFn: (vueloId: string) => apiClient<unknown>(`admin/vuelos/${vueloId}`, { method: 'DELETE' }),
+    onSuccess: refresh,
+  });
+}
+
+export function useCancelarVuelo() {
+  const refresh = useRefreshVuelos();
+  return useMutation({
+    mutationFn: ({ vueloId, motivo }: { vueloId: string; motivo?: string }) =>
+      apiClient<AdminAccionVuelo>(`admin/vuelos/${vueloId}/cancelar`, { method: 'POST', body: JSON.stringify(motivo ? { motivo } : {}) }),
+    onSuccess: refresh,
+  });
+}
+
+export function useReprogramarVuelo() {
+  const refresh = useRefreshVuelos();
+  return useMutation({
+    mutationFn: ({ vueloId, nuevaSalida, motivo }: { vueloId: string; nuevaSalida: string; motivo?: string }) =>
+      apiClient<AdminAccionVuelo>(`admin/vuelos/${vueloId}/reprogramar`, {
+        method: 'POST',
+        body: JSON.stringify(motivo ? { nuevaSalida, motivo } : { nuevaSalida }),
+      }),
+    onSuccess: refresh,
   });
 }

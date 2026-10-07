@@ -54,7 +54,10 @@ export type ExtensionProblemCode =
   | 'PAYMENT_METHOD_NOT_ALLOWED'
   | 'ORDER_NOT_FOUND'
   | 'INVALID_STATE_TRANSITION'
-  | 'ISSUANCE_FAILED_COMPENSATED';
+  | 'ISSUANCE_FAILED_COMPENSATED'
+  // Back office: account and flight management.
+  | 'LAST_ADMIN'
+  | 'FLIGHT_IN_USE';
 
 // Nest's HttpStatus has no 423; used for temporarily locked accounts.
 export const HTTP_LOCKED = 423 as HttpStatus;

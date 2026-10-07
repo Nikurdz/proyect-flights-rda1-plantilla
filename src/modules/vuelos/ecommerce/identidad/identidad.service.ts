@@ -93,6 +93,59 @@ export class IdentidadService {
     return this.vista(cliente);
   }
 
+  /**
+   * Creates an account on behalf of an administrator: the e-mail is already verified and the roles are the ones asked
+   * for. Returns the stored entity (the caller decides what to show; the hash never leaves the back office layer).
+   */
+  async crearCuenta(dto: {
+    correo: string;
+    contrasena: string;
+    nombres: string;
+    apellidos: string;
+    fechaNacimiento: string;
+    telefono?: string;
+    roles: string[];
+  }): Promise<Cliente> {
+    const mercado = await this.mercados.requerirActivo('ec');
+    if (dto.fechaNacimiento >= todayUtc()) {
+      throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Invalid birth date', 'fechaNacimiento must be in the past.', [
+        { name: 'fechaNacimiento', reason: 'must be in the past' },
+      ]);
+    }
+    const hashContrasena = await hashPassword(dto.contrasena);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await this.clientes.save(
+          this.clientes.create({
+            correo: dto.correo,
+            correoVerificado: true,
+            hashContrasena,
+            nombres: dto.nombres.trim(),
+            apellidos: dto.apellidos.trim(),
+            fechaNacimiento: dto.fechaNacimiento,
+            telefono: dto.telefono ?? null,
+            roles: dto.roles,
+            numeroSocio: this.nuevoNumeroSocio(),
+            mercadoPreferido: mercado.codigo,
+            idiomaPreferido: mercado.idiomaPorDefecto,
+            consentimientoMarketing: false,
+            terminosVersionAceptada: mercado.textosLegales.terminos.version,
+            terminosAceptadosEn: new Date(),
+            tokenVerificacionHash: null,
+            tokenVerificacionVenceEn: null,
+          }),
+        );
+      } catch (error) {
+        const columns = uniqueViolationColumns(error);
+        if (columns?.includes('correo')) {
+          throw new ProblemDetailsException(HttpStatus.CONFLICT, 'EMAIL_ALREADY_REGISTERED', 'Email already registered', 'There is already an account with this e-mail.');
+        }
+        if (!columns?.includes('numeroSocio')) throw error;
+      }
+    }
+    throw new ProblemDetailsException(HttpStatus.SERVICE_UNAVAILABLE, 'SERVICE_UNAVAILABLE', 'Could not create the account', 'Please try again.');
+  }
+
   async verificarCorreo(token: string, ip: string): Promise<void> {
     assertWithinLimit(this.verifyLimiter, `verify:${ip}`, 'Too many verification attempts');
     const cliente = await this.clientes.findOne({ where: { tokenVerificacionHash: sha256(token) } });

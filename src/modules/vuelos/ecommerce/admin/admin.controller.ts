@@ -1,23 +1,28 @@
-import { Body, Get, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { CurrentAuth, JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
+import type { AuthClaims } from '../../auth/token.service';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
 import { OrdenParamDto } from '../ordenes/dto/ordenes.dto';
 import {
   AdminAccionVueloViewDto,
+  AdminActualizarVueloDto,
   AdminAsientosVueloDto,
   AdminCancelarVueloDto,
+  AdminCrearVueloDto,
   AdminOrdenViewDto,
   AdminOrdenesPaginaDto,
   AdminOrdenesQueryDto,
   AdminReprogramarVueloDto,
   AdminVueloParamDto,
+  AdminVueloViewDto,
   AdminVuelosPaginaDto,
   AdminVuelosQueryDto,
 } from './admin.dto';
 import { AdminService } from './admin.service';
+import { VuelosAdminService } from './vuelos-admin.service';
 
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT } = HttpStatus;
 
@@ -30,7 +35,10 @@ const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT } = HttpStatus
 @Roles('ADMIN')
 @ApiBearerAuth()
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly vuelosAdmin: VuelosAdminService,
+  ) {}
 
   @Get('ordenes')
   @ApiOperation({ summary: 'Listar órdenes de todos los clientes (ADMIN)', description: 'Más recientes primero, paginado por cursor; filtros por estado, número, PNR y fechas.' })
@@ -54,6 +62,43 @@ export class AdminController {
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN)
   vuelos(@Query() query: AdminVuelosQueryDto) {
     return this.admin.listarVuelos(query);
+  }
+
+  @Post('vuelos')
+  @ApiOperation({
+    summary: 'Crear un vuelo (ADMIN)',
+    description:
+      'Agrega un vuelo al calendario: todos sus asientos quedan disponibles y aparece en la búsqueda. El código lleva la aerolínea en sus dos primeros caracteres; origen y destino deben existir en el catálogo; la salida debe ser futura. 409 si ese código ya sale a esa hora.',
+  })
+  @ApiResponse({ status: 201, type: AdminVueloViewDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, CONFLICT)
+  crearVuelo(@CurrentAuth() auth: AuthClaims, @Body() body: AdminCrearVueloDto) {
+    return this.vuelosAdmin.crear(auth.ownerId, body);
+  }
+
+  @Patch('vuelos/:vueloId')
+  @ApiOperation({
+    summary: 'Editar un vuelo (ADMIN)',
+    description:
+      'Cambia aerolínea, tarifa base, duración (recalcula la llegada) o capacidad. Solo vuelos programados que no han salido. La capacidad no puede bajar de los asientos ya vendidos ni dejar asientos numerados fuera de la cabina. Para mover la salida usa reprogramar.',
+  })
+  @ApiResponse({ status: 200, type: AdminVueloViewDto })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT)
+  actualizarVuelo(@CurrentAuth() auth: AuthClaims, @Param() params: AdminVueloParamDto, @Body() body: AdminActualizarVueloDto) {
+    return this.vuelosAdmin.actualizar(auth.ownerId, params.vueloId, body);
+  }
+
+  @Delete('vuelos/:vueloId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Eliminar un vuelo (ADMIN)',
+    description:
+      'Borra un vuelo que nunca tuvo retenciones, reservas ni asientos asignados. Si tiene historial responde 409 FLIGHT_IN_USE: cancélalo en su lugar (cierra la venta y reembolsa las reservas).',
+  })
+  @ApiResponse({ status: 204, description: 'Eliminado' })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT)
+  async eliminarVuelo(@CurrentAuth() auth: AuthClaims, @Param() params: AdminVueloParamDto): Promise<void> {
+    await this.vuelosAdmin.eliminar(auth.ownerId, params.vueloId);
   }
 
   @Post('vuelos/:vueloId/cancelar')

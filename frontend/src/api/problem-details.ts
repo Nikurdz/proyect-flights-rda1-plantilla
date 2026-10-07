@@ -147,6 +147,10 @@ export function getFriendlyErrorMessage(code: string | undefined, status: number
     case 'BOOKING_NOT_CONFIRMED':
     case 'CONFLICT':
       return 'Esta operación ya no es posible en el estado actual. Actualiza la página e intenta de nuevo.';
+    case 'LAST_ADMIN':
+      return 'No se puede quitar el rol: debe quedar al menos un administrador y no puedes quitártelo a ti mismo.';
+    case 'FLIGHT_IN_USE':
+      return 'Este vuelo tiene reservas o retenciones y no se puede eliminar. Cancélalo en su lugar.';
     case 'SERVICE_UNAVAILABLE':
       return 'El servicio no responde por ahora. Intenta de nuevo en unos segundos.';
     case 'NOT_IMPLEMENTED':
