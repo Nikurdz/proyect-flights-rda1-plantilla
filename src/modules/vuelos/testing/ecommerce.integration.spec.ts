@@ -9,6 +9,7 @@ import { Vuelo } from '../entities/vuelo.entity';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { OffersService } from '../services/offers.service';
 import { BookingsService } from '../services/bookings.service';
+import { MercadosService } from '../ecommerce/mercados/mercados.service';
 import { Localidad } from '../ecommerce/catalogo/entities/localidad.entity';
 import { Cliente } from '../ecommerce/identidad/entities/cliente.entity';
 import { Mercado } from '../ecommerce/mercados/entities/mercado.entity';
@@ -705,6 +706,39 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(retry.body.estado).toBe('EMITIDA');
       expect((await ordenes(ofertaId)).map((o) => o.estado)).toEqual(['FALLIDA_COMPENSADA', 'EMITIDA']);
       expect((await pagos(ofertaId)).map((p) => p.estado)).toEqual(['ANULADO', 'CAPTURADO']);
+    });
+
+    it('still answers the compensated outcome when the market cannot be read while compensating (A4)', async () => {
+      const token = await guest();
+      // Fixed days: every offer built with the shared cursor moves later tests toward the end of the seeded horizon.
+      const { ofertaId } = await ofertaLista(token, { fechas: { out: dayAhead(3), back: dayAhead(10) } });
+      const mercados = app.get(MercadosService);
+      const realObtener = mercados.obtener.bind(mercados);
+      let issuanceFailed = false;
+      const bookingSpy = jest.spyOn(app.get(BookingsService), 'createBookingWithin').mockImplementationOnce(async () => {
+        issuanceFailed = true;
+        throw new Error('PSS unavailable');
+      });
+      // The market reads fine for the whole purchase and vanishes only once compensation starts.
+      const marketSpy = jest.spyOn(mercados, 'obtener').mockImplementation(async (codigo: string) => {
+        if (issuanceFailed) throw new Error('market vanished');
+        return realObtener(codigo);
+      });
+
+      let res: request.Response;
+      try {
+        res = await comprar(token, ofertaId).expect(502);
+      } finally {
+        bookingSpy.mockRestore();
+        marketSpy.mockRestore();
+      }
+
+      expect(res.body.code).toBe('ISSUANCE_FAILED_COMPENSATED');
+      const failed = await ordenes(ofertaId);
+      expect(failed.map((o) => o.estado)).toEqual(['FALLIDA_COMPENSADA']); // recorded once, not lost and not duplicated
+      expect((await pagos(ofertaId)).map((p) => p.estado)).toEqual(['ANULADO']);
+      expect((await ofertaRow(ofertaId)).estado).toBe('ABIERTA'); // still retryable (not bought again here: seats are scarce on the cheapest flights)
+      await api().delete(`/api/v1/ofertas/${ofertaId}`).set(bearer(token)).expect(204); // give the held seat back: the cheapest flights have few
     });
 
     it('passes a known issuance problem through (409) while still compensating', async () => {

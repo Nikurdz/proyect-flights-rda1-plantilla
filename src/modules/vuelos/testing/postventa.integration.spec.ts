@@ -7,6 +7,7 @@ import { DataSource, In } from 'typeorm';
 import { TokenService } from '../auth/token.service';
 import { signWebhookBody } from '../common/safe-http';
 import { Booking } from '../entities/booking.entity';
+import { CancellationQuote } from '../entities/cancellation-quote.entity';
 import { CheckIn } from '../entities/check-in.entity';
 import { DateChangeOffer } from '../entities/date-change-offer.entity';
 import { Ticket } from '../entities/ticket.entity';
@@ -219,6 +220,17 @@ describeIntegration('After-sale (baggage, date change, cancellation, check-in) a
       expect([404, 409, 410]).toContain(again.status);
     });
 
+
+    it('searching twice returns the same alive offers instead of piling up rows (M1)', async () => {
+      const owner = 'owner-dc-dedup';
+      const { bookingId, itineraryId } = await book(owner);
+      const body = { changes: [{ itineraryId, newDepartureDate: dayAhead(41) }] };
+      const first = await api().post(`/api/v1/bookings/${bookingId}/date-change/search`).set(auth(owner)).send(body).expect(200);
+      const second = await api().post(`/api/v1/bookings/${bookingId}/date-change/search`).set(auth(owner)).send(body).expect(200);
+
+      expect(second.body.map((o: { changeOfferId: string }) => o.changeOfferId)).toEqual(first.body.map((o: { changeOfferId: string }) => o.changeOfferId));
+      expect(await ds.getRepository(DateChangeOffer).count({ where: { bookingId } })).toBe(first.body.length);
+    });
   });
 
   describe('cancellation', () => {
@@ -263,6 +275,24 @@ describeIntegration('After-sale (baggage, date change, cancellation, check-in) a
       const late = await api().get(`/api/v1/bookings/${bookingId}/cancellation-quote`).set(auth(owner));
       expect(late.status).toBe(409);
       expect(late.body.code).toBe('CUTOFF_PASSED');
+    });
+
+    it('keeps the refund when the live fare changes after the sale (A1) and reuses the quote still alive (M2)', async () => {
+      const owner = 'owner-cancel-frozen';
+      const { bookingId } = await book(owner, 'LIGHT');
+      const quoteUrl = `/api/v1/bookings/${bookingId}/cancellation-quote`;
+      const first = await api().get(quoteUrl).set(auth(owner)).expect(200);
+      expect(Number(first.body.refundAmount)).toBeGreaterThan(0); // non-refundable: the taxes go back
+
+      // An admin reprices the flight: the taxes the customer paid must not move with it.
+      const flightId = await legFlightId(bookingId);
+      await ds.getRepository(Vuelo).update({ id: flightId }, { precioBase: (await vuelo(flightId)).precioBase * 3 });
+      const again = await api().get(quoteUrl).set(auth(owner)).expect(200);
+
+      expect(again.body.refundAmount).toBe(first.body.refundAmount);
+      expect(again.body.penaltyAmount).toBe(first.body.penaltyAmount);
+      expect(again.body.quoteId).toBe(first.body.quoteId); // same alive quote, not a new row per GET
+      expect(await ds.getRepository(CancellationQuote).count({ where: { bookingId } })).toBe(1);
     });
   });
 
