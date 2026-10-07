@@ -65,16 +65,17 @@ export const AdminOrdersPage: React.FC = () => {
 
       {error != null && <ProblemAlert error={error} onRetry={() => refetch()} className="mb-4" />}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div role="region" tabIndex={0} aria-label="Tabla de órdenes, desplazable horizontalmente" className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full min-w-[720px] text-left text-sm">
+          <caption className="sr-only">Órdenes de compra</caption>
           <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-4 py-3">Orden</th>
-              <th className="px-4 py-3">Reserva</th>
-              <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3">Comprador</th>
-              <th className="px-4 py-3">Fecha</th>
-              <th className="px-4 py-3 text-right">Total</th>
+              <th scope="col" className="px-4 py-3">Orden</th>
+              <th scope="col" className="px-4 py-3">Reserva</th>
+              <th scope="col" className="px-4 py-3">Estado</th>
+              <th scope="col" className="px-4 py-3">Comprador</th>
+              <th scope="col" className="px-4 py-3">Fecha</th>
+              <th scope="col" className="px-4 py-3 text-right">Total</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">

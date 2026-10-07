@@ -201,7 +201,7 @@ export const ResultsPage: React.FC = () => {
             onClick={() => navigate(`/?${searchParams.toString()}`)}
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-airline-navy transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
             <span>Modificar búsqueda</span>
           </button>
 
@@ -221,10 +221,10 @@ export const ResultsPage: React.FC = () => {
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
-              <Plane className="w-4 h-4 -rotate-45" />
+              <Plane className="w-4 h-4 -rotate-45" aria-hidden="true" />
               <span>1. Vuelo de Ida</span>
               {selectedOutbound && (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 ml-1" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 ml-1" aria-hidden="true" />
               )}
             </button>
 
@@ -241,7 +241,7 @@ export const ResultsPage: React.FC = () => {
                   : 'text-slate-300 cursor-not-allowed'
               }`}
             >
-              <Plane className="w-4 h-4 rotate-[135deg]" />
+              <Plane className="w-4 h-4 rotate-[135deg]" aria-hidden="true" />
               <span>2. Vuelo de Vuelta</span>
             </button>
           </div>
@@ -251,7 +251,7 @@ export const ResultsPage: React.FC = () => {
         {activeLegIndex === 1 && selectedOutbound && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-6 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" aria-hidden="true" />
               <div className="text-xs sm:text-sm">
                 <span className="font-bold text-emerald-950">Vuelo de Ida seleccionado: </span>
                 <span className="text-emerald-800">

@@ -139,20 +139,20 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
                 type="button"
                 disabled={counts.adt <= 1}
                 onClick={() => handleUpdate('adt', -1)}
-                className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 aria-label="Restar adulto"
               >
-                <Minus className="w-3.5 h-3.5" />
+                <Minus className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
               <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.adt} adultos`}>{counts.adt}</span>
               <button
                 type="button"
                 disabled={totalPassengers >= maxTotal}
                 onClick={() => handleUpdate('adt', 1)}
-                className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 aria-label="Sumar adulto"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -168,20 +168,20 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
                 type="button"
                 disabled={counts.chd <= 0}
                 onClick={() => handleUpdate('chd', -1)}
-                className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 aria-label="Restar niño"
               >
-                <Minus className="w-3.5 h-3.5" />
+                <Minus className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
               <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.chd} niños`}>{counts.chd}</span>
               <button
                 type="button"
                 disabled={totalPassengers >= maxTotal}
                 onClick={() => handleUpdate('chd', 1)}
-                className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 aria-label="Sumar niño"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -197,20 +197,20 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
                 type="button"
                 disabled={counts.inf <= 0}
                 onClick={() => handleUpdate('inf', -1)}
-                className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 aria-label="Restar bebé"
               >
-                <Minus className="w-3.5 h-3.5" />
+                <Minus className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
               <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.inf} bebés`}>{counts.inf}</span>
               <button
                 type="button"
                 disabled={counts.inf >= counts.adt || totalPassengers >= maxTotal}
                 onClick={() => handleUpdate('inf', 1)}
-                className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 aria-label="Sumar bebé"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </div>
           </div>

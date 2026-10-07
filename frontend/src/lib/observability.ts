@@ -64,7 +64,10 @@ export const notificationStateLabel = labelOf(NOTIFICATION_STATES);
 
 /** Name of a background job as the runtime metrics report it. */
 export function jobLabel(name: string): string {
-  return name === 'reconciliacion' ? 'Reconciliación de pagos y avisos' : name === 'barredor-holds' ? 'Liberación de reservas vencidas' : name;
+  if (name === 'reconciliacion') return 'Reconciliación de pagos y avisos';
+  if (name === 'holds-sweeper') return 'Liberación de reservas vencidas';
+  if (name === 'webhook-dispatcher') return 'Entrega de webhooks';
+  return name;
 }
 
 /** Width (0-100) of a bar for `value` against the largest value of its group. */

@@ -19,7 +19,7 @@ export const DateStrip: React.FC<DateStripProps> = ({
   return (
     <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm mb-5">
       <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 mb-2 px-1">
-        <Calendar className="w-3.5 h-3.5 text-airline-blue" />
+        <Calendar className="w-3.5 h-3.5 text-airline-blue" aria-hidden="true" />
         <span>Fechas cercanas con vuelos disponibles:</span>
       </div>
 
@@ -35,6 +35,7 @@ export const DateStrip: React.FC<DateStripProps> = ({
             <button
               key={item.fecha}
               type="button"
+              aria-pressed={isSelected}
               onClick={() => onSelectDate(item.fecha)}
               className={`flex-1 min-w-[110px] p-2.5 rounded-xl border text-center transition-all ${
                 isSelected
@@ -42,7 +43,7 @@ export const DateStrip: React.FC<DateStripProps> = ({
                   : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
-              <div className="text-[11px] font-semibold text-slate-500 capitalize">{dayName}</div>
+              <div className="text-xs font-semibold text-slate-600 capitalize">{dayName}</div>
               <div className="text-sm font-bold text-slate-900">{dayNumber}</div>
               <div className="mt-1 text-xs text-airline-navy font-bold">
                 <MoneyText

@@ -67,7 +67,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
       <div className="p-5 flex-1 space-y-3.5 text-xs text-slate-700">
         {/* Hand Luggage */}
         <div className="flex items-start gap-2.5">
-          <Briefcase className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+          <Briefcase className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <span className="font-semibold block">Equipaje de mano</span>
             {cond?.equipajeMano?.incluido ? (
@@ -82,7 +82,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
 
         {/* Hold Luggage */}
         <div className="flex items-start gap-2.5">
-          <Luggage className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+          <Luggage className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <span className="font-semibold block">Equipaje de bodega</span>
             {cond?.equipajeBodega?.piezas && cond.equipajeBodega.piezas > 0 ? (
@@ -97,7 +97,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
 
         {/* Changes */}
         <div className="flex items-start gap-2.5">
-          <RefreshCw className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+          <RefreshCw className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <span className="font-semibold block">Cambios de fecha</span>
             {cond?.cambio?.permitido ? (
@@ -110,7 +110,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
 
         {/* Refunds */}
         <div className="flex items-start gap-2.5">
-          <Undo2 className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+          <Undo2 className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <span className="font-semibold block">Devolución / Reembolso</span>
             {cond?.devolucion?.permitida ? (
@@ -123,7 +123,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
 
         {/* Seat Selection */}
         <div className="flex items-start gap-2.5">
-          <Armchair className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+          <Armchair className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <span className="font-semibold block">Selección de asiento</span>
             {cond?.seleccionAsiento?.incluida ? (

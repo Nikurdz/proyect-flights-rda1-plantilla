@@ -26,7 +26,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       primary: 'bg-airline-navy text-white hover:bg-airline-navy-light active:bg-airline-navy-dark',
-      secondary: 'bg-airline-blue text-white hover:bg-blue-700 active:bg-blue-800',
+      secondary: 'bg-airline-blue text-white hover:bg-sky-800 active:bg-sky-900',
       accent: 'bg-brand-gold text-brand-black hover:bg-brand-gold-dark hover:text-white active:bg-brand-gold-dark',
       outline: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100',
       ghost: 'bg-transparent text-slate-700 hover:bg-slate-100 active:bg-slate-200',
@@ -34,9 +34,9 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const sizes = {
-      sm: 'px-3 py-1.5 text-xs',
-      md: 'px-4 py-2.5 text-sm',
-      lg: 'px-6 py-3.5 text-base font-semibold',
+      sm: 'min-h-[32px] px-3 py-1.5 text-xs',
+      md: 'min-h-[44px] px-4 py-2.5 text-sm',
+      lg: 'min-h-[44px] px-6 py-3.5 text-base font-semibold',
     };
 
     return (
@@ -44,9 +44,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={clsx(baseStyles, variants[variant], sizes[size], className)}
         disabled={disabled || isLoading}
+        aria-busy={isLoading || undefined}
         {...props}
       >
-        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />}
+        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" aria-hidden="true" />}
         {children}
       </button>
     );

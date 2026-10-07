@@ -19,20 +19,20 @@ export const TransparencyPage: React.FC = () => (
     <p>El importe se calcula por pasajero según su edad en la fecha del primer vuelo y se muestra desglosado en el resumen de tu reserva. No hay cargos ocultos: el total del resumen es lo que se cobra.</p>
 
     <h3>Pasajeros y edades</h3>
-    <table>
-      <thead><tr><th>Tipo</th><th>Edad al primer vuelo</th><th>Factor sobre la tarifa</th></tr></thead>
+    <div className="overflow-x-auto" role="region" tabIndex={0} aria-label="Tabla desplazable horizontalmente"><table>
+      <thead><tr><th scope="col">Tipo</th><th scope="col">Edad al primer vuelo</th><th scope="col">Factor sobre la tarifa</th></tr></thead>
       <tbody>
         <tr><td>Adulto</td><td>18 años o más</td><td>100 %</td></tr>
         <tr><td>Joven</td><td>12 a 17 años</td><td>100 %</td></tr>
         <tr><td>Niño</td><td>2 a 11 años</td><td>75 %</td></tr>
         <tr><td>Infante (sin asiento)</td><td>Menos de 2 años</td><td>10 %</td></tr>
       </tbody>
-    </table>
+    </table></div>
     <p>Cada infante viaja en brazos de un adulto: no puede haber más infantes que adultos en una reserva. Los porcentajes y las bandas de edad son valores provisionales del prototipo.</p>
 
     <h2 id="familias">2. Qué incluye cada familia tarifaria</h2>
-    <table>
-      <thead><tr><th>Condición</th><th>BASIC</th><th>LIGHT</th><th>FULL</th></tr></thead>
+    <div className="overflow-x-auto" role="region" tabIndex={0} aria-label="Tabla desplazable horizontalmente"><table>
+      <thead><tr><th scope="col">Condición</th><th scope="col">BASIC</th><th scope="col">LIGHT</th><th scope="col">FULL</th></tr></thead>
       <tbody>
         <tr><td>Factor sobre la tarifa base</td><td>1,00</td><td>1,15</td><td>1,35</td></tr>
         <tr><td>Equipaje de mano</td><td>No incluido</td><td>10 kg</td><td>10 kg</td></tr>
@@ -41,7 +41,7 @@ export const TransparencyPage: React.FC = () => (
         <tr><td>Reembolso</td><td>No reembolsable</td><td>No reembolsable</td><td>Reembolsable</td></tr>
         <tr><td>Selección de asiento</td><td>No incluida</td><td>No incluida</td><td>Incluida</td></tr>
       </tbody>
-    </table>
+    </table></div>
     <p>La familia se elige por tramo antes de pagar y queda registrada en tu orden.</p>
 
     <h2 id="reserva">3. Tiempo de reserva y cambios de precio</h2>

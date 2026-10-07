@@ -23,7 +23,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ oferta, onExpi
       {oferta.venceEn && (
         <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+            <Clock className="w-4 h-4 text-amber-600 animate-pulse" aria-hidden="true" />
             <span className="text-xs font-bold text-slate-800">Tu cupo está retenido</span>
           </div>
           <Countdown
@@ -58,7 +58,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ oferta, onExpi
               >
                 <div className="flex items-center justify-between">
                   <span className="font-extrabold text-slate-900 flex items-center gap-1.5">
-                    <Plane className="w-3.5 h-3.5 text-brand-gold" />
+                    <Plane className="w-3.5 h-3.5 text-brand-gold" aria-hidden="true" />
                     {trayecto.origen} → {trayecto.destino}
                   </span>
                   <span className="text-[11px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
@@ -79,7 +79,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ oferta, onExpi
           {/* Passenger Composition */}
           <div className="pt-3 border-t border-slate-100 text-xs">
             <div className="flex items-center gap-2 text-slate-700 font-bold mb-1">
-              <Users className="w-4 h-4 text-slate-400" />
+              <Users className="w-4 h-4 text-slate-400" aria-hidden="true" />
               <span>Pasajeros:</span>
             </div>
             <div className="text-slate-500 pl-6 text-[11px] space-y-0.5">
@@ -112,7 +112,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ oferta, onExpi
 
         {/* Guaranteed Protection Footer */}
         <div className="bg-slate-50 p-4 border-t border-slate-100 flex items-center gap-3 text-[11px] text-slate-500">
-          <Shield className="w-4 h-4 text-emerald-600 shrink-0" />
+          <Shield className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
           <span>Tus datos viajan cifrados. Los pagos de este sitio son simulados.</span>
         </div>
       </div>

@@ -74,7 +74,7 @@ export const CheckoutPage: React.FC = () => {
             to="/resultados"
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-brand-black transition-colors"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
             <span>Volver a resultados</span>
           </Link>
 
@@ -89,7 +89,7 @@ export const CheckoutPage: React.FC = () => {
         {isExpired && (
           <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center space-y-4 mb-6">
             <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-              <AlertCircle className="w-6 h-6" />
+              <AlertCircle className="w-6 h-6" aria-hidden="true" />
             </div>
             <div>
               <h3 className="text-base font-bold text-rose-950 mb-1">
@@ -104,7 +104,7 @@ export const CheckoutPage: React.FC = () => {
               to="/"
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-airline-navy text-white text-xs font-bold hover:bg-slate-900 transition-colors"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="w-4 h-4" aria-hidden="true" />
               <span>Buscar nuevos vuelos</span>
             </Link>
           </div>

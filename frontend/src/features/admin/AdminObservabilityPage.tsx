@@ -246,15 +246,16 @@ export const AdminObservabilityPage: React.FC = () => {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div>
                 <h3 className="mb-2 text-xs font-bold text-slate-300">Rutas más usadas</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-[11px]">
+                <div role="region" tabIndex={0} aria-label="Rutas con más actividad, desplazable horizontalmente" className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <caption className="sr-only">Rendimiento por ruta</caption>
                     <thead className="text-slate-400">
                       <tr>
-                        <th className="py-1 pr-2 font-semibold">Ruta</th>
-                        <th className="px-2 py-1 text-right font-semibold">Veces</th>
-                        <th className="px-2 py-1 text-right font-semibold">Prom.</th>
-                        <th className="px-2 py-1 text-right font-semibold">Máx.</th>
-                        <th className="pl-2 py-1 text-right font-semibold">Err.</th>
+                        <th scope="col" className="py-1 pr-2 font-semibold">Ruta</th>
+                        <th scope="col" className="px-2 py-1 text-right font-semibold">Veces</th>
+                        <th scope="col" className="px-2 py-1 text-right font-semibold">Prom.</th>
+                        <th scope="col" className="px-2 py-1 text-right font-semibold">Máx.</th>
+                        <th scope="col" className="pl-2 py-1 text-right font-semibold">Err.</th>
                       </tr>
                     </thead>
                     <tbody className="font-mono">

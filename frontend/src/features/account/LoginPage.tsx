@@ -54,7 +54,7 @@ export const LoginPage: React.FC = () => {
           type="email"
           autoComplete="email"
           placeholder="nombre@ejemplo.com"
-          leftIcon={<Mail className="h-4 w-4" />}
+          leftIcon={<Mail className="h-4 w-4" aria-hidden="true" />}
           value={correo}
           onChange={(e) => setCorreo(e.target.value)}
           required
@@ -64,7 +64,7 @@ export const LoginPage: React.FC = () => {
           label="Contraseña"
           type={showPassword ? 'text' : 'password'}
           autoComplete="current-password"
-          leftIcon={<Lock className="h-4 w-4" />}
+          leftIcon={<Lock className="h-4 w-4" aria-hidden="true" />}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
@@ -73,7 +73,7 @@ export const LoginPage: React.FC = () => {
         <button
           type="button"
           onClick={() => setShowPassword((value) => !value)}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-black"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-black"
           aria-pressed={showPassword}
         >
           {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
@@ -82,7 +82,7 @@ export const LoginPage: React.FC = () => {
 
         <Button type="submit" variant="primary" size="lg" isLoading={isLoading} className="w-full gap-2 font-bold">
           <span>Ingresar</span>
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Button>
       </form>
 

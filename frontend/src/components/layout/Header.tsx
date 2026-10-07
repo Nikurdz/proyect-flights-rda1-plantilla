@@ -91,13 +91,13 @@ export const Header: React.FC = () => {
 
           <button
             type="button"
-            className="rounded-lg p-2 text-slate-200 hover:bg-white/10 lg:hidden"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-slate-200 hover:bg-white/10 lg:hidden"
             aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
             aria-expanded={open}
             aria-controls="menu-movil"
             onClick={() => setOpen((value) => !value)}
           >
-            {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            {open ? <X className="h-6 w-6" aria-hidden="true" /> : <Menu className="h-6 w-6" aria-hidden="true" />}
           </button>
         </div>
       </div>

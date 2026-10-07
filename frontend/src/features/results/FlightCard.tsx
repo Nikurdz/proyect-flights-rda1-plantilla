@@ -39,17 +39,17 @@ export const FlightCard: React.FC<FlightCardProps> = ({
         <div className="flex flex-wrap items-center gap-1.5">
           {itinerario.distintivos?.includes('RECOMENDADO') && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-              <Award className="w-3.5 h-3.5" /> Recomendado
+              <Award className="w-3.5 h-3.5" aria-hidden="true" /> Recomendado
             </span>
           )}
           {itinerario.distintivos?.includes('MAS_ECONOMICO') && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-              <Sparkles className="w-3.5 h-3.5" /> Más económico
+              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" /> Más económico
             </span>
           )}
           {itinerario.distintivos?.includes('MAS_RAPIDO') && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-100 text-sky-800">
-              <Zap className="w-3.5 h-3.5" /> Más rápido
+              <Zap className="w-3.5 h-3.5" aria-hidden="true" /> Más rápido
             </span>
           )}
         </div>
@@ -57,7 +57,7 @@ export const FlightCard: React.FC<FlightCardProps> = ({
         {/* Scarcity badge */}
         {itinerario.ultimosAsientos && (
           <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full">
-            <AlertTriangle className="w-3.5 h-3.5" /> Últimos asientos a este precio
+            <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" /> Últimos asientos a este precio
           </span>
         )}
       </div>
@@ -84,7 +84,7 @@ export const FlightCard: React.FC<FlightCardProps> = ({
             <div className="relative w-24 sm:w-36 flex items-center">
               <div className="w-2 h-2 rounded-full bg-brand-black" />
               <div className="flex-1 border-b-2 border-dashed border-slate-300 mx-1" />
-              <Plane className="w-4 h-4 text-brand-gold shrink-0 -rotate-45" />
+              <Plane className="w-4 h-4 text-brand-gold shrink-0 -rotate-45" aria-hidden="true" />
               <div className="flex-1 border-b-2 border-dashed border-slate-300 mx-1" />
               <div className="w-2 h-2 rounded-full bg-brand-black" />
             </div>
@@ -144,7 +144,7 @@ export const FlightCard: React.FC<FlightCardProps> = ({
             className="px-6 py-2.5 font-bold shadow-sm bg-brand-black hover:bg-slate-900 text-brand-gold border border-brand-gold/30"
           >
             <span>{isSelected ? 'Seleccionado' : 'Elegir vuelo'}</span>
-            <ArrowRight className="w-4 h-4 ml-1.5" />
+            <ArrowRight className="w-4 h-4 ml-1.5" aria-hidden="true" />
           </Button>
         </div>
       </div>

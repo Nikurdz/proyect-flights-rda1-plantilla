@@ -37,7 +37,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={clsx(
-              'w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-airline-blue focus-visible:border-airline-blue disabled:bg-slate-50 disabled:text-slate-500',
+              'w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-airline-blue focus-visible:border-airline-blue disabled:bg-slate-50 disabled:text-slate-500',
               leftIcon && 'pl-10',
               rightIcon && 'pr-10',
               error

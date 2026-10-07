@@ -7,15 +7,15 @@ export const PrivacyPage: React.FC = () => (
     <PrototypeNotice />
 
     <h2>1. Datos que recopilamos</h2>
-    <table>
-      <thead><tr><th>Cuándo</th><th>Datos</th></tr></thead>
+    <div className="overflow-x-auto" role="region" tabIndex={0} aria-label="Tabla desplazable horizontalmente"><table>
+      <thead><tr><th scope="col">Cuándo</th><th scope="col">Datos</th></tr></thead>
       <tbody>
         <tr><td>Al crear una cuenta</td><td>Correo, contraseña (guardada solo como huella cifrada irreversible), nombres, apellidos, fecha de nacimiento, teléfono opcional y la versión de los términos aceptada.</td></tr>
         <tr><td>Al comprar</td><td>Por pasajero: nombres, apellidos, fecha de nacimiento, género, nacionalidad y documento de viaje. Contacto del comprador (correo y teléfono) y datos de facturación.</td></tr>
         <tr><td>Al pagar</td><td>Solo la marca de la tarjeta y sus últimos cuatro dígitos. <strong>Nunca guardamos el número completo ni el código de seguridad.</strong></td></tr>
         <tr><td>Al usar el sitio</td><td>Un identificador técnico de cada solicitud para diagnosticar errores, y los datos mínimos de la sesión.</td></tr>
       </tbody>
-    </table>
+    </table></div>
 
     <h2>2. Para qué los usamos</h2>
     <ul>

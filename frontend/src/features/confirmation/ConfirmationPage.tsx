@@ -130,7 +130,7 @@ export const ConfirmationPage: React.FC = () => {
                         aria-label="Copiar código de reserva"
                         className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:text-brand-black print:hidden"
                       >
-                        <Copy className="h-4 w-4" />
+                        <Copy className="h-4 w-4" aria-hidden="true" />
                       </button>
                     )}
                   </div>

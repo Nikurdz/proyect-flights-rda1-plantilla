@@ -31,7 +31,7 @@ export const OrderHistoryPage: React.FC = () => {
           </div>
           <Link to="/">
             <Button variant="accent" size="sm" className="gap-1.5 shadow-sm">
-              <Plane className="h-3.5 w-3.5 -rotate-45" />
+              <Plane className="h-3.5 w-3.5 -rotate-45" aria-hidden="true" />
               <span>Nuevo vuelo</span>
             </Button>
           </Link>

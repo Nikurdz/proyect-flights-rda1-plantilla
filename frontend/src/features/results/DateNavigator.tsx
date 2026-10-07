@@ -70,7 +70,7 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
       {/* Header bar with controls */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-[#C5A880]" />
+          <Calendar className="w-4 h-4 text-[#C5A880]" aria-hidden="true" />
           <span className="text-xs font-bold text-slate-800">{label}</span>
         </div>
 
@@ -80,21 +80,23 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
             type="button"
             onClick={handlePreviousDay}
             disabled={!canGoPrevious}
-            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-700"
+            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 min-h-[44px] min-w-[44px] justify-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-700"
             title="Ver día anterior"
+            aria-label="Ver día anterior"
           >
-            <ChevronLeft className="w-3.5 h-3.5" />
+            <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
             <span className="hidden sm:inline">Día anterior</span>
           </button>
 
           <button
             type="button"
             onClick={handleNextDay}
-            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-700"
+            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 min-h-[44px] min-w-[44px] justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-700"
             title="Ver día siguiente"
+            aria-label="Ver día siguiente"
           >
             <span className="hidden sm:inline">Día siguiente</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
 
           {/* Direct Date Picker Dropdown */}
@@ -134,6 +136,7 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
             <button
               key={dayStr}
               type="button"
+              aria-pressed={isSelected}
               onClick={() => onSelectDate(dayStr)}
               className={`p-2.5 rounded-xl text-center transition-all flex flex-col justify-between min-h-[72px] ${
                 isSelected

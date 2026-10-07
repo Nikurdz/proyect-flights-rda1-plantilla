@@ -74,7 +74,7 @@ export const RetrieveOrderPage: React.FC = () => {
       <div className="max-w-3xl mx-auto">
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-2xl bg-brand-gold-light text-brand-gold-dark flex items-center justify-center mx-auto mb-3">
-            <Luggage className="w-6 h-6" />
+            <Luggage className="w-6 h-6" aria-hidden="true" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-brand-black">
             Gestiona tu viaje
@@ -111,7 +111,7 @@ export const RetrieveOrderPage: React.FC = () => {
               isLoading={isLoading}
               className="w-full sm:w-auto px-8 gap-2"
             >
-              <Search className="w-4 h-4" />
+              <Search className="w-4 h-4" aria-hidden="true" />
               <span>Buscar reserva</span>
             </Button>
           </form>
@@ -150,7 +150,7 @@ export const RetrieveOrderPage: React.FC = () => {
                   <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 rounded-lg bg-brand-black text-white">
-                        <Plane className="w-4 h-4 -rotate-45" />
+                        <Plane className="w-4 h-4 -rotate-45" aria-hidden="true" />
                       </div>
                       <div>
                         <div className="text-sm font-bold text-slate-900">
@@ -180,7 +180,7 @@ export const RetrieveOrderPage: React.FC = () => {
                 {orden.pasajeros?.map((pax) => (
                   <div key={pax.id} className="p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-slate-400" />
+                      <User className="w-4 h-4 text-slate-400" aria-hidden="true" />
                       <span className="font-bold text-slate-900">
                         {pax.nombres} {pax.apellidos}
                       </span>
@@ -190,7 +190,7 @@ export const RetrieveOrderPage: React.FC = () => {
                     {pax.eTicket && (
                       <div className="flex items-center gap-3">
                         <div className="flex items-center gap-1.5 font-mono text-xs bg-slate-100 px-2 py-1 rounded text-slate-700">
-                          <Ticket className="w-3.5 h-3.5 text-brand-gold-dark" />
+                          <Ticket className="w-3.5 h-3.5 text-brand-gold-dark" aria-hidden="true" />
                           <span>Billete: {pax.eTicket}</span>
                         </div>
                         {pax.qr && <TicketQr code={pax.qr} size={72} passengerName={`${pax.nombres} ${pax.apellidos}`} />}
@@ -233,7 +233,7 @@ export const RetrieveOrderPage: React.FC = () => {
                 state={{ orden }}
                 className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-black text-white text-xs font-bold hover:bg-brand-navy transition-colors shadow-sm"
               >
-                <Printer className="w-4 h-4 text-brand-gold" />
+                <Printer className="w-4 h-4 text-brand-gold" aria-hidden="true" />
                 <span>Ver e imprimir comprobante</span>
               </Link>
             </div>

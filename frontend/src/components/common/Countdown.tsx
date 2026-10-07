@@ -62,7 +62,7 @@ export const Countdown: React.FC<CountdownProps> = ({
       role="timer"
       aria-live="polite"
     >
-      <Clock className="w-3.5 h-3.5" />
+      <Clock className="w-3.5 h-3.5" aria-hidden="true" />
       <span>Tu reserva expira en: {formattedTime}</span>
     </div>
   );

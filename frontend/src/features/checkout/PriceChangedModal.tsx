@@ -45,7 +45,7 @@ export const PriceChangedModal: React.FC<PriceChangedModalProps> = ({
     <Dialog isOpen={isOpen} onClose={() => {}} title="Actualización de Tarifa en Tiempo Real">
       <div className="space-y-5">
         <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200">
-          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
           <div className="text-xs text-amber-900 leading-relaxed">
             <span className="font-bold block mb-1">El valor de tu viaje ha cambiado</span>
             Durante el proceso de reserva, la aerolínea actualizó la disponibilidad o tasas oficiales.
@@ -92,7 +92,7 @@ export const PriceChangedModal: React.FC<PriceChangedModalProps> = ({
             disabled={isSubmitting}
             className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
           >
-            <XCircle className="w-4 h-4 text-slate-400" />
+            <XCircle className="w-4 h-4 text-slate-400" aria-hidden="true" />
             <span>Cancelar y buscar otro vuelo</span>
           </button>
 
@@ -104,13 +104,13 @@ export const PriceChangedModal: React.FC<PriceChangedModalProps> = ({
           >
             {isSubmitting ? (
               <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
+                <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
                 <span>Confirmando...</span>
               </>
             ) : (
               <>
                 <span>Aceptar nuevo precio</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </>
             )}
           </button>

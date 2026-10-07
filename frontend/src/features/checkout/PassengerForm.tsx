@@ -215,7 +215,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-airline-navy/5 text-airline-navy flex items-center justify-center font-bold text-xs">
-                    {isInfant ? <Baby className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+                    {isInfant ? <Baby className="w-4 h-4" aria-hidden="true" /> : <Users className="w-4 h-4" aria-hidden="true" />}
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">{labelTitle}</h3>
@@ -232,7 +232,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
               {isInfant && (
                 <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 space-y-2">
                   <div className="font-bold flex items-center gap-1.5">
-                    <UserCheck className="w-4 h-4 text-amber-700" />
+                    <UserCheck className="w-4 h-4 text-amber-700" aria-hidden="true" />
                     <span>Asignar adulto acompañante (viaja en brazos)</span>
                   </div>
                   <select
@@ -399,7 +399,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
       {/* Contact Section */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
         <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Mail className="w-5 h-5 text-airline-navy" />
+          <Mail className="w-5 h-5 text-airline-navy" aria-hidden="true" />
           <div>
             <h3 className="text-sm font-bold text-slate-900">Datos de Contacto del Comprador</h3>
             <p className="text-xs text-slate-500">
@@ -467,7 +467,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
           ) : (
             <>
               <span>Continuar a Facturación</span>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </>
           )}
         </button>

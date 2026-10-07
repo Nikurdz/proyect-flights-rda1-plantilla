@@ -129,11 +129,11 @@ export const RegisterPage: React.FC = () => {
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input label="Nombres" autoComplete="given-name" leftIcon={<User className="h-4 w-4" />} error={errors.nombres?.message} {...register('nombres')} />
-          <Input label="Apellidos" autoComplete="family-name" leftIcon={<User className="h-4 w-4" />} error={errors.apellidos?.message} {...register('apellidos')} />
+          <Input label="Nombres" autoComplete="given-name" leftIcon={<User className="h-4 w-4" aria-hidden="true" />} error={errors.nombres?.message} {...register('nombres')} />
+          <Input label="Apellidos" autoComplete="family-name" leftIcon={<User className="h-4 w-4" aria-hidden="true" />} error={errors.apellidos?.message} {...register('apellidos')} />
         </div>
 
-        <Input label="Correo electrónico" type="email" autoComplete="email" placeholder="nombre@ejemplo.com" leftIcon={<Mail className="h-4 w-4" />} error={errors.correo?.message} {...register('correo')} />
+        <Input label="Correo electrónico" type="email" autoComplete="email" placeholder="nombre@ejemplo.com" leftIcon={<Mail className="h-4 w-4" aria-hidden="true" />} error={errors.correo?.message} {...register('correo')} />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
@@ -149,7 +149,7 @@ export const RegisterPage: React.FC = () => {
             type="tel"
             autoComplete="tel"
             placeholder="+593999999999"
-            leftIcon={<Phone className="h-4 w-4" />}
+            leftIcon={<Phone className="h-4 w-4" aria-hidden="true" />}
             helperText="Con código de país."
             error={errors.telefono?.message}
             {...register('telefono')}
@@ -162,7 +162,7 @@ export const RegisterPage: React.FC = () => {
               label="Contraseña"
               type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
-              leftIcon={<Lock className="h-4 w-4" />}
+              leftIcon={<Lock className="h-4 w-4" aria-hidden="true" />}
               helperText="Mínimo 10 caracteres, con una letra y un número."
               error={errors.contrasena?.message}
               {...register('contrasena')}
@@ -172,7 +172,7 @@ export const RegisterPage: React.FC = () => {
             label="Repite la contraseña"
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
-            leftIcon={<Lock className="h-4 w-4" />}
+            leftIcon={<Lock className="h-4 w-4" aria-hidden="true" />}
             error={errors.confirmacion?.message}
             {...register('confirmacion')}
           />
@@ -181,7 +181,7 @@ export const RegisterPage: React.FC = () => {
         <button
           type="button"
           onClick={() => setShowPassword((value) => !value)}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-black"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-black"
           aria-pressed={showPassword}
         >
           {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}

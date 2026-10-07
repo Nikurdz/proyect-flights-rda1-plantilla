@@ -40,6 +40,7 @@ export const CheckoutStepper: React.FC<CheckoutStepperProps> = ({
                 type="button"
                 onClick={() => isClickable && onStepClick?.(step.id)}
                 disabled={!isClickable && !isCurrent}
+                aria-current={isCurrent ? 'step' : undefined}
                 className={`w-full flex items-center gap-2.5 p-2 rounded-xl text-left transition-all ${
                   isCurrent
                     ? 'bg-airline-navy text-white font-bold shadow-sm'
@@ -57,7 +58,7 @@ export const CheckoutStepper: React.FC<CheckoutStepperProps> = ({
                       : 'bg-slate-100 text-slate-500'
                   }`}
                 >
-                  {isCompleted ? <Check className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+                  {isCompleted ? <Check className="w-4 h-4" aria-hidden="true" /> : <Icon className="w-4 h-4" aria-hidden="true" />}
                 </div>
                 <div className="min-w-0">
                   <span className="block text-xs truncate leading-tight">{step.label}</span>

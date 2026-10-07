@@ -54,7 +54,7 @@ export const Footer: React.FC = () => {
               <ul className="space-y-2.5">
                 {column.links.map((link) => (
                   <li key={link.label}>
-                    <Link to={link.to} className="text-xs transition-colors hover:text-brand-gold">
+                    <Link to={link.to} className="inline-block py-1.5 text-xs transition-colors hover:text-brand-gold">
                       {link.label}
                     </Link>
                   </li>
@@ -64,7 +64,7 @@ export const Footer: React.FC = () => {
           ))}
         </div>
 
-        <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-[11px] text-slate-500 sm:flex-row">
+        <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-slate-400 sm:flex-row">
           <p>© {new Date().getFullYear()} RAM Alliance. Proyecto académico de integración de sistemas.</p>
           <p>Los pagos de este sitio son simulados: no se realizan cobros reales.</p>
         </div>

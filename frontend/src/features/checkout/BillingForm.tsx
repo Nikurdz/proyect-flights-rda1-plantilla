@@ -83,7 +83,7 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-5">
         <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
           <div className="w-8 h-8 rounded-xl bg-airline-navy/5 text-airline-navy flex items-center justify-center font-bold">
-            <Building2 className="w-4 h-4" />
+            <Building2 className="w-4 h-4" aria-hidden="true" />
           </div>
           <div>
             <h3 className="text-sm font-bold text-slate-900">Datos para Comprobante Fiscal</h3>
@@ -195,7 +195,7 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
           onClick={onBack}
           className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
           <span>Volver a Pasajeros</span>
         </button>
 
@@ -209,7 +209,7 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
           ) : (
             <>
               <span>Continuar a Condiciones</span>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </>
           )}
         </button>

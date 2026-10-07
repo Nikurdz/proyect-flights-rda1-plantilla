@@ -60,12 +60,12 @@ export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, clas
           {(onRetry || supportCode) && (
             <div className="mt-3 flex flex-wrap items-center gap-4">
               {onRetry && (
-                <button type="button" onClick={onRetry} className="text-xs font-semibold text-red-700 underline hover:text-red-900">
+                <button type="button" onClick={onRetry} className="inline-flex min-h-[44px] items-center px-1 text-xs font-semibold text-red-700 underline hover:text-red-900">
                   Reintentar
                 </button>
               )}
               {supportCode && (
-                <button type="button" onClick={copySupportCode} className="text-[11px] text-red-500 underline hover:text-red-700">
+                <button type="button" onClick={copySupportCode} className="inline-flex min-h-[44px] items-center px-1 text-xs text-red-700 underline hover:text-red-900">
                   {copied ? 'Código copiado' : 'Copiar código para soporte'}
                 </button>
               )}

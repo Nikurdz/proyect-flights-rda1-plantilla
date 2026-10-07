@@ -25,13 +25,13 @@ export const SortingBar: React.FC<SortingBarProps> = ({
 }) => {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-4 py-3 rounded-xl border border-slate-200/80 shadow-sm mb-4">
-      <div className="text-xs sm:text-sm font-semibold text-slate-700">
+      <div role="status" aria-live="polite" className="text-xs sm:text-sm font-semibold text-slate-700">
         <span className="text-airline-navy font-bold">{totalResults}</span>{' '}
         {totalResults === 1 ? 'vuelo directo disponible' : 'vuelos directos disponibles'}
       </div>
 
       <div className="flex items-center gap-2">
-        <ArrowUpDown className="w-4 h-4 text-slate-400 shrink-0" />
+        <ArrowUpDown className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
         <label htmlFor="sorting-select" className="text-xs font-semibold text-slate-500 whitespace-nowrap">
           Ordenar por:
         </label>

@@ -36,11 +36,12 @@ const FlightSeatsDialog: React.FC<{ flight: AdminVueloView | null; ownerId?: str
                 <p className="text-xs text-slate-500">Ningún asiento reservado todavía.</p>
               ) : (
                 <table className="w-full text-left text-xs">
+                  <caption className="sr-only">Asientos reservados</caption>
                   <thead className="text-slate-500">
                     <tr>
-                      <th className="py-1 pr-3 font-semibold">Asiento</th>
-                      <th className="py-1 pr-3 font-semibold">Reserva</th>
-                      <th className="py-1 font-semibold">Orden</th>
+                      <th scope="col" className="py-1 pr-3 font-semibold">Asiento</th>
+                      <th scope="col" className="py-1 pr-3 font-semibold">Reserva</th>
+                      <th scope="col" className="py-1 font-semibold">Orden</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
@@ -101,17 +102,18 @@ export const AdminFlightsPage: React.FC = () => {
 
       {error != null && <ProblemAlert error={error} onRetry={() => refetch()} className="mb-4" />}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div role="region" tabIndex={0} aria-label="Tabla de vuelos, desplazable horizontalmente" className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full min-w-[760px] text-left text-sm">
+          <caption className="sr-only">Vuelos programados</caption>
           <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
             <tr>
-              <th className="px-4 py-3">Vuelo</th>
-              <th className="px-4 py-3">Ruta</th>
-              <th className="px-4 py-3">Salida (UTC)</th>
-              <th className="px-4 py-3">Aerolínea</th>
-              <th className="px-4 py-3 text-right">Tarifa base</th>
-              <th className="px-4 py-3 text-right">Libres</th>
-              <th className="px-4 py-3 text-right">Asiento elegido</th>
+              <th scope="col" className="px-4 py-3">Vuelo</th>
+              <th scope="col" className="px-4 py-3">Ruta</th>
+              <th scope="col" className="px-4 py-3">Salida (UTC)</th>
+              <th scope="col" className="px-4 py-3">Aerolínea</th>
+              <th scope="col" className="px-4 py-3 text-right">Tarifa base</th>
+              <th scope="col" className="px-4 py-3 text-right">Libres</th>
+              <th scope="col" className="px-4 py-3 text-right">Asiento elegido</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">

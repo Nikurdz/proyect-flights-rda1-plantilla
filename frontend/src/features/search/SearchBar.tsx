@@ -171,7 +171,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
             aria-label="Invertir origen y destino"
             title="Invertir origen y destino"
           >
-            <ArrowLeftRight className="w-4 h-4" />
+            <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -213,7 +213,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
                 }}
                 className="w-full h-[54px] px-3 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold text-slate-800 bg-white focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20"
               />
-              <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block" />
+              <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block" aria-hidden="true" />
             </div>
           </div>
 
@@ -238,7 +238,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
                     : 'bg-white border-slate-300'
                 }`}
               />
-              <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block" />
+              <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block" aria-hidden="true" />
             </div>
           </div>
         </div>
@@ -270,7 +270,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
           size="lg"
           className="w-full sm:w-auto px-8 gap-2 bg-[#0B0E14] hover:bg-[#1E293B] border border-[#C5A880]/50 text-white hover:text-[#C5A880] shadow-md hover:shadow-lg font-black transition-all"
         >
-          <Search className="w-4 h-4 text-[#C5A880]" />
+          <Search className="w-4 h-4 text-[#C5A880]" aria-hidden="true" />
           <span>Buscar vuelos</span>
         </Button>
       </div>
