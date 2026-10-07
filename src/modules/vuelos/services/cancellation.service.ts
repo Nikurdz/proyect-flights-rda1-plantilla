@@ -138,10 +138,13 @@ export class CancellationService {
 
   /** The refund and penalty of a booking for a given penalty percentage (0 when the airline cancels). */
   async amountsFor(manager: EntityManager, context: BookingContext, penaltyPercent: number, airlineCancelled = false): Promise<CancellationAmounts> {
-    const taxesMinor = context.legs.reduce(
-      (sum, leg) => sum + priceForPartyParts(toMinorUnits(leg.vuelo.precioBase), leg.family.priceMultiplier, context.hold.passengersBreakdown, this.config.taxRate).taxes,
-      0,
-    );
+    // The taxes frozen at hold time; holds created before that column existed fall back to the live price.
+    const taxesMinor =
+      context.hold.lockedTaxesMinor ??
+      context.legs.reduce(
+        (sum, leg) => sum + priceForPartyParts(toMinorUnits(leg.vuelo.precioBase), leg.family.priceMultiplier, context.hold.passengersBreakdown, this.config.taxRate).taxes,
+        0,
+      );
     const purchases = await manager.find(BaggagePurchase, { where: { bookingId: context.booking.bookingId } });
     return cancellationAmounts({
       fareTotalMinor: toMinorUnits(context.booking.grandTotal),

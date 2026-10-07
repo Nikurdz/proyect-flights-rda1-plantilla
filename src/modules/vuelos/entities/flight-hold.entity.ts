@@ -21,6 +21,11 @@ export class FlightHold {
   @Column({ type: 'varchar', length: 20 })
   lockedPrice: string;
 
+  // Taxes included in lockedPrice, in minor units, frozen when the hold is created so a later change of
+  // Vuelo.precioBase cannot move the refund of a non-refundable fare. Null on holds created before it existed.
+  @Column({ type: 'int', nullable: true })
+  lockedTaxesMinor: number | null;
+
   @Column({ type: 'varchar', length: 3 })
   currency: string;
 

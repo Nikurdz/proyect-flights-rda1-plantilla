@@ -170,6 +170,10 @@ export class DateChangeService {
     // The fare difference raises what the booking is worth (never lowers it: a cheaper flight is not refunded).
     const raise = Math.max(0, offer.fareDifferenceMinor + offer.taxDifferenceMinor);
     context.booking.grandTotal = formatMinorUnits(toMinorUnits(context.booking.grandTotal) + raise);
+    if (raise > 0 && context.hold.lockedTaxesMinor !== null) {
+      context.hold.lockedTaxesMinor += Math.max(0, offer.taxDifferenceMinor);
+      await manager.save(context.hold);
+    }
     this.context.addChange(
       context.booking,
       `Cambio de fecha: ${old.codigoVuelo} del ${new Date(old.fechaSalida).toISOString().slice(0, 10)} a ${newVuelo.codigoVuelo} del ${new Date(newVuelo.fechaSalida).toISOString().slice(0, 10)}. Pagado ${formatMinorUnits(offer.totalToPayMinor)} ${offer.currency} (cargo ${formatMinorUnits(offer.changeFeeMinor)}).`,

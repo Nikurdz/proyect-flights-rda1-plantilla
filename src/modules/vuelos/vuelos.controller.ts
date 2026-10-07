@@ -99,7 +99,13 @@ export class VuelosController {
 
   @Get('offers/:offerId/seatmap')
   @ApiTags(SWAGGER_TAGS.nucleoBusqueda)
-  @ApiOperation({ summary: 'Obtener mapa de asientos por segmento' })
+  @ApiOperation({
+    summary: 'Obtener mapa de asientos por segmento',
+    description:
+      'Muestra los asientos ya emitidos (reservados por una reserva confirmada). Un hold no fija asientos concretos: ' +
+      'dos clientes pueden elegir el mismo asiento libre y el perdedor recibe 409 `SEAT_TAKEN` al confirmar la reserva, ' +
+      'sin cobro. Es un mapa de cabina, no una reserva de inventario.',
+  })
   @ApiParam({ name: 'offerId', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Mapa de asientos' })
   @ApiProblemResponses(BAD_REQUEST, NOT_FOUND, GONE)

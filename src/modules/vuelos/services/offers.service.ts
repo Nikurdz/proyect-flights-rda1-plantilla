@@ -6,7 +6,7 @@ import { assertGroupSize, assertInfantRatio } from '../common/business-rules';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { toIso } from '../common/date.util';
 import { formatMinorUnits, toMinorUnits } from '../common/money.util';
-import { PassengerBreakdown, priceForParty, seatsRequired } from '../common/pricing.util';
+import { PassengerBreakdown, priceForPartyParts, seatsRequired } from '../common/pricing.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { buildSeatGrid } from '../common/seat-grid';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
@@ -158,6 +158,7 @@ export class OffersService {
 
     const seats = seatsRequired(breakdown);
     let lockedMinor = 0;
+    let lockedTaxesMinor = 0;
     const inventory: { vueloId: string; seats: number }[] = [];
 
     for (const selection of request.itinerarySelections) {
@@ -184,7 +185,9 @@ export class OffersService {
         throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight cancelled', `Flight ${vuelo.codigoVuelo} was cancelled.`);
       }
 
-      lockedMinor += priceForParty(toMinorUnits(vuelo.precioBase), family.priceMultiplier, breakdown, this.config.taxRate);
+      const parts = priceForPartyParts(toMinorUnits(vuelo.precioBase), family.priceMultiplier, breakdown, this.config.taxRate);
+      lockedMinor += parts.total;
+      lockedTaxesMinor += parts.taxes;
       inventory.push({ vueloId: vuelo.id, seats });
     }
 
@@ -197,6 +200,7 @@ export class OffersService {
         ownerId,
         status: 'HELD',
         lockedPrice: formatMinorUnits(lockedMinor),
+        lockedTaxesMinor,
         currency: offer.currency,
         ttlMinutes: this.config.holdTtlMinutes,
         itinerarySelections: request.itinerarySelections,

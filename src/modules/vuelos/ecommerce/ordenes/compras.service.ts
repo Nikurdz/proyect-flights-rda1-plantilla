@@ -220,12 +220,19 @@ export class ComprasService {
     const hold = await this.gdsOffers.getHoldStatus(oferta.ownerId, oferta.holdId).catch(() => null);
     await this.ofertas.liberarPago(oferta.ofertaId, hold?.status === 'HELD' ? 'ABIERTA' : 'VENCIDA');
 
-    await this.events.publish(
-      'OrdenFallidaCompensada',
-      fallida.ordenId,
-      { ordenId: fallida.ordenId, numeroOrden: fallida.numeroOrden, correo: fallida.contacto.correo, idioma: (await this.mercados.obtener(oferta.mercado)).idiomaPorDefecto, motivo },
-      { market: oferta.mercado },
-    );
+    // Everything above is already recorded: a market that vanished since the lock must not turn a
+    // compensated failure into an exception (the key would be released and a retry would record a second one).
+    const idioma = await this.mercados.obtener(oferta.mercado).then((m) => m.idiomaPorDefecto).catch(() => 'es');
+    await this.events
+      .publish(
+        'OrdenFallidaCompensada',
+        fallida.ordenId,
+        { ordenId: fallida.ordenId, numeroOrden: fallida.numeroOrden, correo: fallida.contacto.correo, idioma, motivo },
+        { market: oferta.mercado },
+      )
+      .catch((publishError: unknown) =>
+        this.logger.error(`Could not announce failed order ${fallida.numeroOrden}: ${publishError instanceof Error ? publishError.message : String(publishError)}`),
+      );
 
     const status = known ? known.getStatus() : HttpStatus.BAD_GATEWAY;
     return {
