@@ -56,7 +56,7 @@ export const PriceChangedModal: React.FC<PriceChangedModalProps> = ({
         {error != null && <ProblemAlert error={error} className="mb-2" />}
 
         {/* Comparison Cards */}
-        <div className="grid grid-cols-2 gap-3 text-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-center">
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
               Precio Anterior
@@ -84,8 +84,11 @@ export const PriceChangedModal: React.FC<PriceChangedModalProps> = ({
           </div>
         </div>
 
-        {/* Modal Actions */}
-        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+        {/* Modal Actions: Escape and the close button are inert on purpose, so say that one option must be chosen. */}
+        <p id="price-changed-choice" className="text-xs font-semibold text-slate-700">
+          Debes elegir una opción para continuar: aceptar el nuevo precio o cancelar y buscar otro vuelo.
+        </p>
+        <div role="group" aria-labelledby="price-changed-choice" className="flex flex-col sm:flex-row gap-3 pt-2">
           <button
             type="button"
             onClick={onCancel}

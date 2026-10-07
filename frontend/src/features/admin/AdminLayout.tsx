@@ -24,7 +24,7 @@ export const AdminLayout: React.FC = () => {
               <p className="text-xs text-slate-500">Órdenes, vuelos y estado del sistema. Solo lectura.</p>
             </div>
           </div>
-          <nav aria-label="Administración" className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1">
+          <nav aria-label="Administración" className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
             <NavLink to="/admin/ordenes" className={tabClass}>
               Órdenes
             </NavLink>

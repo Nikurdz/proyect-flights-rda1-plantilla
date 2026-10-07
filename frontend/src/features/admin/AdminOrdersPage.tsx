@@ -81,7 +81,7 @@ export const AdminOrdersPage: React.FC = () => {
           <tbody className="divide-y divide-slate-100">
             {isLoading && (
               <tr>
-                <td colSpan={6} className="p-4">
+                <td colSpan={6} className="p-4" role="status" aria-busy="true" aria-label="Cargando">
                   <Skeleton className="h-24 w-full" />
                 </td>
               </tr>

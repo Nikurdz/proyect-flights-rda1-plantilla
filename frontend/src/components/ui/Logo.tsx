@@ -14,7 +14,7 @@ export interface LogoProps {
  */
 export const Logo: React.FC<LogoProps> = ({ variant = 'full', inverted = true, className = '' }) => {
   return (
-    <div className={`inline-flex select-none items-center gap-3 ${className}`}>
+    <div className={`inline-flex min-w-0 max-w-full select-none items-center gap-3 ${className}`}>
       <svg viewBox="0 0 64 64" className="h-9 w-9 shrink-0" role="img" aria-label="RAM Alliance">
         <g fill="none" stroke="#AB9159" strokeWidth="4.5" strokeLinecap="round">
           <path d="M32 14a18 18 0 1 0 18 18" />
@@ -23,7 +23,7 @@ export const Logo: React.FC<LogoProps> = ({ variant = 'full', inverted = true, c
         <circle cx="50" cy="32" r="3.2" fill="#AB9159" />
       </svg>
       {variant === 'full' && (
-        <span className={`text-[15px] font-semibold uppercase leading-none tracking-[0.32em] ${inverted ? 'text-white' : 'text-brand-black'}`}>
+        <span className={`truncate text-[15px] font-semibold uppercase leading-none tracking-[0.2em] sm:tracking-[0.32em] ${inverted ? 'text-white' : 'text-brand-black'}`}>
           RAM <span className="font-light">Alliance</span>
         </span>
       )}

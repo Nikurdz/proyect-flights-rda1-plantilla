@@ -81,6 +81,8 @@ export const SeatSelector: React.FC<SeatSelectorProps> = ({ oferta, passengers, 
               key={l.itinerarioId}
               type="button"
               role="tab"
+              id={`seat-tab-${l.itinerarioId}`}
+              aria-controls="seat-tabpanel"
               aria-selected={l.itinerarioId === leg.itinerarioId}
               onClick={() => setLegId(l.itinerarioId)}
               className={`rounded-full border px-4 py-1.5 text-xs font-bold transition-colors ${
@@ -92,6 +94,7 @@ export const SeatSelector: React.FC<SeatSelectorProps> = ({ oferta, passengers, 
           ))}
         </div>
       )}
+      <div role={legs.length > 1 ? 'tabpanel' : undefined} id="seat-tabpanel" aria-labelledby={legs.length > 1 ? `seat-tab-${leg.itinerarioId}` : undefined} className="space-y-4">
       <p className="text-xs text-slate-500">
         Vuelo <strong className="font-mono text-slate-800">{leg.numeroVuelo}</strong> · {leg.origen} → {leg.destino}
       </p>
@@ -120,7 +123,7 @@ export const SeatSelector: React.FC<SeatSelectorProps> = ({ oferta, passengers, 
       {error != null ? (
         <ProblemAlert error={error} title="No pudimos cargar el mapa de asientos" onRetry={() => refetch()} />
       ) : isLoading || !map ? (
-        <Skeleton className="mx-auto h-72 max-w-xs rounded-3xl" />
+        <div role="status" aria-busy="true" aria-label="Cargando"><Skeleton className="mx-auto h-72 max-w-xs rounded-3xl" /></div>
       ) : (
         <div className="space-y-4">
           <div className="max-h-[28rem] overflow-y-auto rounded-3xl">
@@ -129,6 +132,7 @@ export const SeatSelector: React.FC<SeatSelectorProps> = ({ oferta, passengers, 
           <SeatLegend />
         </div>
       )}
+      </div>
     </section>
   );
 };

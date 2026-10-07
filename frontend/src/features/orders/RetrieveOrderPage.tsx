@@ -117,6 +117,9 @@ export const RetrieveOrderPage: React.FC = () => {
           </form>
         </div>
 
+        <p className="sr-only" role="status" aria-live="polite">
+          {isLoading ? 'Buscando tu reserva...' : orden ? `Reserva encontrada: orden ${orden.numeroOrden}, estado ${orderStatusLabel(orden.estado)}.` : ''}
+        </p>
         {error != null && <ProblemAlert error={error} className="mb-6" />}
 
         {/* Order Details View */}

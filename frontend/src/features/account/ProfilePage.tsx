@@ -30,7 +30,7 @@ export const ProfilePage: React.FC = () => {
 
   return (
     <AuthShell title="Mi cuenta" subtitle="Tus datos y tus preferencias de comunicación." wide>
-      {isLoading && <Skeleton className="h-40 w-full" />}
+      {isLoading && <div role="status" aria-busy="true" aria-label="Cargando"><Skeleton className="h-40 w-full" /></div>}
       {error != null && <ProblemAlert error={error} onRetry={() => refetch()} />}
 
       {perfil && (

@@ -141,7 +141,7 @@ export const AdminObservabilityPage: React.FC = () => {
 
       {resumen.isLoading || !s ? (
         resumen.error == null && (
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-6" role="status" aria-busy="true" aria-label="Cargando">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Skeleton key={i} className="h-24 rounded-2xl" />
             ))}
@@ -225,7 +225,7 @@ export const AdminObservabilityPage: React.FC = () => {
         {runtime.error != null ? (
           <ProblemAlert error={runtime.error} onRetry={() => runtime.refetch()} />
         ) : !r ? (
-          <Skeleton className="h-28 rounded-xl" />
+          <div role="status" aria-busy="true" aria-label="Cargando"><Skeleton className="h-28 rounded-xl" /></div>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-5">

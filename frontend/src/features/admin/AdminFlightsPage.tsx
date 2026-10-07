@@ -20,7 +20,7 @@ const FlightSeatsDialog: React.FC<{ flight: AdminVueloView | null; ownerId?: str
       {error != null ? (
         <ProblemAlert error={error} onRetry={() => refetch()} />
       ) : isLoading || !data ? (
-        <Skeleton className="h-72 w-full rounded-2xl" />
+        <div role="status" aria-busy="true" aria-label="Cargando"><Skeleton className="h-72 w-full rounded-2xl" /></div>
       ) : (
         <div className="space-y-5">
           <p className="text-xs text-slate-600">
@@ -119,7 +119,7 @@ export const AdminFlightsPage: React.FC = () => {
           <tbody className="divide-y divide-slate-100">
             {isLoading && (
               <tr>
-                <td colSpan={7} className="p-4">
+                <td colSpan={7} className="p-4" role="status" aria-busy="true" aria-label="Cargando">
                   <Skeleton className="h-24 w-full" />
                 </td>
               </tr>

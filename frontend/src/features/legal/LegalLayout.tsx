@@ -25,6 +25,8 @@ export const LegalLayout: React.FC<LegalLayoutProps> = ({ title, intro, children
     document.title = `${title} | RAM Alliance`;
   }, [title]);
 
+  const isActive = (label: string) => label === title || title.startsWith(label);
+
   return (
     <div className="bg-airline-sand">
       <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
@@ -33,8 +35,9 @@ export const LegalLayout: React.FC<LegalLayoutProps> = ({ title, intro, children
             <Link
               key={item.to}
               to={item.to}
+              aria-current={isActive(item.label) ? 'page' : undefined}
               className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                item.label === title || title.startsWith(item.label)
+                isActive(item.label)
                   ? 'border-brand-black bg-brand-black text-white'
                   : 'border-slate-300 bg-white text-slate-600 hover:border-brand-gold hover:text-brand-black'
               }`}

@@ -25,7 +25,7 @@ export const VerifyTicketPage: React.FC = () => {
         {error != null ? (
           <ProblemAlert error={error} title="No pudimos verificar el billete" onRetry={() => refetch()} />
         ) : isLoading || !data ? (
-          <Skeleton className="h-40 rounded-2xl" />
+          <div role="status" aria-busy="true" aria-label="Cargando"><Skeleton className="h-40 rounded-2xl" /></div>
         ) : data.valido ? (
           <div role="status" className="space-y-5 text-center">
             <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-600" aria-hidden="true" />

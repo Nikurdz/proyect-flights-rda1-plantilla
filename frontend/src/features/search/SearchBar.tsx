@@ -191,9 +191,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
         </div>
 
         {/* Dates (3 cols) */}
-        <div className="md:col-span-3 grid grid-cols-2 gap-2">
+        <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
           {/* Outbound Date */}
-          <div>
+          <div className="min-w-0">
             <label htmlFor="search-outbound" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
               Ida
             </label>
@@ -211,14 +211,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
                     setInbound(e.target.value);
                   }
                 }}
-                className="w-full h-[54px] px-3 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold text-slate-800 bg-white focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20"
+                className="w-full min-w-0 h-[54px] px-3 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold text-slate-800 bg-white focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20"
               />
               <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block" aria-hidden="true" />
             </div>
           </div>
 
           {/* Inbound Date */}
-          <div>
+          <div className="min-w-0">
             <label htmlFor="search-inbound" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
               Vuelta
             </label>
@@ -232,7 +232,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
                 disabled={tripType === 'OW'}
                 value={tripType === 'OW' ? '' : inbound}
                 onChange={(e) => setInbound(e.target.value)}
-                className={`w-full h-[54px] px-3 rounded-xl border text-xs sm:text-sm font-semibold text-slate-800 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 ${
+                className={`w-full min-w-0 h-[54px] px-3 rounded-xl border text-xs sm:text-sm font-semibold text-slate-800 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 ${
                   tripType === 'OW'
                     ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
                     : 'bg-white border-slate-300'

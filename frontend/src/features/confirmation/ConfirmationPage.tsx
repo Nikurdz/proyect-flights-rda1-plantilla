@@ -98,7 +98,7 @@ export const ConfirmationPage: React.FC = () => {
         )}
 
         {isLoading && !orden ? (
-          <div className="space-y-6 rounded-3xl border border-slate-200 bg-white p-8">
+          <div className="space-y-6 rounded-3xl border border-slate-200 bg-white p-8" role="status" aria-busy="true" aria-label="Cargando">
             <Skeleton className="h-12 w-1/3" />
             <Skeleton className="h-32 rounded-2xl" />
             <Skeleton className="h-48 rounded-2xl" />

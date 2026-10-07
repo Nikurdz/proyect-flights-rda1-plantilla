@@ -63,7 +63,7 @@ export const CardBrandLogo: React.FC<CardBrandLogoProps> = ({ brand, className =
 
 /** Row with every accepted brand; the detected one stays in colour, the rest fade. */
 export const AcceptedBrands: React.FC<{ active: DetectedBrand; brands: CardBrand[] }> = ({ active, brands }) => (
-  <ul className="flex items-center gap-2" aria-label="Tarjetas aceptadas">
+  <ul className="flex flex-wrap items-center gap-2" aria-label="Tarjetas aceptadas">
     {brands.map((brand) => (
       <li key={brand} className={`transition-all duration-200 ${active && active !== brand ? 'opacity-30 grayscale' : 'opacity-100'}`}>
         <CardBrandLogo brand={brand} className="h-6 w-10" />

@@ -43,8 +43,8 @@ export const Header: React.FC = () => {
       </a>
 
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between gap-4 lg:h-20">
-          <Link to="/" aria-label="RAM Alliance, inicio" className="focus-visible:ring-offset-brand-black">
+        <div className="flex h-16 items-center justify-between gap-2 sm:gap-4 lg:h-20">
+          <Link to="/" aria-label="RAM Alliance, inicio" className="min-w-0 focus-visible:ring-offset-brand-black">
             <Logo variant="full" inverted />
           </Link>
 

@@ -198,6 +198,7 @@ export const ResultsPage: React.FC = () => {
         {/* Navigation Breadcrumb & Back */}
         <div className="flex items-center justify-between mb-6">
           <button
+            type="button"
             onClick={() => navigate(`/?${searchParams.toString()}`)}
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-airline-navy transition-colors"
           >
@@ -214,6 +215,7 @@ export const ResultsPage: React.FC = () => {
         {trip === 'RT' && trayectos.length > 1 && (
           <div className="flex rounded-2xl bg-white p-2 shadow-sm border border-slate-200/80 mb-6">
             <button
+              type="button"
               onClick={() => setActiveLegIndex(0)}
               className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all ${
                 activeLegIndex === 0
@@ -229,6 +231,7 @@ export const ResultsPage: React.FC = () => {
             </button>
 
             <button
+              type="button"
               onClick={() => {
                 if (selectedOutbound) setActiveLegIndex(1);
               }}
@@ -262,6 +265,7 @@ export const ResultsPage: React.FC = () => {
               </div>
             </div>
             <button
+              type="button"
               onClick={() => setActiveLegIndex(0)}
               className="text-xs font-bold text-emerald-800 underline hover:text-emerald-950"
             >
@@ -300,7 +304,7 @@ export const ResultsPage: React.FC = () => {
 
         {/* Loading Skeletons */}
         {isLoading || isCreatingOffer ? (
-          <div className="space-y-4">
+          <div className="space-y-4" role="status" aria-busy="true" aria-label="Buscando vuelos">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
               <Skeleton className="h-5 w-48" />
               <Skeleton className="h-8 w-32" />

@@ -15,6 +15,6 @@ export const TicketQr: React.FC<TicketQrProps> = ({ code, size = 96, passengerNa
     <div className="rounded-lg border border-slate-200 bg-white p-1.5">
       <QRCodeSVG value={ticketVerificationUrl(code)} size={size} level="M" role="img" aria-label={`Código QR del billete${passengerName ? ` de ${passengerName}` : ''}`} />
     </div>
-    <figcaption className="text-[10px] font-medium text-slate-500">Escanea para verificar</figcaption>
+    <figcaption className="text-xs font-medium text-slate-500">Escanea para verificar</figcaption>
   </figure>
 );

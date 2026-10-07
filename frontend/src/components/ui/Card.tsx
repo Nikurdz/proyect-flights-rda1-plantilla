@@ -9,7 +9,7 @@ export const Card: React.FC<CardProps> = ({ className, hoverable = false, childr
   return (
     <div
       className={clsx(
-        'rounded-xl border border-slate-200/80 bg-white p-5 shadow-card transition-all duration-200',
+        'min-w-0 rounded-xl border border-slate-200/80 bg-white p-5 shadow-card transition-all duration-200',
         hoverable && 'hover:shadow-card-hover hover:border-airline-blue/40',
         className
       )}

@@ -22,6 +22,7 @@ export const WakeUpBanner: React.FC = () => {
           <Plane className="h-4 w-4 text-brand-gold-dark" aria-hidden="true" />
           Estamos conectando con el servidor. Puede tardar un poco la primera vez.
         </span>
+        {/* Decorative: the elapsed time is only an estimate, the text above carries the message. */}
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-brand-gold/25 sm:w-40" aria-hidden="true">
           <div className="h-full rounded-full bg-brand-gold transition-all duration-1000 ease-linear" style={{ width: `${progressPercent}%` }} />
         </div>

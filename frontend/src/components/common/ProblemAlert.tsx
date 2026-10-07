@@ -44,7 +44,7 @@ export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, clas
       <div className="flex items-start gap-3">
         <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
         <div className="flex-1">
-          <h4 className="text-sm font-bold text-red-800">{title}</h4>
+          <p className="text-sm font-bold text-red-800"><strong>{title}</strong></p>
           <p className="mt-1 text-sm leading-relaxed text-red-700">{message}</p>
 
           {fields.length > 0 && (

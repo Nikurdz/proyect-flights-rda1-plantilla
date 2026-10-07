@@ -40,7 +40,7 @@ export const OrderHistoryPage: React.FC = () => {
         {error != null && <ProblemAlert error={error} onRetry={() => refetch()} className="mb-6" />}
 
         {isLoading ? (
-          <div className="space-y-4">
+          <div className="space-y-4" role="status" aria-busy="true" aria-label="Cargando">
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-36 rounded-2xl" />
             ))}

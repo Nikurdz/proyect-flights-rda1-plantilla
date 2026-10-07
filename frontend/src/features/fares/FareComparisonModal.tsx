@@ -60,7 +60,7 @@ export const FareComparisonModal: React.FC<FareComparisonModalProps> = ({
           )}
 
           {isLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5" role="status" aria-busy="true" aria-label="Cargando">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="rounded-2xl border border-slate-200 p-5 space-y-4">
                   <Skeleton className="h-6 w-24" />
