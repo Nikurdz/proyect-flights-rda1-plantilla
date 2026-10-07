@@ -163,3 +163,9 @@ graph TD
 > El archivo OpenAPI sirve actualmente solo como una **guía obligatoria** para que todos sigamos los mismos parámetros y estructuras.
 > 
 > **Objetivo Actual:** Cada equipo debe construir su aplicativo para que funcione de manera independiente y **subir su API correspondiente a Render**. La verdadera integración (la comunicación entre las APIs) se realizará en las siguientes fases (RDA2, etc.), una vez que se haya verificado que todas las aplicaciones individuales funcionan correctamente en la nube.
+
+## Documentación técnica
+
+- [Modelo de datos (diagrama ER, 24 tablas, reglas de integridad)](docs/MODELO-DE-DATOS.md)
+- [Arquitectura de servicios y eventos (SOA/EDA), catálogo de eventos y webhooks](docs/ARQUITECTURA-EVENTOS.md)
+- [Guía de defensa del Swagger](docs/GUIA-DEFENSA-SWAGGER.md) · [SRS](docs/SRS_Plataforma_Ecommerce_LATAM.md) · [Levantamiento de requerimientos](docs/Levantamiento_Requerimientos_LATAM_Nucleo_Vuelos_1.md)
