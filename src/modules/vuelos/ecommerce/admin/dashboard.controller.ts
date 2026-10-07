@@ -6,7 +6,6 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
-import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import { DashboardService, VentanaDashboard } from './dashboard.service';
 
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN } = HttpStatus;
@@ -21,7 +20,7 @@ export class DashboardQueryDto {
 }
 
 /** Management dashboard of the ADMIN: sales, conversion, routes, occupancy and after-sale activity, ready to chart. */
-@ProblemController('admin/dashboard', SWAGGER_TAGS.admin)
+@ProblemController('admin/dashboard', 'E-commerce · Observabilidad')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 @ApiBearerAuth()

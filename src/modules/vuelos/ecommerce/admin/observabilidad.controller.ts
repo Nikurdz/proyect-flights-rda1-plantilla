@@ -6,7 +6,6 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
-import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import { ObservabilidadService, VentanaObservabilidad } from './observabilidad.service';
 
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN } = HttpStatus;
@@ -19,7 +18,7 @@ export class ObservabilidadQueryDto {
 }
 
 /** Operational view for the ADMIN: how the platform is behaving, with no personal data. */
-@ProblemController('admin/observabilidad', SWAGGER_TAGS.admin)
+@ProblemController('admin/observabilidad', 'E-commerce · Observabilidad')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 @ApiBearerAuth()
@@ -54,7 +53,7 @@ export class ObservabilidadController {
 }
 
 /** Public liveness + database check, for the host's health check and uptime pings. */
-@ProblemController('health', SWAGGER_TAGS.sistema)
+@ProblemController('health', 'Sistema')
 export class HealthController {
   constructor(private readonly observabilidad: ObservabilidadService) {}
 

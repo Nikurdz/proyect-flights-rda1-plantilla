@@ -4,7 +4,6 @@ import { CurrentAuth, JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import type { AuthClaims } from '../../auth/token.service';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
-import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import { HTTP_LOCKED } from '../../common/problem-details.exception';
 import { ClienteParamDto, ClienteViewDto, LoginDto, PreferenciasDto, RegistroClienteDto, TokenViewDto, VerificarCorreoDto } from './dto/identidad.dto';
 import { IdentidadService } from './identidad.service';
@@ -12,13 +11,13 @@ import { IdentidadService } from './identidad.service';
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, UNPROCESSABLE_ENTITY, TOO_MANY_REQUESTS } = HttpStatus;
 const LOCKED = HTTP_LOCKED;
 
-@ProblemController('auth', SWAGGER_TAGS.acceso)
+@ProblemController('auth', 'E-commerce · Identidad')
 export class AuthController {
   constructor(private readonly identidad: IdentidadService) {}
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Paso 1C · Iniciar sesión (cuenta o ADMIN)', description: 'RF-IAM-003. Bloqueo temporal tras 5 intentos fallidos consecutivos.' })
+  @ApiOperation({ summary: 'Iniciar sesión', description: 'RF-IAM-003. Bloqueo temporal tras 5 intentos fallidos consecutivos.' })
   @ApiResponse({ status: 200, type: TokenViewDto })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, LOCKED, TOO_MANY_REQUESTS)
   login(@Body() dto: LoginDto, @Ip() ip: string) {
@@ -27,7 +26,7 @@ export class AuthController {
 
   @Post('invitado')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Paso 1A · Sesión de invitado (comprar sin cuenta)', description: 'RF-CHK-001: comprar sin cuenta. El viaje se recupera luego con número de orden y apellido.' })
+  @ApiOperation({ summary: 'Sesión de invitado', description: 'RF-CHK-001: comprar sin cuenta. El viaje se recupera luego con número de orden y apellido.' })
   @ApiResponse({ status: 201, type: TokenViewDto })
   @ApiProblemResponses(TOO_MANY_REQUESTS)
   invitado(@Ip() ip: string) {
@@ -43,13 +42,13 @@ export class AuthController {
   }
 }
 
-@ProblemController('clientes', SWAGGER_TAGS.acceso)
+@ProblemController('clientes', 'E-commerce · Identidad')
 export class ClientesController {
   constructor(private readonly identidad: IdentidadService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Paso 1B · Registrar una cuenta', description: 'RF-IAM-001/002: cuenta gratuita vinculada a un número LATAM Pass; se envía un correo de verificación.' })
+  @ApiOperation({ summary: 'Registrar una cuenta', description: 'RF-IAM-001/002: cuenta gratuita vinculada a un número LATAM Pass; se envía un correo de verificación.' })
   @ApiResponse({ status: 201, type: ClienteViewDto })
   @ApiProblemResponses(BAD_REQUEST, CONFLICT, NOT_FOUND, UNPROCESSABLE_ENTITY)
   registrar(@Body() dto: RegistroClienteDto) {

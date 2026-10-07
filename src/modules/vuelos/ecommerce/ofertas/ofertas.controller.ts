@@ -5,7 +5,6 @@ import { CurrentAuth, JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import type { AuthClaims } from '../../auth/token.service';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
-import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import {
   AceptarCondicionesDto,
   AceptarPrecioDto,
@@ -23,7 +22,7 @@ import { OfertasService } from './ofertas.service';
 
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY, TOO_MANY_REQUESTS, SERVICE_UNAVAILABLE } = HttpStatus;
 
-@ProblemController('ofertas', SWAGGER_TAGS.oferta)
+@ProblemController('ofertas', 'E-commerce · Ofertas y checkout')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class OfertasController {
@@ -34,7 +33,7 @@ export class OfertasController {
   @UseGuards(IdempotencyKeyGuard)
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiOperation({
-    summary: 'Paso 3A · Armar una oferta de viaje',
+    summary: 'Armar una oferta de viaje',
     description:
       'RF-CRT-001: consolida los trayectos elegidos (ida y, si aplica, vuelta), su familia y la composición de pasajeros, fija el mercado y la moneda (RN-01) y retiene el inventario hasta `venceEn`. ' +
       'Requiere sesión: de cliente o de invitado (POST /auth/invitado).',
@@ -46,7 +45,7 @@ export class OfertasController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Consultar una oferta vigente (qué falta antes de pagar)', description: 'RF-CRT-004/006: resumen con total persistente, vigencia y lo que falta antes de pagar.' })
+  @ApiOperation({ summary: 'Consultar una oferta vigente', description: 'RF-CRT-004/006: resumen con total persistente, vigencia y lo que falta antes de pagar.' })
   @ApiResponse({ status: 200, type: OfertaViewDto })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND)
   obtener(@CurrentAuth() auth: AuthClaims, @Param() params: OfertaParamDto) {
@@ -55,7 +54,7 @@ export class OfertasController {
 
   @Get(':id/asientos')
   @ApiOperation({
-    summary: 'Paso 3B+ · Mapa de asientos de un trayecto (opcional)',
+    summary: 'Mapa de asientos de un trayecto de la oferta',
     description: 'Asientos de un trayecto (economía) y cuáles están libres. Es solo orientativo: el asiento se reserva al emitir la compra y, si otra persona lo toma antes, la compra responde SEAT_TAKEN.',
   })
   @ApiResponse({ status: 200, type: MapaAsientosViewDto })
@@ -74,7 +73,7 @@ export class OfertasController {
 
   @Post(':id/revalidacion')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Si hace falta · Revalidar precio y disponibilidad', description: 'RF-CRT-003 / RN-12: si el precio cambió, la oferta queda en revisión hasta que el cliente acepte el nuevo total.' })
+  @ApiOperation({ summary: 'Revalidar precio y disponibilidad', description: 'RF-CRT-003 / RN-12: si el precio cambió, la oferta queda en revisión hasta que el cliente acepte el nuevo total.' })
   @ApiResponse({ status: 200, type: RevalidacionViewDto })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE)
   revalidar(@CurrentAuth() auth: AuthClaims, @Param() params: OfertaParamDto) {
@@ -83,7 +82,7 @@ export class OfertasController {
 
   @Post(':id/aceptacion-precio')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Si el precio cambió · Aceptar el nuevo precio' })
+  @ApiOperation({ summary: 'Aceptar el nuevo precio tras una revalidación' })
   @ApiResponse({ status: 200, type: OfertaViewDto })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE)
   aceptarPrecio(@CurrentAuth() auth: AuthClaims, @Param() params: OfertaParamDto, @Body() dto: AceptarPrecioDto) {
@@ -92,7 +91,7 @@ export class OfertasController {
 
   @Put(':id/pasajeros')
   @ApiOperation({
-    summary: 'Paso 3B · Registrar pasajeros y contacto (asiento opcional)',
+    summary: 'Registrar pasajeros y contacto',
     description:
       'RF-CHK-002..010: valida la composición, normaliza los nombres, comprueba el tipo según la edad el día del primer vuelo (RN-14), duplicados, infantes y el vencimiento del documento. Los datos personales se guardan cifrados.',
   })
@@ -103,7 +102,7 @@ export class OfertasController {
   }
 
   @Put(':id/facturacion')
-  @ApiOperation({ summary: 'Paso 3C · Registrar los datos de facturación', description: 'RF-CHK-011: los tipos de identificación y su formato salen de la configuración del mercado.' })
+  @ApiOperation({ summary: 'Registrar los datos de facturación', description: 'RF-CHK-011: los tipos de identificación y su formato salen de la configuración del mercado.' })
   @ApiResponse({ status: 200, type: OfertaViewDto })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE, UNPROCESSABLE_ENTITY)
   facturacion(@CurrentAuth() auth: AuthClaims, @Param() params: OfertaParamDto, @Body() dto: FacturacionDto) {
@@ -112,7 +111,7 @@ export class OfertasController {
 
   @Post(':id/condiciones')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Paso 3D · Aceptar las condiciones', description: 'RF-CHK-012: se registra la versión aceptada y la fecha; debe ser la vigente del mercado.' })
+  @ApiOperation({ summary: 'Aceptar las condiciones', description: 'RF-CHK-012: se registra la versión aceptada y la fecha; debe ser la vigente del mercado.' })
   @ApiResponse({ status: 200, type: OfertaViewDto })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, GONE)
   condiciones(@CurrentAuth() auth: AuthClaims, @Param() params: OfertaParamDto, @Body() dto: AceptarCondicionesDto) {
@@ -120,7 +119,7 @@ export class OfertasController {
   }
 
   @Get(':id/medios-pago')
-  @ApiOperation({ summary: 'Paso 3E (opcional) · Medios de pago habilitados para la oferta', description: 'RF-PAY-001/002: según el mercado y el producto.' })
+  @ApiOperation({ summary: 'Medios de pago habilitados para la oferta', description: 'RF-PAY-001/002: según el mercado y el producto.' })
   @ApiResponse({ status: 200, type: [MedioPagoViewDto] })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND)
   medios(@CurrentAuth() auth: AuthClaims, @Param() params: OfertaParamDto) {

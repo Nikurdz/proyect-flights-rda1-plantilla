@@ -232,7 +232,7 @@ export class VuelosController {
   @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Paso 6A · Opciones y precio del equipaje extra',
+    summary: 'Opciones y precio del equipaje extra',
     description: 'Scope de referencia: flights:read. Por pasajero y tramo: precio de una maleta, máximo permitido y las ya compradas. Los bebés en brazos no compran equipaje.',
   })
   @ApiParam({ name: 'bookingId', type: 'string', format: 'uuid' })
@@ -248,7 +248,7 @@ export class VuelosController {
   @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Paso 6B · Agregar equipaje extra',
+    summary: 'Agregar equipaje extra',
     description:
       'Scope de referencia: flights:book. Hasta 3 h antes de la salida, máximo 2 maletas extra por pasajero y tramo. La referencia de pago es de un solo uso. Una sola transacción; con la misma Idempotency-Key devuelve el mismo resultado.',
   })
@@ -271,7 +271,7 @@ export class VuelosController {
   @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Paso 6C · Buscar opciones de cambio de fecha',
+    summary: 'Buscar opciones de cambio de fecha',
     description:
       'Scope de referencia: flights:read. Solo tarifas que permiten cambios. Devuelve vuelos directos de la misma ruta con cupo, con la diferencia de tarifa e impuestos más el cargo de cambio; cada opción vive 15 minutos.',
   })
@@ -288,7 +288,7 @@ export class VuelosController {
   @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Paso 6D · Confirmar el cambio de fecha',
+    summary: 'Confirmar el cambio de fecha',
     description:
       'Scope de referencia: flights:book. Una sola transacción: toma los cupos del vuelo nuevo, devuelve los del viejo y actualiza la reserva. Si hay algo que pagar, hay que enviar payment.paymentReference (de un solo uso). Los asientos se asignan a los pasajeros que ocupan asiento en orden ascendente de passengerId.',
   })
@@ -310,7 +310,7 @@ export class VuelosController {
   @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Paso 6E · Cotizar la cancelación',
+    summary: 'Cotizar la cancelación',
     description:
       'Scope de referencia: flights:read. Tarifa reembolsable (FULL): el total menos 10 % de penalidad; no reembolsable (BASIC/LIGHT): solo los impuestos; el equipaje extra se devuelve completo. La cotización vive 15 minutos. No se cancela un vuelo que ya salió ni a menos de 3 h de la salida.',
   })
@@ -327,7 +327,7 @@ export class VuelosController {
   @ApiTags(SWAGGER_TAGS.gestionar)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Paso 6F · Cancelar la reserva',
+    summary: 'Cancelar la reserva',
     description:
       'Scope de referencia: flights:cancel. Una sola transacción: la reserva pasa a CANCELLED, los billetes a REFUNDED (o VOIDED si no hay nada que devolver), los asientos y cupos vuelven al inventario. El reembolso se ejecuta en la pasarela y la orden del e-commerce pasa a REEMBOLSADA.',
   })
@@ -351,7 +351,7 @@ export class VuelosController {
   @ApiTags(SWAGGER_TAGS.checkin)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Paso 7A · Hacer el check-in',
+    summary: 'Hacer el check-in',
     description:
       'Scope de referencia: flights:book. Abre 48 h y cierra 1 h antes de la salida de cada tramo. Usa el asiento elegido o asigna el primero libre; los bebés en brazos no llevan asiento. Repetirlo no cambia nada (no necesita Idempotency-Key).',
   })
@@ -367,7 +367,7 @@ export class VuelosController {
   @ApiTags(SWAGGER_TAGS.checkin)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Paso 7B · Pases de abordar',
+    summary: 'Pases de abordar',
     description:
       'Scope de referencia: flights:read. Uno por pasajero con asiento y tramo, con su grupo y posición de embarque y un código QR firmado (sin datos personales). Antes del check-in responde 404 BOARDING_PASS_NOT_AVAILABLE.',
   })
@@ -393,7 +393,7 @@ export class VuelosController {
   @UseGuards(JwtAuthGuard)
   @ApiTags(SWAGGER_TAGS.webhooks)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Paso 8A · Listar mis suscripciones', description: 'Scope de referencia: flights:webhooks. El secreto nunca se devuelve.' })
+  @ApiOperation({ summary: 'Listar mis suscripciones', description: 'Scope de referencia: flights:webhooks. El secreto nunca se devuelve.' })
   @ApiResponse({ status: 200, description: 'Suscripciones activas', type: [WebhookSubscriptionViewDto] })
   @ApiProblemResponses(UNAUTHORIZED)
   listWebhooks(@CurrentAuth() auth: AuthClaims) {
@@ -405,7 +405,7 @@ export class VuelosController {
   @ApiTags(SWAGGER_TAGS.webhooks)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Paso 8B · Registrar un webhook',
+    summary: 'Registrar un webhook',
     description:
       'Scope de referencia: flights:webhooks. Solo URLs https que resuelvan a direcciones públicas (se rechazan localhost y redes privadas). Cada entrega es un POST con X-Webhook-Id, X-Webhook-Event, X-Webhook-Timestamp y X-Webhook-Signature = sha256=HMAC(secret, timestamp.cuerpo); se reintenta 5 veces (1 min, 5 min, 30 min, 2 h, 6 h). Máximo 10 por cuenta.',
   })
@@ -420,7 +420,7 @@ export class VuelosController {
   @UseGuards(JwtAuthGuard)
   @ApiTags(SWAGGER_TAGS.webhooks)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Paso 8C · Eliminar un webhook', description: 'Scope de referencia: flights:webhooks. Las entregas pendientes de esa suscripción se descartan.' })
+  @ApiOperation({ summary: 'Eliminar un webhook', description: 'Scope de referencia: flights:webhooks. Las entregas pendientes de esa suscripción se descartan.' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Eliminado' })
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, NOT_FOUND)

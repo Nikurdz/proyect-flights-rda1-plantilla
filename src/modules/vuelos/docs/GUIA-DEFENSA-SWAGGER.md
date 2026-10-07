@@ -22,7 +22,9 @@ Cada paso dice **qué pulsar**, **qué escribir** y **qué decir**. Imprímela o
 
 ---
 
-## 1. Acceso — sección `1 · Acceso (empieza aquí)`
+> **Nombres en pantalla.** Los números de esta guía (1 a 9, «Paso 3A»…) son el orden del recorrido, no los nombres del Swagger. En pantalla las secciones se llaman: **E-commerce · Identidad** (paso 1), **E-commerce · Búsqueda** y **E-commerce · Mercados** (2), **E-commerce · Ofertas y checkout** (3), **E-commerce · Compra y órdenes** (4 y 5), **E-commerce · Verificación de billetes** (5C), **Postventa (Maletas, Fechas y Cancelaciones)** (6), **Check-in y Boarding Pass** (7), **Webhooks** (8), **E-commerce · Back-office** y **E-commerce · Observabilidad** (9, ADMIN), y las del contrato de vuelos (Búsqueda y Catálogo, Bloqueo de Cupos (Hold), Reservas y Emisión, Estado de Vuelos).
+
+## 1. Acceso — sección `E-commerce · Identidad`
 
 **Qué decir:** "Se puede comprar sin cuenta (invitado) o con cuenta. Ambos reciben un JWT firmado; el dueño de cada recurso es siempre el `sub` del token, nunca un dato que mande el cliente."
 

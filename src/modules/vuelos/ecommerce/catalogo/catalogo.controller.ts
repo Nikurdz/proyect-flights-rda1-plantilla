@@ -2,7 +2,6 @@ import { Get, HttpStatus, Param, Query } from '@nestjs/common';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
-import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import { CatalogoService } from './catalogo.service';
 import {
   DisponibilidadQueryDto,
@@ -16,12 +15,12 @@ import {
 
 const { BAD_REQUEST, NOT_FOUND, UNPROCESSABLE_ENTITY, SERVICE_UNAVAILABLE } = HttpStatus;
 
-@ProblemController('', SWAGGER_TAGS.buscar)
+@ProblemController('', 'E-commerce · Búsqueda')
 export class CatalogoController {
   constructor(private readonly catalogo: CatalogoService) {}
 
   @Get('localidades')
-  @ApiOperation({ summary: 'Paso 2A · Sugerir ciudades y aeropuertos', description: 'RF-SHP-001/002: prefijo sobre código, ciudad y aeropuerto, sin distinguir acentos ni mayúsculas.' })
+  @ApiOperation({ summary: 'Sugerir ciudades y aeropuertos', description: 'RF-SHP-001/002: prefijo sobre código, ciudad y aeropuerto, sin distinguir acentos ni mayúsculas.' })
   @ApiResponse({ status: 200, type: [LocalidadViewDto] })
   @ApiProblemResponses(BAD_REQUEST)
   sugerir(@Query() query: LocalidadesQueryDto) {
@@ -30,7 +29,7 @@ export class CatalogoController {
 
   @Get('disponibilidad')
   @ApiOperation({
-    summary: 'Paso 2B · Buscar vuelos disponibles',
+    summary: 'Buscar vuelos disponibles',
     description:
       'RF-SHP-004..024. Los criterios son los parámetros del enlace profundo (origin, destination, outbound, inbound, adt, chd, inf, trip, cabin, sort). ' +
       'Un trayecto sin vuelos se devuelve vacío con fechas alternativas, no como error. Solo vuelos directos en cabina económica.',
@@ -42,7 +41,7 @@ export class CatalogoController {
   }
 
   @Get('itinerarios/:id/tarifas')
-  @ApiOperation({ summary: 'Paso 2C · Comparar las familias tarifarias de un itinerario', description: 'RF-PRC-002/003/005/009: precios con impuestos por pasajero, condiciones estructuradas y vigencia.' })
+  @ApiOperation({ summary: 'Comparar las familias tarifarias de un itinerario', description: 'RF-PRC-002/003/005/009: precios con impuestos por pasajero, condiciones estructuradas y vigencia.' })
   @ApiResponse({ status: 200, type: TarifasViewDto })
   @ApiProblemResponses(BAD_REQUEST, NOT_FOUND, UNPROCESSABLE_ENTITY, SERVICE_UNAVAILABLE)
   tarifas(@Param() params: TarifasParamDto, @Query() query: TarifasQueryDto) {

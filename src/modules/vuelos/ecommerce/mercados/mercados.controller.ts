@@ -5,18 +5,17 @@ import { Roles, RolesGuard } from '../../auth/roles.guard';
 import type { AuthClaims } from '../../auth/token.service';
 import { ApiProblemResponses } from '../../common/api-problem-responses';
 import { ProblemController } from '../../common/problem-controller';
-import { SWAGGER_TAGS } from '../../common/swagger-tags';
 import { ActualizarMercadoDto, AuditoriaQueryDto, MercadoParamDto, MercadoViewDto } from './dto/mercado.dto';
 import { MercadosService } from './mercados.service';
 
 const { BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT } = HttpStatus;
 
-@ProblemController('mercados', SWAGGER_TAGS.buscar)
+@ProblemController('mercados', 'E-commerce · Mercados')
 export class MercadosController {
   constructor(private readonly mercados: MercadosService) {}
 
   @Get(':codigo')
-  @ApiOperation({ summary: 'Configuración vigente del mercado (usa "ec")', description: 'RF-MKT-001/005/006/008: moneda, idiomas, productos del buscador, medios de pago y textos legales del portal.' })
+  @ApiOperation({ summary: 'Configuración vigente del mercado', description: 'RF-MKT-001/005/006/008: moneda, idiomas, productos del buscador, medios de pago y textos legales del portal.' })
   @ApiResponse({ status: 200, type: MercadoViewDto })
   @ApiProblemResponses(BAD_REQUEST, NOT_FOUND)
   obtener(@Param() params: MercadoParamDto) {
@@ -24,7 +23,7 @@ export class MercadosController {
   }
 }
 
-@ProblemController('admin', SWAGGER_TAGS.admin)
+@ProblemController('admin', 'E-commerce · Back-office')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 @ApiBearerAuth()
