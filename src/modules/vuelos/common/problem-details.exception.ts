@@ -88,12 +88,16 @@ export function isProblemDetailsBody(value: unknown): value is ProblemDetailsBod
 
 /** RFC 7807 problem whose shape matches the contract's ProblemDetails schema. */
 export class ProblemDetailsException extends HttpException {
+  /** Sent as the Retry-After header (429, and 409 for a request still in progress); never part of the body. */
+  readonly retryAfterSeconds?: number;
+
   constructor(
     status: HttpStatus,
     code: ProblemDetailsCode,
     title: string,
     detail: string,
     invalidParams?: InvalidParam[],
+    retryAfterSeconds?: number,
   ) {
     const body: ProblemDetailsBody = {
       type: `https://api.booking-hub.com/errors/${code.toLowerCase().replace(/_/g, '-')}`,
@@ -106,5 +110,6 @@ export class ProblemDetailsException extends HttpException {
       body.invalidParams = invalidParams;
     }
     super(body, status);
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }

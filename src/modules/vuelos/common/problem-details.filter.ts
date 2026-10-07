@@ -6,6 +6,7 @@ import {
   isProblemDetailsBody,
   ProblemDetailsBody,
   ProblemDetailsCode,
+  ProblemDetailsException,
 } from './problem-details.exception';
 
 const STATUS_CODES: Record<number, { code: ProblemDetailsCode; title: string }> = {
@@ -84,6 +85,10 @@ export class VuelosProblemDetailsFilter implements ExceptionFilter {
         code: 'INTERNAL_ERROR',
         detail: 'An unexpected error occurred. Quote the correlation id when contacting support.',
       };
+    }
+
+    if (exception instanceof ProblemDetailsException && exception.retryAfterSeconds !== undefined) {
+      response.setHeader('Retry-After', String(exception.retryAfterSeconds));
     }
 
     runtimeMetrics.recordProblem(body.code);

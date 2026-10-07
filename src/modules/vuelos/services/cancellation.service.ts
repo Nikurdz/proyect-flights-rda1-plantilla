@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, MoreThan } from 'typeorm';
 import type { AuthClaims } from '../auth/token.service';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { formatMinorUnits, toMinorUnits } from '../common/money.util';
@@ -42,18 +42,23 @@ export class CancellationService {
     this.assertCancellable(context);
 
     const amounts = await this.amountsFor(manager, context, this.config.postSale.cancelPenaltyPercent);
-    const quote = await manager.save(
-      manager.create(CancellationQuote, {
-        bookingId,
-        ownerId,
-        isRefundable: amounts.isRefundable,
-        refundMinor: amounts.refundMinor,
-        penaltyMinor: amounts.penaltyMinor,
-        currency: context.booking.currency,
-        status: 'OPEN',
-        expiresAt: new Date(Date.now() + this.config.postSale.quoteTtlMinutes * 60_000),
-      }),
-    );
+    // Asking again for the same booking returns the quote still alive instead of piling up a row per GET.
+    const alive = await manager.findOne(CancellationQuote, { where: { bookingId, ownerId, status: 'OPEN', expiresAt: MoreThan(new Date()) }, order: { createdAt: 'DESC' } });
+    const quote =
+      alive && alive.refundMinor === amounts.refundMinor && alive.penaltyMinor === amounts.penaltyMinor && alive.isRefundable === amounts.isRefundable
+        ? alive
+        : await manager.save(
+            manager.create(CancellationQuote, {
+              bookingId,
+              ownerId,
+              isRefundable: amounts.isRefundable,
+              refundMinor: amounts.refundMinor,
+              penaltyMinor: amounts.penaltyMinor,
+              currency: context.booking.currency,
+              status: 'OPEN',
+              expiresAt: new Date(Date.now() + this.config.postSale.quoteTtlMinutes * 60_000),
+            }),
+          );
     return {
       quoteId: quote.quoteId,
       isRefundable: quote.isRefundable,

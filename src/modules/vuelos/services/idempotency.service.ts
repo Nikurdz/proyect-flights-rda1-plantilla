@@ -56,6 +56,8 @@ const inProgress = () =>
     'CONFLICT',
     'Request already in progress',
     'A request with this Idempotency-Key is still being processed. Retry shortly.',
+    undefined,
+    1,
   );
 
 /**

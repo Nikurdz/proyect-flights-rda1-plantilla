@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, MoreThan } from 'typeorm';
 import type { AuthClaims } from '../auth/token.service';
 import { mapBookingUniqueViolation } from '../common/db-errors';
 import { DomainEventBus } from '../common/domain-event-bus';
@@ -67,20 +67,28 @@ export class DateChangeService {
       for (const vuelo of candidates) {
         const newParts = priceForPartyParts(toMinorUnits(vuelo.precioBase), leg.family.priceMultiplier, context.hold.passengersBreakdown, this.config.taxRate);
         const pricing = changePricing(oldParts, newParts, this.config.postSale.changeFeeMinor);
-        const offer = await manager.save(
-          manager.create(DateChangeOffer, {
-            bookingId,
-            ownerId,
-            itineraryId: leg.itineraryId,
-            fromVueloId: leg.vueloId,
-            toVueloId: vuelo.id,
-            ...pricing,
-            currency: context.booking.currency,
-            status: 'OPEN',
-            paymentReference: null,
-            expiresAt: new Date(Date.now() + this.config.postSale.quoteTtlMinutes * 60_000),
-          }),
-        );
+        // Searching again returns the offer still alive for the same move instead of piling up one row per search.
+        const alive = await manager.findOne(DateChangeOffer, {
+          where: { bookingId, ownerId, itineraryId: leg.itineraryId, fromVueloId: leg.vueloId, toVueloId: vuelo.id, status: 'OPEN', expiresAt: MoreThan(new Date()) },
+          order: { createdAt: 'DESC' },
+        });
+        const offer =
+          alive && alive.totalToPayMinor === pricing.totalToPayMinor && alive.changeFeeMinor === pricing.changeFeeMinor
+            ? alive
+            : await manager.save(
+                manager.create(DateChangeOffer, {
+                  bookingId,
+                  ownerId,
+                  itineraryId: leg.itineraryId,
+                  fromVueloId: leg.vueloId,
+                  toVueloId: vuelo.id,
+                  ...pricing,
+                  currency: context.booking.currency,
+                  status: 'OPEN',
+                  paymentReference: null,
+                  expiresAt: new Date(Date.now() + this.config.postSale.quoteTtlMinutes * 60_000),
+                }),
+              );
         options.push({
           changeOfferId: offer.changeOfferId,
           expiresAt: offer.expiresAt.toISOString(),

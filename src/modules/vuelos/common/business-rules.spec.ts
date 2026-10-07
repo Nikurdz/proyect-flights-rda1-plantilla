@@ -111,6 +111,12 @@ describe('business-rules', () => {
       ).not.toThrow();
     });
 
+    it('treats the same document written with spaces, dashes or other case as one (M9)', () => {
+      const second = { ...base, passengerId: 'p2', firstName: 'Ana' };
+      expect(() => assertNoDuplicatePassengers([{ ...base, documentNumber: 'AB123' }, { ...second, documentNumber: 'ab 123' }])).toThrow();
+      expect(() => assertNoDuplicatePassengers([{ ...base, documentNumber: 'AB123' }, { ...second, documentNumber: 'A-B.123' }])).toThrow();
+    });
+
     it('rejects a repeated document, client id, or person (ignoring accents and case)', () => {
       expect(() => assertNoDuplicatePassengers([base, { ...base, passengerId: 'p2', firstName: 'Ana' }])).toThrow();
       expect(() => assertNoDuplicatePassengers([base, { ...base, documentNumber: 'B654321', firstName: 'Ana' }])).toThrow();

@@ -153,7 +153,8 @@ export function assertNoDuplicatePassengers(passengers: PassengerIdentity[]): vo
   for (const p of passengers) {
     const keys = [
       `id:${p.passengerId}`,
-      `doc:${p.documentNumber.trim().toUpperCase()}`,
+      // "AB 123", "ab-123" and "AB123" are the same document.
+      `doc:${p.documentNumber.replace(/[^\p{L}\p{N}]/gu, '').toUpperCase()}`,
       `person:${normalizeName(p.firstName)}|${normalizeName(p.lastName)}|${p.birthDate}`,
     ];
     for (const key of keys) {

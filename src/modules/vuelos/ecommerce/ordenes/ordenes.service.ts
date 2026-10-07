@@ -234,7 +234,7 @@ export class OrdenesService implements OnModuleInit {
     }
     const limit = this.recoveryLimiter.consume(`recover:${ip}`);
     if (!limit.allowed) {
-      throw new ProblemDetailsException(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMIT_EXCEEDED', 'Too many lookups', `Try again in ${limit.retryAfterSeconds} seconds.`);
+      throw new ProblemDetailsException(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMIT_EXCEEDED', 'Too many lookups', `Try again in ${limit.retryAfterSeconds} seconds.`, undefined, limit.retryAfterSeconds);
     }
 
     const orden = await this.buscarPorCodigoYApellido(query);

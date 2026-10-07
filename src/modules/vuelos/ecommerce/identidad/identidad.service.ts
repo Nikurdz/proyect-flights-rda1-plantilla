@@ -107,7 +107,7 @@ export class IdentidadService {
   async login(dto: LoginDto, ip: string): Promise<SignedToken> {
     const limit = this.loginLimiter.consume(`login:${ip}`);
     if (!limit.allowed) {
-      throw new ProblemDetailsException(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMIT_EXCEEDED', 'Too many sign-in attempts', `Try again in ${limit.retryAfterSeconds} seconds.`);
+      throw new ProblemDetailsException(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMIT_EXCEEDED', 'Too many sign-in attempts', `Try again in ${limit.retryAfterSeconds} seconds.`, undefined, limit.retryAfterSeconds);
     }
 
     const cliente = await this.clientes.findOne({ where: { correo: dto.correo } });

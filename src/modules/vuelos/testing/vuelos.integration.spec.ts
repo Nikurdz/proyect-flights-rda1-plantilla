@@ -301,8 +301,8 @@ describeIntegration('Vuelos core against a real Postgres', () => {
           aerolinea: 'Test Air',
           codigoAerolinea: 'TA',
           codigoVuelo: 'TA001',
-          origenIATA: 'BOG',
-          destinoIATA: 'CLO',
+          origenIATA: 'MDE',
+          destinoIATA: 'CTG',
           fechaSalida: new Date(`${dayAhead(20)}T10:00:00.000Z`),
           fechaLlegada: new Date(`${dayAhead(20)}T11:00:00.000Z`),
           precioBase: 80,
@@ -311,7 +311,7 @@ describeIntegration('Vuelos core against a real Postgres', () => {
           durationMinutes: 60,
         }),
       );
-      const offer = await searchOffer(dayAhead(20), ['BOG', 'CLO']);
+      const offer = await searchOffer(dayAhead(20), ['MDE', 'CTG']);
 
       const [a, b] = await Promise.all([createHold('racer-1', holdBody(offer)), createHold('racer-2', holdBody(offer))]);
 

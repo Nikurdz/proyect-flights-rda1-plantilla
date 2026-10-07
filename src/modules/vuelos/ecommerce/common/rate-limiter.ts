@@ -42,6 +42,6 @@ export class SlidingWindowLimiter {
 export function assertWithinLimit(limiter: SlidingWindowLimiter, key: string, title: string): void {
   const limit = limiter.consume(key);
   if (!limit.allowed) {
-    throw new ProblemDetailsException(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMIT_EXCEEDED', title, `Try again in ${limit.retryAfterSeconds} seconds.`);
+    throw new ProblemDetailsException(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMIT_EXCEEDED', title, `Try again in ${limit.retryAfterSeconds} seconds.`, undefined, limit.retryAfterSeconds);
   }
 }
