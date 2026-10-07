@@ -97,16 +97,73 @@ export function useAdminObservabilidad(ventana: VentanaObservabilidad, ownerId?:
     queryFn: () => apiClient<ObservabilidadResumen>(`admin/observabilidad/resumen${toQuery({ ventana })}`),
     enabled: Boolean(ownerId),
     refetchInterval: 30_000,
+    refetchOnWindowFocus: 'always',
     retry: false,
   });
 }
 
-export function useAdminRuntime(ownerId?: string) {
+export type DashboardDias = 7 | 30 | 90;
+
+/** GET /admin/dashboard: business metrics of the window. `*Minor` fields are integer cents. */
+export interface AdminDashboard {
+  dias: number;
+  moneda: string;
+  generadoEn: string;
+  desde: string;
+  hasta: string;
+  kpis: {
+    ingresosMinor: number;
+    ordenesEmitidas: number;
+    ticketPromedioMinor: number;
+    pasajeros: number;
+    conversion: number | null;
+    tasaCancelacion: number | null;
+    reembolsosMinor: number;
+    ocupacionFutura: number | null;
+    vuelosAgotados: number;
+    rechazoDePago: number | null;
+  };
+  serie: { fecha: string; ordenes: number; emitidas: number; ingresosMinor: number; ofertas: number; cancelaciones: number }[];
+  embudo: { etapa: string; valor: number }[];
+  ordenesPorEstado: Counts;
+  pagosPorEstado: Counts;
+  ofertasPorEstado: Counts;
+  notificacionesPorEstado: Counts;
+  pasajerosPorTipo: Counts;
+  topRutas: { ruta: string; reservas: number; canceladas: number; ingresos: number }[];
+  ocupacionPorRuta: { ruta: string; vuelos: number; capacidad: number; libres: number; agotados: number; ocupacion: number }[];
+  posventa: { maletasExtra: number; ingresosEquipajeMinor: number; cambiosDeFecha: number; cancelaciones: number; checkIns: number };
+  webhooks: { entregasPendientes: number; entregasEntregadas: number; entregasMuertas: number };
+}
+
+export const DASHBOARD_REFRESH_MS = 60_000;
+
+/** Dashboard of the window; refreshes every 60 s and never while the tab is hidden. */
+export function useAdminDashboard(dias: DashboardDias, ownerId?: string) {
+  return useQuery({
+    queryKey: ['admin-dashboard', ownerId, dias],
+    queryFn: () => apiClient<AdminDashboard>(`admin/dashboard${toQuery({ dias })}`),
+    enabled: Boolean(ownerId),
+    refetchInterval: DASHBOARD_REFRESH_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: 'always',
+    retry: false,
+  });
+}
+
+/** Refresh period of the live process counters. */
+export const RUNTIME_REFRESH_MS = 3_000;
+
+/** Live counters: polled every 3 s while the tab is visible; `paused` stops the automatic refresh. */
+export function useAdminRuntime(ownerId?: string, options: { paused?: boolean } = {}) {
   return useQuery({
     queryKey: ['admin-runtime', ownerId],
     queryFn: () => apiClient<ObservabilidadRuntime>('admin/observabilidad/runtime'),
     enabled: Boolean(ownerId),
-    refetchInterval: 15_000,
+    refetchInterval: options.paused ? false : RUNTIME_REFRESH_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: 'always',
+    staleTime: 0,
     retry: false,
   });
 }

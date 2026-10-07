@@ -1124,6 +1124,31 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(health.body.uptimeSeconds).toBeGreaterThanOrEqual(0);
     });
 
+    it('serves the management dashboard only to an ADMIN, with one point per day and figures that match the database', async () => {
+      const mine = await sharedCustomer();
+      await api().get('/api/v1/admin/dashboard').expect(401);
+      await api().get('/api/v1/admin/dashboard').set(bearer(await guest())).expect(403);
+      await api().get('/api/v1/admin/dashboard').set(bearer(mine.token)).expect(403);
+      await api().get('/api/v1/admin/dashboard').query({ dias: 5 }).set(bearer(adminToken)).expect(400);
+
+      const res = await api().get('/api/v1/admin/dashboard').query({ dias: 7 }).set(bearer(adminToken)).expect(200);
+      const d = res.body;
+      expect(d).toMatchObject({ dias: 7, moneda: 'USD' });
+      expect(d.serie).toHaveLength(7);
+      expect(d.serie[6].fecha).toBe(d.hasta);
+      expect(new Set(d.serie.map((p: { fecha: string }) => p.fecha)).size).toBe(7); // no repeated or skipped day
+
+      const emitidas = await ds.getRepository(Orden).createQueryBuilder('o').where('o."estado" IN (:...e) AND o."creadaEn" >= :d', { e: ['EMITIDA', 'MODIFICADA', 'EN_VIAJE', 'COMPLETADA'], d: new Date(`${d.desde}T00:00:00.000Z`) }).getCount();
+      expect(d.kpis.ordenesEmitidas).toBe(emitidas);
+      expect(d.kpis.ordenesEmitidas).toBeGreaterThan(0); // the purchases of the tests above
+      expect(d.serie.reduce((n: number, p: { ordenes: number }) => n + p.ordenes, 0)).toBe(Object.values(d.ordenesPorEstado as Record<string, number>).reduce((a, b) => a + b, 0));
+      expect(d.kpis.ingresosMinor).toBe(d.serie.reduce((n: number, p: { ingresosMinor: number }) => n + p.ingresosMinor, 0));
+      expect(d.topRutas.length).toBeGreaterThan(0);
+      expect(d.ocupacionPorRuta[0]).toEqual(expect.objectContaining({ ruta: expect.stringMatching(/^[A-Z]{3}-[A-Z]{3}$/) }));
+      // Aggregates only: no passenger, contact or e-mail data anywhere.
+      expect(JSON.stringify(d)).not.toMatch(/@|PENA|MARIA/);
+    });
+
     it('validates the window', async () => {
       await api().get('/api/v1/admin/observabilidad/resumen').query({ ventana: '1h' }).set(bearer(adminToken)).expect(400);
     });

@@ -47,8 +47,13 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.4' },
         },
+        flashGold: {
+          '0%': { backgroundColor: 'rgba(212, 175, 55, 0.35)' },
+          '100%': { backgroundColor: 'rgba(212, 175, 55, 0)' },
+        },
       },
       animation: {
+        'flash-gold': 'flashGold 600ms ease-out',
         'pulse-fast': 'pulseFast 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
     },

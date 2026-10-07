@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Activity, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Activity, AlertTriangle, CheckCircle2, Pause, Play, RefreshCw } from 'lucide-react';
 import { useAdminObservabilidad, useAdminRuntime, type VentanaObservabilidad } from '../../api/endpoints/admin';
 import { MoneyText } from '../../components/common/MoneyText';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
@@ -76,6 +76,23 @@ const Pending: React.FC<{ label: string; count: number; hint: string }> = ({ lab
   </li>
 );
 
+/** Briefly tints its box when the value changes (not on first render). The text itself always carries the information. */
+const Flash: React.FC<{ value: React.ReactNode; className?: string; as?: 'div' | 'td' }> = ({ value, className = '', as: Tag = 'div' }) => {
+  const previous = useRef(value);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (previous.current !== value) {
+      previous.current = value;
+      setTick((n) => n + 1);
+    }
+  }, [value]);
+  return (
+    <Tag key={tick} className={`${className} ${tick > 0 ? 'animate-flash-gold' : ''}`}>
+      {value}
+    </Tag>
+  );
+};
+
 const WINDOWS: { value: VentanaObservabilidad; label: string }[] = [
   { value: '24h', label: 'Últimas 24 h' },
   { value: '7d', label: 'Últimos 7 días' },
@@ -86,7 +103,8 @@ export const AdminObservabilityPage: React.FC = () => {
   const session = useSession();
   const [ventana, setVentana] = useState<VentanaObservabilidad>('24h');
   const resumen = useAdminObservabilidad(ventana, session?.ownerId);
-  const runtime = useAdminRuntime(session?.ownerId);
+  const [paused, setPaused] = useState(false);
+  const runtime = useAdminRuntime(session?.ownerId, { paused });
 
   const s = resumen.data;
   const r = runtime.data;
@@ -216,13 +234,42 @@ export const AdminObservabilityPage: React.FC = () => {
       )}
 
       <section aria-labelledby="en-vivo" className="space-y-4 rounded-2xl border border-brand-gold/30 bg-brand-black p-5 text-white">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="en-vivo" className="text-sm font-bold">
-            En vivo
-          </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 id="en-vivo" className="text-sm font-bold">
+              En vivo
+            </h2>
+            <span role="status" className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
+              {runtime.isError && !paused ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
+                  <span className="text-amber-300">Sin conexión · reintentando</span>
+                </>
+              ) : paused ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-slate-500" aria-hidden="true" />
+                  <span className="text-slate-300">En pausa{runtime.dataUpdatedAt ? ` · actualizado ${new Date(runtime.dataUpdatedAt).toLocaleTimeString('es-EC')}` : ''}</span>
+                </>
+              ) : (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 motion-safe:animate-pulse-fast" aria-hidden="true" />
+                  <span className="text-emerald-300">En vivo{runtime.dataUpdatedAt ? ` · actualizado ${new Date(runtime.dataUpdatedAt).toLocaleTimeString('es-EC')}` : ''}</span>
+                </>
+              )}
+            </span>
+            <button
+              type="button"
+              aria-pressed={paused}
+              onClick={() => setPaused((p) => !p)}
+              className="inline-flex items-center gap-1 rounded-lg border border-white/20 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+            >
+              {paused ? <Play className="h-3 w-3" aria-hidden="true" /> : <Pause className="h-3 w-3" aria-hidden="true" />}
+              {paused ? 'Reanudar' : 'Pausar'}
+            </button>
+          </div>
           <span className="text-[11px] text-slate-400">Contadores de este proceso: parten de cero en cada reinicio del servidor.</span>
         </div>
-        {runtime.error != null ? (
+        {runtime.error != null && !r ? (
           <ProblemAlert error={runtime.error} onRetry={() => runtime.refetch()} />
         ) : !r ? (
           <div role="status" aria-busy="true" aria-label="Cargando"><Skeleton className="h-28 rounded-xl" /></div>
@@ -238,7 +285,7 @@ export const AdminObservabilityPage: React.FC = () => {
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-xl bg-white/5 p-3">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
-                  <div className={`mt-1 text-xl font-black ${label === 'Errores 5xx' && Number(value) > 0 ? 'text-red-400' : 'text-brand-gold'}`}>{value}</div>
+                  <Flash value={value} className={`mt-1 rounded-md text-xl font-black ${label === 'Errores 5xx' && Number(value) > 0 ? 'text-red-400' : 'text-brand-gold'}`} />
                 </div>
               ))}
             </div>
@@ -264,9 +311,9 @@ export const AdminObservabilityPage: React.FC = () => {
                           <td className="max-w-[16rem] truncate py-1 pr-2" title={route.route}>
                             {route.route.replace('/api/v1', '')}
                           </td>
-                          <td className="px-2 py-1 text-right">{route.count}</td>
-                          <td className="px-2 py-1 text-right">{route.avgMs} ms</td>
-                          <td className="px-2 py-1 text-right">{route.maxMs} ms</td>
+                          <Flash as="td" value={route.count} className="px-2 py-1 text-right" />
+                          <Flash as="td" value={`${route.avgMs} ms`} className="px-2 py-1 text-right" />
+                          <Flash as="td" value={`${route.maxMs} ms`} className="px-2 py-1 text-right" />
                           <td className={`pl-2 py-1 text-right ${route.serverErrors > 0 ? 'text-red-400' : ''}`}>{route.clientErrors + route.serverErrors}</td>
                         </tr>
                       ))}

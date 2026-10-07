@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Outlet } from 'react-router-dom';
+import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
 import { WakeUpBanner } from '../components/common/WakeUpBanner';
@@ -23,6 +23,7 @@ import { HelpPage } from '../features/legal/HelpPage';
 import { AdminLayout } from '../features/admin/AdminLayout';
 import { AdminOrdersPage } from '../features/admin/AdminOrdersPage';
 import { AdminFlightsPage } from '../features/admin/AdminFlightsPage';
+import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
 import { AdminObservabilityPage } from '../features/admin/AdminObservabilityPage';
 import { RequireAdmin, RequireCustomer } from './guards';
 import { RouteEffects } from './RouteEffects';
@@ -65,7 +66,8 @@ export const AppRoutes: React.FC = () => {
 
         <Route element={<RequireAdmin />}>
           <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<AdminOrdersPage />} />
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<AdminDashboardPage />} />
             <Route path="ordenes" element={<AdminOrdersPage />} />
             <Route path="vuelos" element={<AdminFlightsPage />} />
             <Route path="observabilidad" element={<AdminObservabilityPage />} />

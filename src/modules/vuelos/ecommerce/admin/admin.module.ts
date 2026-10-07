@@ -8,12 +8,14 @@ import { VuelosCoreModule } from '../../vuelos-core.module';
 import { OrdenesModule } from '../ordenes/ordenes.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { DashboardController } from './dashboard.controller';
+import { DashboardService } from './dashboard.service';
 import { HealthController, ObservabilidadController } from './observabilidad.controller';
 import { ObservabilidadService } from './observabilidad.service';
 
 @Module({
   imports: [VuelosCoreModule, OrdenesModule, TypeOrmModule.forFeature([Vuelo, SeatAssignment, Booking])],
-  controllers: [AdminController, ObservabilidadController, HealthController],
-  providers: [AdminService, ObservabilidadService, RolesGuard],
+  controllers: [AdminController, ObservabilidadController, DashboardController, HealthController],
+  providers: [AdminService, ObservabilidadService, DashboardService, RolesGuard],
 })
 export class AdminModule {}
