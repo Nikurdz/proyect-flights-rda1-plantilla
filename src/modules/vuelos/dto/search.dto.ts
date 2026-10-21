@@ -1,52 +1,61 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsString, IsArray, ValidateNested, IsInt, Min, IsDateString, IsOptional, Matches, IsBoolean } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsOptional, IsString, Matches, Max, Min, ValidateNested } from 'class-validator';
+import { IsDateOnly, ToUpperTrimmed } from './validators';
 
 export class ItinerarySearchDto {
   @ApiProperty({ example: 'UIO', pattern: '^[A-Z]{3}$' })
+  @ToUpperTrimmed()
   @IsString()
   @Matches(/^[A-Z]{3}$/)
   origin: string;
 
   @ApiProperty({ example: 'JFK', pattern: '^[A-Z]{3}$' })
+  @ToUpperTrimmed()
   @IsString()
   @Matches(/^[A-Z]{3}$/)
   destination: string;
 
   @ApiProperty({ example: '2026-12-01', format: 'date' })
-  @IsDateString()
+  @IsDateOnly()
   departureDate: string;
 }
 
 export class PassengerBreakdownDto {
-  @ApiPropertyOptional({ example: 1, minimum: 1, default: 1 })
+  @ApiPropertyOptional({ example: 1, minimum: 1, maximum: 50, default: 1 })
   @IsInt()
   @Min(1)
+  @Max(50)
   @IsOptional()
   adults?: number = 1;
 
-  @ApiPropertyOptional({ example: 0, minimum: 0, default: 0 })
+  @ApiPropertyOptional({ example: 0, minimum: 0, maximum: 50, default: 0 })
   @IsInt()
   @Min(0)
+  @Max(50)
   @IsOptional()
   youths?: number = 0;
 
-  @ApiPropertyOptional({ example: 0, minimum: 0, default: 0 })
+  @ApiPropertyOptional({ example: 0, minimum: 0, maximum: 50, default: 0 })
   @IsInt()
   @Min(0)
+  @Max(50)
   @IsOptional()
   children?: number = 0;
 
-  @ApiPropertyOptional({ example: 0, minimum: 0, default: 0 })
+  @ApiPropertyOptional({ example: 0, minimum: 0, maximum: 50, default: 0 })
   @IsInt()
   @Min(0)
+  @Max(50)
   @IsOptional()
   infants?: number = 0;
 }
 
 export class SearchRequestDto {
-  @ApiProperty({ type: [ItinerarySearchDto] })
+  @ApiProperty({ type: [ItinerarySearchDto], minItems: 1, maxItems: 6 })
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(6)
   @ValidateNested({ each: true })
   @Type(() => ItinerarySearchDto)
   itineraries: ItinerarySearchDto[];
@@ -57,18 +66,20 @@ export class SearchRequestDto {
   passengers: PassengerBreakdownDto;
 }
 
+// --- Response shapes (output-only: no class-validator decorators needed) ---
+
+const MONEY = '^\\d+\\.\\d{2}$';
+
 export class MoneyAmountDto {
   @ApiProperty({ example: 'USD', pattern: '^[A-Z]{3}$' })
   currency: string;
-  @ApiProperty({ example: '100.00' })
+  @ApiPropertyOptional({ example: '100.00', pattern: MONEY })
   baseFare?: string;
-  @ApiProperty({ example: '20.00' })
+  @ApiPropertyOptional({ example: '20.00', pattern: MONEY })
   taxes?: string;
-  @ApiProperty({ example: '120.00' })
+  @ApiProperty({ example: '120.00', pattern: MONEY })
   total: string;
 }
-
-// --- Response shapes (output-only: no class-validator decorators needed) ---
 
 export class FlightEndpointDto {
   @ApiProperty({ example: 'BOG' })
@@ -117,7 +128,7 @@ export class FareRulesDto {
 }
 
 export class PricePerPassengerTypeDto {
-  @ApiProperty()
+  @ApiProperty({ enum: ['ADULT', 'YOUTH', 'CHILD', 'INFANT'] })
   passengerType: string;
   @ApiProperty()
   price: MoneyAmountDto;
@@ -134,7 +145,7 @@ export class CabinPricingDto {
   fareRules: FareRulesDto;
   @ApiProperty()
   baggageAllowance: BaggageAllowanceDto;
-  @ApiProperty({ type: [PricePerPassengerTypeDto] })
+  @ApiProperty({ type: [PricePerPassengerTypeDto], description: 'Unit price for every passenger type present in the request.' })
   pricePerPassengerType: PricePerPassengerTypeDto[];
 }
 
@@ -158,7 +169,7 @@ export class FlightOfferDto {
   airline: { code: string; name: string };
   @ApiProperty({ type: [ItineraryOptionDto] })
   itineraries: ItineraryOptionDto[];
-  @ApiProperty()
+  @ApiProperty({ description: 'Cheapest fare per itinerary, for the whole party.' })
   grandTotal: MoneyAmountDto;
 }
 

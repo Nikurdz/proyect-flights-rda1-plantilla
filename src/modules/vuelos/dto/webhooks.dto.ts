@@ -1,32 +1,36 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsArray } from 'class-validator';
+import { ArrayNotEmpty, ArrayUnique, IsArray, IsIn, IsString, IsUrl, MaxLength, MinLength } from 'class-validator';
+import { WEBHOOK_EVENTS } from './enums';
 
 export class WebhookSubscriptionDto {
   @ApiProperty({ format: 'uri' })
-  @IsString()
+  // http only passes here so the SSRF guard (resolveSafeTarget) decides: it refuses it unless private hosts are allowed.
+  @IsUrl({ protocols: ['https', 'http'], require_protocol: true, require_tld: false })
+  @MaxLength(500)
   url: string;
 
-  @ApiProperty({
-    type: [String],
-    enum: [
-      'booking.confirmed',
-      'booking.failed',
-      'booking.changed',
-      'booking.cancelled',
-      'booking.baggage_added',
-      'hold.expired',
-      'flight.schedule_changed',
-      'flight.cancelled',
-      'booking.ticket_issuing',
-      'booking.ticket_issued',
-      'booking.ticket_failed',
-      'booking.checked_in'
-    ]
-  })
+  @ApiProperty({ type: [String], enum: WEBHOOK_EVENTS })
   @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsIn(WEBHOOK_EVENTS, { each: true })
   events: string[];
 
-  @ApiProperty()
+  @ApiProperty({ minLength: 16, description: 'Shared secret used to sign deliveries (HMAC-SHA256).' })
   @IsString()
+  @MinLength(16)
+  @MaxLength(200)
   secret: string;
+}
+
+/** A subscription as it is shown back: the secret is write-only. */
+export class WebhookSubscriptionViewDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string;
+
+  @ApiProperty({ format: 'uri' })
+  url: string;
+
+  @ApiProperty({ type: [String], enum: WEBHOOK_EVENTS })
+  events: string[];
 }

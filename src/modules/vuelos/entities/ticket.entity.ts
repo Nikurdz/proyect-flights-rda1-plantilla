@@ -1,10 +1,11 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 export type TicketStatus = 'PENDING' | 'ISSUING' | 'ISSUED' | 'FAILED' | 'VOIDED' | 'REFUNDED';
 
 // One row per passenger for the whole itinerary — the direct-flights-only simplification
 // means there is exactly one segment/coupon per ticket, so no separate coupon table.
 @Entity('vuelos_tickets')
+@Index('IDX_vuelos_tickets_booking', ['bookingId'])
 export class Ticket {
   @PrimaryGeneratedColumn('uuid')
   ticketId: string;

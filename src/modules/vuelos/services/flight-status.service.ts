@@ -1,39 +1,52 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { toIso, todayUtc, utcDayRange } from '../common/date.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
+import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { Vuelo } from '../entities/vuelo.entity';
 
 @Injectable()
 export class FlightStatusService {
-  constructor(@InjectRepository(Vuelo) private readonly vuelos: Repository<Vuelo>) {}
+  constructor(
+    @InjectRepository(Vuelo) private readonly vuelos: Repository<Vuelo>,
+    @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
+  ) {}
 
-  async getStatus(flightNumber: string, date: string) {
-    const dayStart = new Date(date);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
+  /** Status of the flight that departs on `date` (a UTC calendar day), derived from its schedule. */
+  async getStatus(flightNumber: string, requestedDate?: string) {
+    const qb = this.vuelos.createQueryBuilder('v').where('v."codigoVuelo" = :flightNumber', { flightNumber });
+    if (requestedDate) {
+      const { start, end } = utcDayRange(requestedDate);
+      qb.andWhere('v."fechaSalida" >= :start AND v."fechaSalida" < :end', { start, end });
+    } else {
+      // No date given: today's flight, or else the next one that operates.
+      qb.andWhere('v."fechaSalida" >= :today', { today: utcDayRange(todayUtc()).start }).orderBy('v."fechaSalida"', 'ASC');
+    }
+    const vuelo = await qb.getOne();
+    const date = requestedDate ?? (vuelo ? toIso(vuelo.fechaSalida).slice(0, 10) : todayUtc());
 
-    const vuelo = await this.vuelos.findOne({ where: { codigoVuelo: flightNumber } });
     if (!vuelo) {
       throw new ProblemDetailsException(
         HttpStatus.NOT_FOUND,
         'FLIGHT_STATUS_NOT_AVAILABLE',
         'Flight not found',
-        `No flight ${flightNumber} was found for ${date}.`,
+        `No flight ${flightNumber} operates on ${date}.`,
       );
     }
 
     const departure = new Date(vuelo.fechaSalida);
     const arrival = new Date(vuelo.fechaLlegada);
-    const now = new Date();
+    const now = Date.now();
 
     let status: string;
-    if (now < new Date(departure.getTime() - 30 * 60_000)) {
+    if (vuelo.estado === 'CANCELLED') {
+      status = 'CANCELLED';
+    } else if (now < departure.getTime() - this.config.postSale.boardingWindowMinutes * 60_000) {
       status = 'SCHEDULED';
-    } else if (now < departure) {
+    } else if (now < departure.getTime()) {
       status = 'BOARDING';
-    } else if (now < arrival) {
+    } else if (now < arrival.getTime()) {
       status = 'DEPARTED';
     } else {
       status = 'ARRIVED';
@@ -47,14 +60,14 @@ export class FlightStatusService {
       departure: {
         iataCode: vuelo.origenIATA,
         terminal: null,
-        scheduledAt: departure.toISOString(),
+        scheduledAt: toIso(departure),
         estimatedAt: null,
         actualAt: null,
       },
       arrival: {
         iataCode: vuelo.destinoIATA,
         terminal: null,
-        scheduledAt: arrival.toISOString(),
+        scheduledAt: toIso(arrival),
         estimatedAt: null,
         actualAt: null,
       },

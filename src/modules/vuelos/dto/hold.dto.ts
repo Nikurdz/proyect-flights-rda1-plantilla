@@ -1,29 +1,35 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsString, IsArray, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsString, IsUUID, Matches, ValidateNested } from 'class-validator';
+import { CABIN_CLASSES } from './enums';
 import { MoneyAmountDto, PassengerBreakdownDto } from './search.dto';
+import { ToUpperTrimmed } from './validators';
 
 export class ItinerarySelectionDto {
-  @ApiProperty()
-  @IsString()
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
   itineraryId: string;
 
-  @ApiProperty({ enum: ['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'] })
-  @IsString()
+  @ApiProperty({ enum: CABIN_CLASSES })
+  @IsIn(CABIN_CLASSES)
   cabinClass: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'LIGHT' })
+  @ToUpperTrimmed()
   @IsString()
+  @Matches(/^[A-Z_]{2,20}$/)
   fareBrand: string;
 }
 
 export class HoldRequestDto {
-  @ApiProperty()
-  @IsString()
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
   offerId: string;
 
-  @ApiProperty({ type: [ItinerarySelectionDto] })
+  @ApiProperty({ type: [ItinerarySelectionDto], minItems: 1, maxItems: 6 })
   @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(6)
   @ValidateNested({ each: true })
   @Type(() => ItinerarySelectionDto)
   itinerarySelections: ItinerarySelectionDto[];

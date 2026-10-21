@@ -43,3 +43,12 @@ lerna-debug.log*
 
 # machine-local docker-compose port overrides (see docker-compose.override.yml)
 docker-compose.override.yml
+
+# Frontend (Vite/React) in frontend/: its own package, build output and local env
+/frontend/node_modules
+/frontend/dist
+/frontend/.env
+/frontend/.env.local
+/frontend/playwright-report
+/frontend/test-results
+/frontend/*.tsbuildinfo
