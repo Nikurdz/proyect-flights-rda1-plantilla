@@ -59,7 +59,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
               size="2xl"
             />
           </div>
-          <span className="text-[11px] text-slate-400">Tasas e impuestos incluidos</span>
+          <span className="text-[11px] text-slate-500">Tasas e impuestos incluidos</span>
         </div>
       </div>
 
@@ -75,7 +75,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
                 Incluido ({cond.equipajeMano.kg} kg en cabina)
               </span>
             ) : (
-              <span className="text-slate-400">Solo artículo personal</span>
+              <span className="text-slate-500">Solo artículo personal</span>
             )}
           </div>
         </div>
@@ -90,7 +90,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
                 {cond.equipajeBodega.piezas} pieza(s) de 23 kg incluida
               </span>
             ) : (
-              <span className="text-slate-400">No incluido</span>
+              <span className="text-slate-500">No incluido</span>
             )}
           </div>
         </div>
@@ -103,7 +103,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
             {cond?.cambio?.permitido ? (
               <span className="text-emerald-700 font-medium">Permitido (aplica cargo/diferencia)</span>
             ) : (
-              <span className="text-slate-400">No permitido</span>
+              <span className="text-slate-500">No permitido</span>
             )}
           </div>
         </div>
@@ -116,7 +116,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
             {cond?.devolucion?.permitida ? (
               <span className="text-emerald-700 font-medium">Reembolso permitido</span>
             ) : (
-              <span className="text-slate-400">No reembolsable</span>
+              <span className="text-slate-500">No reembolsable</span>
             )}
           </div>
         </div>
@@ -129,7 +129,7 @@ export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
             {cond?.seleccionAsiento?.incluida ? (
               <span className="text-emerald-700 font-medium">Asiento estándar incluido</span>
             ) : (
-              <span className="text-slate-400">No incluida</span>
+              <span className="text-slate-500">No incluida</span>
             )}
           </div>
         </div>

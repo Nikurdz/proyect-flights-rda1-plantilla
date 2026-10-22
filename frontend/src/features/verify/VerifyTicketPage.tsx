@@ -51,7 +51,7 @@ export const VerifyTicketPage: React.FC = () => {
                 </li>
               ))}
             </ul>
-            <p className="text-[11px] text-slate-400">Por privacidad no mostramos nombres ni datos de contacto.</p>
+            <p className="text-[11px] text-slate-500">Por privacidad no mostramos nombres ni datos de contacto.</p>
           </div>
         ) : (
           <div role="alert" className="space-y-3 text-center">

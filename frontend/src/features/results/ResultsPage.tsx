@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useKeyedState } from '../../hooks/useKeyedState';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Plane, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { useDisponibilidad } from '../../api/endpoints/catalog';
@@ -55,27 +56,18 @@ export const ResultsPage: React.FC = () => {
 
   const { data: disponibilidad, isLoading, error, refetch } = useDisponibilidad(queryCriteria);
 
-  // Round Trip multi-leg selection state
-  const [activeLegIndex, setActiveLegIndex] = useState<number>(0);
-  const [selectedOutbound, setSelectedOutbound] = useState<{
-    itinerario: ItinerarioDto;
-    familia: FamiliaTarifariaDto;
-  } | null>(null);
-
+  // Round Trip multi-leg selection state.
   // The outbound flight picked is only valid for the route, outbound day and party it was picked for. The return
   // date is not part of the key: changing it must keep the outbound choice and stay on the return leg.
   const outboundKey = outboundSelectionKey({ origin, destination, outbound, trip, adt, chd, inf });
-  useEffect(() => {
-    setSelectedOutbound(null);
-    setActiveLegIndex(0);
-  }, [outboundKey]);
+  const [activeLegIndex, setActiveLegIndex] = useKeyedState<number>(outboundKey, 0);
+  const [selectedOutbound, setSelectedOutbound] = useKeyedState<{
+    itinerario: ItinerarioDto;
+    familia: FamiliaTarifariaDto;
+  } | null>(outboundKey, null);
 
   // Any change of the search (the return day included) clears an old error from a previous attempt.
   const searchKey = `${outboundKey}|${inbound}`;
-  useEffect(() => {
-    setOfferError(null);
-    setSoldOutNotice(false);
-  }, [searchKey]);
 
   // Fare modal state
   const [modalItinerario, setModalItinerario] = useState<ItinerarioDto | null>(null);
@@ -83,8 +75,8 @@ export const ResultsPage: React.FC = () => {
 
   // Loading checkout creation
   const [isCreatingOffer, setIsCreatingOffer] = useState(false);
-  const [offerError, setOfferError] = useState<unknown>(null);
-  const [soldOutNotice, setSoldOutNotice] = useState(false);
+  const [offerError, setOfferError] = useKeyedState<unknown>(searchKey, null);
+  const [soldOutNotice, setSoldOutNotice] = useKeyedState<boolean>(searchKey, false);
 
   // Handle Sort Change
   const handleSortChange = (newSort: Ordenamiento) => {

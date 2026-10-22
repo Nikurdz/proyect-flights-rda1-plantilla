@@ -135,7 +135,7 @@ export const FlightCard: React.FC<FlightCardProps> = ({
             </div>
           </div>
           <div className="lg:mt-1">
-            <span className="text-slate-400">Tarifa desde: </span>
+            <span className="text-slate-500">Tarifa desde: </span>
             <span className="font-semibold text-slate-700">{fareFamilyLabel(itinerario.familiaDesde)}</span>
           </div>
         </div>
@@ -161,7 +161,7 @@ export const FlightCard: React.FC<FlightCardProps> = ({
                 size="2xl"
               />
             </div>
-            <span className="text-[11px] text-slate-400">Tasas e impuestos incluidos</span>
+            <span className="text-[11px] text-slate-500">Tasas e impuestos incluidos</span>
           </div>
 
           <Button

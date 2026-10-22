@@ -119,7 +119,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     ...extra,
   });
 
-  async function completarCheckout(token: string, ofertaId: string, salida: string, mercado = 'ec', composicion = { adultos: 1, ninos: 1 }) {
+  async function completarCheckout(token: string, ofertaId: string, salida: string, _mercado = 'ec', composicion = { adultos: 1, ninos: 1 }) {
     const pasajeros = [pasajero('a1', 'ADULT', yearsBefore(35, salida))];
     if (composicion.ninos) pasajeros.push(pasajero('c1', 'CHILD', yearsBefore(8, salida)));
     await api().put(`/api/v1/ofertas/${ofertaId}/pasajeros`).set(bearer(token)).send({ pasajeros, contacto: { correo: 'comprador@example.com', telefono: '+593999999999' } }).expect(200);

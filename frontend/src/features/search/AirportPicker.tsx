@@ -38,7 +38,8 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data: localidades, isLoading, isError, refetch } = useLocalidades(query);
+  // An empty query lists every airport, so the arrows work as soon as the field takes the focus.
+  const { data: localidades, isLoading, isError, refetch } = useLocalidades(query.trim() || undefined);
   const options = localidades ?? [];
 
   const cityOfValue = value
@@ -46,16 +47,15 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
     : '';
   const displayValue = editing ? query : value ? `${value}${cityOfValue ? ` · ${cityOfValue}` : ''}` : '';
 
-  // Keep the active option inside range when the results change.
-  useEffect(() => {
-    setActiveIndex((current) => (current >= options.length ? options.length - 1 : current));
-  }, [options.length]);
+  // The active option always stays inside the current results (they change while typing).
+  const active = Math.min(activeIndex, options.length - 1);
+  const hasActive = isOpen && active >= 0;
+  const activeId = hasActive ? optionId(active) : undefined;
 
   // Keep the active option visible while navigating with the arrows.
   useEffect(() => {
-    if (activeIndex >= 0) document.getElementById(optionId(activeIndex))?.scrollIntoView?.({ block: 'nearest' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIndex]);
+    if (activeId) document.getElementById(activeId)?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeId]);
 
   const close = () => {
     setIsOpen(false);
@@ -68,6 +68,11 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
     setSelectedCity(loc.ciudad);
     onChange(loc.iata, loc);
     close();
+  };
+
+  // Leaving the widget (input, clear or retry button) closes the list; moving inside it does not.
+  const handleBlur = (e: React.FocusEvent) => {
+    if (!containerRef.current?.contains(e.relatedTarget as Node | null)) close();
   };
 
   const handleClear = () => {
@@ -88,7 +93,7 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
           setIsOpen(true);
           setActiveIndex(options.length ? 0 : -1);
         } else if (options.length) {
-          setActiveIndex((i) => (i + 1) % options.length);
+          setActiveIndex((i) => (Math.min(i, options.length - 1) + 1) % options.length);
         }
         break;
       case 'ArrowUp':
@@ -98,7 +103,10 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
           setIsOpen(true);
           setActiveIndex(options.length ? options.length - 1 : -1);
         } else if (options.length) {
-          setActiveIndex((i) => (i <= 0 ? options.length - 1 : i - 1));
+          setActiveIndex((i) => {
+            const current = Math.min(i, options.length - 1);
+            return current <= 0 ? options.length - 1 : current - 1;
+          });
         }
         break;
       case 'Home':
@@ -117,7 +125,7 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
         if (isOpen) {
           // Never submit the search form while the list is open.
           e.preventDefault();
-          if (activeIndex >= 0 && options[activeIndex]) handleSelect(options[activeIndex]);
+          if (hasActive && options[active]) handleSelect(options[active]);
         }
         break;
       case 'Escape':
@@ -136,16 +144,9 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
   };
 
   const Icon = type === 'origin' ? PlaneTakeoff : PlaneLanding;
-  const hasActive = isOpen && activeIndex >= 0 && activeIndex < options.length;
 
   return (
-    <div
-      ref={containerRef}
-      className="relative w-full"
-      onBlur={(e) => {
-        if (!containerRef.current?.contains(e.relatedTarget as Node | null)) close();
-      }}
-    >
+    <div ref={containerRef} className="relative w-full">
       <label htmlFor={inputId} className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
         {label}
       </label>
@@ -169,7 +170,7 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
           aria-autocomplete="list"
           aria-expanded={isOpen}
           aria-controls={listId}
-          aria-activedescendant={hasActive ? optionId(activeIndex) : undefined}
+          aria-activedescendant={activeId}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
           value={displayValue}
@@ -190,6 +191,7 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
             setActiveIndex(0);
           }}
           onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
           className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 placeholder:font-normal placeholder:text-slate-500 focus:outline-none"
         />
         {isLoading && isOpen && <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" aria-hidden="true" />}
@@ -197,6 +199,7 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
           <button
             type="button"
             onClick={handleClear}
+            onBlur={handleBlur}
             className="ml-1 p-1 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
             aria-label={`Borrar ${label.toLowerCase()}`}
           >
@@ -213,24 +216,28 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
 
       {isOpen && (
         <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in-50 zoom-in-95">
-          <ul
+          <div
             id={listId}
             role="listbox"
             aria-label={`Aeropuertos para ${label.toLowerCase()}`}
             className="max-h-64 overflow-y-auto divide-y divide-slate-100"
           >
             {options.map((loc, index) => (
-              <li
+              // Combobox pattern: the keyboard stays on the input (arrows + Enter, via aria-activedescendant),
+              // so the options only need the pointer. Selecting on mousedown also keeps the focus in the input.
+              <div
                 key={loc.iata}
                 id={optionId(index)}
                 role="option"
+                tabIndex={-1}
                 aria-selected={loc.iata === value}
-                // mousedown would blur the input before the click lands: keep the focus where it is.
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => handleSelect(loc)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelect(loc);
+                }}
                 onMouseMove={() => setActiveIndex(index)}
                 className={`flex items-center justify-between p-3.5 cursor-pointer transition-colors ${
-                  index === activeIndex ? 'bg-airline-blue-light/70' : 'hover:bg-airline-blue-light/50'
+                  index === active ? 'bg-airline-blue-light/70' : 'hover:bg-airline-blue-light/50'
                 } ${loc.iata === value ? 'font-semibold' : ''}`}
               >
                 <div className="flex items-start gap-3">
@@ -245,14 +252,14 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
                 <span className="font-mono text-xs font-black px-2 py-1 rounded bg-slate-100 text-airline-navy border border-slate-200 shrink-0">
                   {loc.iata}
                 </span>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
 
           {isError && (
             <div className="p-6 text-center text-xs text-slate-600" role="alert">
               No pudimos cargar los aeropuertos.{' '}
-              <button type="button" onClick={() => refetch()} className="font-bold text-brand-gold-dark underline">
+              <button type="button" onClick={() => refetch()} onBlur={handleBlur} className="inline-flex min-h-[44px] items-center font-bold text-brand-gold-dark underline">
                 Reintentar
               </button>
             </div>

@@ -144,7 +144,7 @@ export const ConfirmationPage: React.FC = () => {
                 <div className="border-b border-slate-200 pb-4 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
                   <span className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-slate-500">Número de orden</span>
                   <span className="font-mono text-sm font-black text-slate-800">{orden.numeroOrden}</span>
-                  <span className="mt-1 block text-[11px] text-slate-400">Compra del {formatDateTime(orden.creadaEn)}</span>
+                  <span className="mt-1 block text-[11px] text-slate-500">Compra del {formatDateTime(orden.creadaEn)}</span>
                 </div>
 
                 <div className="flex flex-col justify-between">
@@ -156,7 +156,7 @@ export const ConfirmationPage: React.FC = () => {
                     </span>
                   </div>
                   <div className="mt-2">
-                    <span className="block text-[11px] text-slate-400">Total pagado</span>
+                    <span className="block text-[11px] text-slate-500">Total pagado</span>
                     <MoneyText amount={orden.total.monto} currency={orden.total.moneda} size="lg" className="font-black text-brand-black" />
                   </div>
                 </div>
@@ -185,12 +185,12 @@ export const ConfirmationPage: React.FC = () => {
 
                       <div className="grid grid-cols-1 gap-4 text-xs sm:grid-cols-2">
                         <div>
-                          <span className="block text-[11px] text-slate-400">Origen</span>
+                          <span className="block text-[11px] text-slate-500">Origen</span>
                           <span className="text-sm font-extrabold text-slate-800">{itin.origen}</span>
                           <span className="block text-[11px] text-slate-500">Salida: {formatDateTime(itin.salida, timeZoneOf(itin.origen))} (hora local)</span>
                         </div>
                         <div>
-                          <span className="block text-[11px] text-slate-400">Destino</span>
+                          <span className="block text-[11px] text-slate-500">Destino</span>
                           <span className="text-sm font-extrabold text-slate-800">{itin.destino}</span>
                           <span className="block text-[11px] text-slate-500">Llegada: {formatDateTime(itin.llegada, timeZoneOf(itin.destino))} (hora local)</span>
                         </div>

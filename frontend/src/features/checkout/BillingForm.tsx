@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { ArrowRight, ArrowLeft, Building2 } from 'lucide-react';
 import { useMercado } from '../../api/endpoints/markets';
 import { registrarFacturacion } from '../../api/endpoints/offers';
-import { FieldError, FieldLabel, fieldA11y } from '../../components/ui/FormField';
+import { FieldError, FieldLabel } from '../../components/ui/FormField';
+import { fieldA11y } from '../../lib/field-a11y';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import type { OfertaViewDto, FacturacionDto } from '../../api/types';
 

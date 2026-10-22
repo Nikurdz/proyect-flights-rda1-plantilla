@@ -127,6 +127,19 @@ describeIntegration('Vuelos core against a real Postgres', () => {
         .expect(400);
     });
 
+    it('never combines a leg that leaves before the previous one lands, even on the same day (M8)', async () => {
+      const day = dayAhead(13);
+      const res = await api()
+        .post('/api/v1/search')
+        .set('X-Device-Fingerprint', 'it')
+        .send({ itineraries: [{ origin: 'BOG', destination: 'SCL', departureDate: day }, { origin: 'SCL', destination: 'BOG', departureDate: day }], passengers: { adults: 1 } })
+        .expect(200);
+      for (const offer of res.body.offers as { itineraries: { segments: { departure: { at: string }; arrival: { at: string } }[] }[] }[]) {
+        const [ida, vuelta] = offer.itineraries.map((i) => i.segments[0]);
+        expect(new Date(vuelta.departure.at).getTime()).toBeGreaterThanOrEqual(new Date(ida.arrival.at).getTime());
+      }
+    });
+
     it('prices the whole party by passenger type (A2)', async () => {
       const offer = await searchOffer(dayAhead(11), ['BOG', 'SCL'], { adults: 2, children: 1, infants: 1 });
       const prices = offer.itineraries[0] as unknown as { pricingOptions: { pricePerPassengerType: { passengerType: string }[] }[] };

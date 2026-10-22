@@ -155,6 +155,17 @@ export class OffersService {
       where: { code: In(request.itinerarySelections.map((s) => s.fareBrand)) },
     });
     const vuelos = await manager.find(Vuelo, { where: { id: In(offer.itineraries.map((i) => i.vueloId)) } });
+    // Legs are compared by instant, not only by day: a leg cannot leave before the previous one lands.
+    const enOrden = offer.itineraries.map((i) => vuelos.find((v) => v.id === i.vueloId));
+    for (let i = 1; i < enOrden.length; i++) {
+      const previo = enOrden[i - 1];
+      const actual = enOrden[i];
+      if (previo && actual && new Date(actual.fechaSalida).getTime() < new Date(previo.fechaLlegada).getTime()) {
+        throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', 'Legs out of order', `Flight ${actual.codigoVuelo} departs before ${previo.codigoVuelo} lands.`, [
+          { name: 'itinerarySelections', reason: 'each leg must depart after the previous one lands' },
+        ]);
+      }
+    }
 
     const seats = seatsRequired(breakdown);
     let lockedMinor = 0;

@@ -36,6 +36,19 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // While the panel is open, Escape closes it and gives the focus back to the trigger.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   const handleUpdate = (type: keyof PassengerCounts, delta: number) => {
     const next = { ...counts };
 
@@ -80,17 +93,7 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="relative w-full"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape' && isOpen) {
-          e.stopPropagation();
-          setIsOpen(false);
-          triggerRef.current?.focus();
-        }
-      }}
-    >
+    <div ref={containerRef} className="relative w-full">
       <span id={`${uid}-label`} className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
         Pasajeros
       </span>

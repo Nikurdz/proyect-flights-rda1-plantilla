@@ -58,7 +58,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect, takenI
 
   return (
     <div className="mx-auto w-fit space-y-1.5 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-5 sm:px-8" role="group" aria-label="Mapa de asientos">
-      <div className="flex items-center gap-1.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400" aria-hidden="true">
+      <div className="flex items-center gap-1.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500" aria-hidden="true">
         <span className="w-6" />
         {LEFT.map((c) => (
           <span key={c} className="w-9 text-center">
@@ -75,7 +75,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect, takenI
 
       {filas.map((fila) => (
         <div key={fila.rowNumber} className="flex items-center gap-1.5">
-          <span className="w-6 text-right text-[10px] font-semibold text-slate-400" aria-hidden="true">
+          <span className="w-6 text-right text-[10px] font-semibold text-slate-500" aria-hidden="true">
             {fila.rowNumber}
           </span>
           {LEFT.map((column) => renderSeat(column, fila.seats))}

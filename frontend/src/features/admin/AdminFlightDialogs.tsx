@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -42,23 +42,18 @@ const Actions: React.FC<{ onClose: () => void; busy: boolean; submitLabel: strin
   </div>
 );
 
-export const CreateFlightDialog: React.FC<{ isOpen: boolean; onClose: () => void; onDone: (message: string) => void }> = ({ isOpen, onClose, onDone }) => {
+/*
+ * Each dialog is mounted only while it is open (the page renders it with a `key`), so its form and
+ * mutation state start clean every time without a reset effect.
+ */
+export const CreateFlightDialog: React.FC<{ onClose: () => void; onDone: (message: string) => void }> = ({ onClose, onDone }) => {
   const crear = useCrearVuelo();
   const localidades = useLocalidades();
   const {
     register,
     handleSubmit,
-    reset,
     formState: { errors },
   } = useForm<NewFlightForm>({ resolver: zodResolver(newFlightSchema), defaultValues: { capacidad: '180' } });
-
-  useEffect(() => {
-    if (isOpen) {
-      reset({ capacidad: '180' });
-      crear.reset();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
 
   const airports = [
     { value: '', label: 'Elige un aeropuerto' },
@@ -86,7 +81,7 @@ export const CreateFlightDialog: React.FC<{ isOpen: boolean; onClose: () => void
     );
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} title="Nuevo vuelo" description="La hora de salida se ingresa en UTC." maxWidth="lg">
+    <Dialog isOpen onClose={onClose} title="Nuevo vuelo" description="La hora de salida se ingresa en UTC." maxWidth="lg">
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         {crear.error != null && <ProblemAlert error={crear.error} message={adminErrorMessage(crear.error, 'crear-vuelo')} />}
         {localidades.isError && <ProblemAlert error={localidades.error} onRetry={() => localidades.refetch()} title="No pudimos cargar los aeropuertos" />}
@@ -106,30 +101,23 @@ export const CreateFlightDialog: React.FC<{ isOpen: boolean; onClose: () => void
   );
 };
 
-export const EditFlightDialog: React.FC<{ flight: AdminVueloView | null; onClose: () => void; onDone: (message: string) => void }> = ({ flight, onClose, onDone }) => {
+export const EditFlightDialog: React.FC<{ flight: AdminVueloView; onClose: () => void; onDone: (message: string) => void }> = ({ flight, onClose, onDone }) => {
   const editar = useEditarVuelo();
   const {
     register,
     handleSubmit,
-    reset,
     formState: { errors },
-  } = useForm<EditFlightForm>({ resolver: zodResolver(editFlightSchema) });
-
-  useEffect(() => {
-    if (flight) {
-      editar.reset();
-      reset({
-        aerolinea: flight.aerolinea,
-        precioBaseUsd: flight.precioBaseUsd.toFixed(2),
-        duracionMinutos: String(flight.duracionMinutos),
-        capacidadTotal: String(flight.capacidadTotal),
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flight?.vueloId]);
+  } = useForm<EditFlightForm>({
+    resolver: zodResolver(editFlightSchema),
+    defaultValues: {
+      aerolinea: flight.aerolinea,
+      precioBaseUsd: flight.precioBaseUsd.toFixed(2),
+      duracionMinutos: String(flight.duracionMinutos),
+      capacidadTotal: String(flight.capacidadTotal),
+    },
+  });
 
   const onSubmit = (form: EditFlightForm) => {
-    if (!flight) return;
     editar.mutate(
       {
         vueloId: flight.vueloId,
@@ -151,10 +139,10 @@ export const EditFlightDialog: React.FC<{ flight: AdminVueloView | null; onClose
 
   return (
     <Dialog
-      isOpen={Boolean(flight)}
+      isOpen
       onClose={onClose}
-      title={flight ? `Editar vuelo ${flight.codigoVuelo}` : ''}
-      description={flight ? `${flight.origen} → ${flight.destino} · ${flight.asientosReservados} asiento(s) reservado(s)` : undefined}
+      title={`Editar vuelo ${flight.codigoVuelo}`}
+      description={`${flight.origen} → ${flight.destino} · ${flight.asientosReservados} asiento(s) reservado(s)`}
       maxWidth="lg"
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -171,25 +159,18 @@ export const EditFlightDialog: React.FC<{ flight: AdminVueloView | null; onClose
   );
 };
 
-export const RescheduleFlightDialog: React.FC<{ flight: AdminVueloView | null; onClose: () => void; onDone: (message: string) => void }> = ({ flight, onClose, onDone }) => {
+export const RescheduleFlightDialog: React.FC<{ flight: AdminVueloView; onClose: () => void; onDone: (message: string) => void }> = ({ flight, onClose, onDone }) => {
   const reprogramar = useReprogramarVuelo();
   const {
     register,
     handleSubmit,
-    reset,
     formState: { errors },
-  } = useForm<RescheduleForm>({ resolver: zodResolver(rescheduleSchema) });
-
-  useEffect(() => {
-    if (flight) {
-      reprogramar.reset();
-      reset({ nuevaSalida: isoToUtcLocal(flight.salida), motivo: '' });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flight?.vueloId]);
+  } = useForm<RescheduleForm>({
+    resolver: zodResolver(rescheduleSchema),
+    defaultValues: { nuevaSalida: isoToUtcLocal(flight.salida), motivo: '' },
+  });
 
   const onSubmit = (form: RescheduleForm) => {
-    if (!flight) return;
     reprogramar.mutate(
       { vueloId: flight.vueloId, nuevaSalida: utcLocalToIso(form.nuevaSalida), motivo: form.motivo || undefined },
       {
@@ -203,10 +184,10 @@ export const RescheduleFlightDialog: React.FC<{ flight: AdminVueloView | null; o
 
   return (
     <Dialog
-      isOpen={Boolean(flight)}
+      isOpen
       onClose={onClose}
-      title={flight ? `Reprogramar vuelo ${flight.codigoVuelo}` : ''}
-      description={flight ? `Salida actual: ${formatDateTime(flight.salida)} UTC. Las reservas confirmadas se mueven a la nueva hora y se avisa por webhooks.` : undefined}
+      title={`Reprogramar vuelo ${flight.codigoVuelo}`}
+      description={`Salida actual: ${formatDateTime(flight.salida)} UTC. Las reservas confirmadas se mueven a la nueva hora y se avisa por webhooks.`}
       maxWidth="md"
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -219,20 +200,11 @@ export const RescheduleFlightDialog: React.FC<{ flight: AdminVueloView | null; o
   );
 };
 
-export const CancelFlightDialog: React.FC<{ flight: AdminVueloView | null; onClose: () => void; onDone: (message: string) => void }> = ({ flight, onClose, onDone }) => {
+export const CancelFlightDialog: React.FC<{ flight: AdminVueloView; onClose: () => void; onDone: (message: string) => void }> = ({ flight, onClose, onDone }) => {
   const cancelar = useCancelarVuelo();
   const [motivo, setMotivo] = useState('');
 
-  useEffect(() => {
-    if (flight) {
-      cancelar.reset();
-      setMotivo('');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flight?.vueloId]);
-
   const confirm = () => {
-    if (!flight) return;
     cancelar.mutate(
       { vueloId: flight.vueloId, motivo: motivo.trim() || undefined },
       {
@@ -246,8 +218,8 @@ export const CancelFlightDialog: React.FC<{ flight: AdminVueloView | null; onClo
 
   return (
     <ConfirmDialog
-      isOpen={Boolean(flight)}
-      title={flight ? `Cancelar vuelo ${flight.codigoVuelo}` : ''}
+      isOpen
+      title={`Cancelar vuelo ${flight.codigoVuelo}`}
       confirmLabel="Cancelar vuelo"
       cancelLabel="Volver"
       destructive
@@ -268,7 +240,7 @@ export const CancelFlightDialog: React.FC<{ flight: AdminVueloView | null; onClo
 };
 
 export const DeleteFlightDialog: React.FC<{
-  flight: AdminVueloView | null;
+  flight: AdminVueloView;
   onClose: () => void;
   onDone: (message: string) => void;
   /** Cuando el vuelo tiene reservas (409 FLIGHT_IN_USE) se ofrece cancelarlo. */
@@ -276,15 +248,9 @@ export const DeleteFlightDialog: React.FC<{
 }> = ({ flight, onClose, onDone, onSwitchToCancel }) => {
   const eliminar = useEliminarVuelo();
 
-  useEffect(() => {
-    if (flight) eliminar.reset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flight?.vueloId]);
-
   const inUse = eliminar.error instanceof ProblemDetailsError && eliminar.error.code === 'FLIGHT_IN_USE';
 
   const confirm = () => {
-    if (!flight) return;
     eliminar.mutate(flight.vueloId, {
       onSuccess: () => {
         onDone(`Vuelo ${flight.codigoVuelo} eliminado.`);
@@ -295,8 +261,8 @@ export const DeleteFlightDialog: React.FC<{
 
   return (
     <ConfirmDialog
-      isOpen={Boolean(flight)}
-      title={flight ? `Eliminar vuelo ${flight.codigoVuelo}` : ''}
+      isOpen
+      title={`Eliminar vuelo ${flight.codigoVuelo}`}
       confirmLabel="Eliminar vuelo"
       cancelLabel="Volver"
       destructive
@@ -309,7 +275,7 @@ export const DeleteFlightDialog: React.FC<{
       <p>
         Se borra el vuelo y su cabina del sistema. Solo es posible si nunca tuvo reservas ni retenciones; si las tiene, usa «Cancelar vuelo».
       </p>
-      {inUse && flight && (
+      {inUse && (
         <div className="mt-3">
           <Button type="button" variant="outline" onClick={() => onSwitchToCancel(flight)}>
             Cancelar vuelo en su lugar

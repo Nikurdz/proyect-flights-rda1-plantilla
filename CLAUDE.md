@@ -29,7 +29,8 @@ npm test                   # unit tests + integration tests when TEST_DATABASE_U
 npx jest path/to/file.spec.ts   # a single file
 npm run build              # nest build (compiles specs too, so a broken spec breaks the build)
 npm run migration:run:vuelos | migration:generate:vuelos | migration:check:vuelos   # schema migrations (see below)
-npm run lint               # broken repo-wide (ESLint is not installed); pre-existing template gap, do not fix incidentally
+npm run lint               # ESLint 10 + typescript-eslint (eslint.config.mjs): Vuelos, src/common, main.ts, scripts; must stay at 0 errors
+npm run lint:fix           # same, applying automatic fixes (the frontend has its own `npm run lint` in frontend/)
 ```
 
 Swagger UI: `http://localhost:3000/api/docs` (Authorize with a token from `POST /api/v1/auth/login` or `/auth/invitado`). It is grouped as it was originally, with plain names and no numbering: the flight-contract sections live in `src/modules/vuelos/common/swagger-tags.ts` (Búsqueda y Catálogo, Bloqueo de Cupos (Hold), Reservas y Emisión, Postventa, Check-in y Boarding Pass, Webhooks, Estado de Vuelos) and the e-commerce controllers name their own `'E-commerce · …'` sections inline; `main.ts` builds the document with a plain `DocumentBuilder`. Every route is under the global prefix `api/v1` set once in `src/main.ts`, shared by all domains — it does **not** match the contracts' own `servers[].url`. `main.ts` registers the Bearer scheme for Swagger (the only shared-file change this module needed).

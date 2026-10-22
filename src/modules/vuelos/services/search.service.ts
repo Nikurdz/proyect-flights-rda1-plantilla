@@ -60,6 +60,8 @@ export class SearchService {
 
     // Cheapest bundles first, then cap: a truncated list must still hold the best offers.
     const bundles = this.buildCombinations(legOptions)
+      // Same-day legs: only combinations where every leg leaves after the previous one lands (the day check above is coarser).
+      .filter((combo) => combo.every((vuelo, i) => i === 0 || new Date(vuelo.fechaSalida).getTime() >= new Date(combo[i - 1].fechaLlegada).getTime()))
       .map((combo) => ({
         combo,
         total: combo.reduce((sum, vuelo) => sum + this.cheapestPartyTotal(vuelo, families, passengers), 0),

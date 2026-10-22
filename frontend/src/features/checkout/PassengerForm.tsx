@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Users, Mail, Phone, ArrowRight, Baby, UserCheck } from 'lucide-react';
@@ -7,7 +7,8 @@ import { registrarPasajeros } from '../../api/endpoints/offers';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { selectionsFromRegistered, toAsientosPayload, type SeatSelections } from '../../lib/seats';
 import { SeatSelector } from './SeatSelector';
-import { FieldError, FieldLabel, fieldA11y } from '../../components/ui/FormField';
+import { FieldError, FieldLabel } from '../../components/ui/FormField';
+import { fieldA11y } from '../../lib/field-a11y';
 import type { OfertaViewDto, RegistrarPasajerosDto, PasajeroDto } from '../../api/types';
 
 const COUNTRIES = [
@@ -131,7 +132,6 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
     register,
     control,
     handleSubmit,
-    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -152,7 +152,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
   // `fields[].id` is the key react-hook-form generates, not the passenger id the API needs: take ids from the defaults.
   const adultsList = defaultPassengers.filter((p) => p.tipo === 'ADULT');
 
-  const watched = watch('pasajeros');
+  const watched = useWatch({ control, name: 'pasajeros' });
   const seatPassengers = defaultPassengers
     .map((p, idx) => ({ id: p.id, tipo: p.tipo, idx }))
     .filter((p) => p.tipo !== 'INFANT')
@@ -219,7 +219,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">{labelTitle}</h3>
-                    <span className="text-[11px] text-slate-400 font-mono">ID: {field.id}</span>
+                    <span className="text-[11px] text-slate-500 font-mono">ID: {field.id}</span>
                   </div>
                 </div>
 

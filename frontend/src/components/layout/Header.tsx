@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, Menu, ShieldCheck, User, X } from 'lucide-react';
 import { useSession } from '../../lib/session';
@@ -21,10 +21,10 @@ export const Header: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const session = useSession();
-  const [open, setOpen] = useState(false);
-
-  // The mobile panel closes when the visitor goes somewhere.
-  useEffect(() => setOpen(false), [location.pathname]);
+  // The mobile panel remembers the page it was opened on, so it closes by itself when the visitor
+  // goes somewhere else (no effect needed).
+  const [openOn, setOpenOn] = useState<string | null>(null);
+  const open = openOn === location.pathname;
 
   const isCustomer = session?.kind === 'customer';
 
@@ -95,7 +95,7 @@ export const Header: React.FC = () => {
             aria-label={open ? 'Cerrar menú' : 'Abrir menú'}
             aria-expanded={open}
             aria-controls="menu-movil"
-            onClick={() => setOpen((value) => !value)}
+            onClick={() => setOpenOn(open ? null : location.pathname)}
           >
             {open ? <X className="h-6 w-6" aria-hidden="true" /> : <Menu className="h-6 w-6" aria-hidden="true" />}
           </button>

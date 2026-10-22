@@ -147,7 +147,7 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
               <div>
                 <span
                   className={`block text-[10px] font-black tracking-wider ${
-                    isSelected ? 'text-[#C5A880]' : 'text-slate-400'
+                    isSelected ? 'text-[#C5A880]' : 'text-slate-500'
                   }`}
                 >
                   {dayOfWeek}
@@ -164,7 +164,7 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
                   </span>
                 ) : (
                   <span className={`block text-[9px] ${
-                    isSelected ? 'text-slate-300' : 'text-slate-400'
+                    isSelected ? 'text-slate-300' : 'text-slate-500'
                   }`}>
                     {isSelected ? 'Fecha actual' : 'Ver vuelos'}
                   </span>

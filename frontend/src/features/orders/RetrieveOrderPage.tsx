@@ -127,7 +127,7 @@ export const RetrieveOrderPage: React.FC = () => {
           <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-card border border-slate-200/80 space-y-6 animate-in fade-in">
             <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
               <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
                   Código de reserva
                 </span>
                 <span className="text-2xl font-black text-brand-black font-mono tracking-wider">
@@ -187,7 +187,7 @@ export const RetrieveOrderPage: React.FC = () => {
                       <span className="font-bold text-slate-900">
                         {pax.nombres} {pax.apellidos}
                       </span>
-                      <span className="text-slate-400">({passengerTypeLabel(pax.tipo)})</span>
+                      <span className="text-slate-500">({passengerTypeLabel(pax.tipo)})</span>
                     </div>
 
                     {pax.eTicket && (

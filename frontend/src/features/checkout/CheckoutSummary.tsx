@@ -47,7 +47,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ oferta, onExpi
         <div className="p-5 space-y-5">
           {/* Flight Legs */}
           <div className="space-y-4">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Tu itinerario
             </h4>
 
@@ -96,7 +96,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ oferta, onExpi
             <div className="pt-2 border-t border-slate-100 flex items-baseline justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-900 block">Total a pagar</span>
-                <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Dólares (USD)</span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Dólares (USD)</span>
               </div>
               <div className="text-right">
                 <MoneyText

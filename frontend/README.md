@@ -56,6 +56,7 @@ npm install
 npm run dev          # http://localhost:5173 (o el siguiente puerto libre)
 npm run build        # tsc + vite build
 npm test             # Vitest: dinero, errores, sesión, registro, etiquetas, fechas
+npm run lint         # ESLint 9 (typescript-eslint, react-hooks, jsx-a11y strict); `npm run lint:fix` corrige lo automático
 npm run generate-api # regenera src/api/schema.d.ts desde el OpenAPI (ajusta la URL del script si usas el backend local)
 ```
 

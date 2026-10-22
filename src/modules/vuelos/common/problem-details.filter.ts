@@ -19,6 +19,7 @@ const STATUS_CODES: Record<number, { code: ProblemDetailsCode; title: string }> 
   422: { code: 'VALIDATION_FAILED', title: 'Unprocessable Entity' },
   423: { code: 'ACCOUNT_LOCKED', title: 'Locked' },
   429: { code: 'RATE_LIMIT_EXCEEDED', title: 'Too Many Requests' },
+  // Reserved: no route answers 501 any more, but a 501 raised by the framework still gets a typed problem.
   501: { code: 'NOT_IMPLEMENTED', title: 'Not Implemented' },
   503: { code: 'SERVICE_UNAVAILABLE', title: 'Service Unavailable' },
 };

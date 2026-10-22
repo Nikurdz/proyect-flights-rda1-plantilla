@@ -66,7 +66,7 @@ export const SeatSelector: React.FC<SeatSelectorProps> = ({ oferta, passengers, 
         <Armchair className="mt-0.5 h-5 w-5 text-brand-gold-dark" aria-hidden="true" />
         <div>
           <h3 id="seat-selector-title" className="text-sm font-bold text-slate-900">
-            Elige tus asientos <span className="font-medium text-slate-400">(opcional)</span>
+            Elige tus asientos <span className="font-medium text-slate-500">(opcional)</span>
           </h3>
           <p className="mt-0.5 text-xs text-slate-500">
             Sin costo adicional en este prototipo. Si no eliges, te asignamos uno al hacer el check-in. El asiento queda confirmado al pagar.
@@ -108,10 +108,10 @@ export const SeatSelector: React.FC<SeatSelectorProps> = ({ oferta, passengers, 
               <button type="button" role="radio" aria-checked={isActive} onClick={() => setActiveId(p.id)} className="flex items-center gap-2 px-3 py-2 font-semibold text-slate-800">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-black text-[10px] font-bold text-white">{index + 1}</span>
                 <span className="max-w-[10rem] truncate">{p.label}</span>
-                <span className={`font-mono text-[11px] ${seat ? 'text-brand-gold-dark' : 'text-slate-400'}`}>{seat ?? 'sin asiento'}</span>
+                <span className={`font-mono text-[11px] ${seat ? 'text-brand-gold-dark' : 'text-slate-500'}`}>{seat ?? 'sin asiento'}</span>
               </button>
               {seat && (
-                <button type="button" onClick={() => clear(p.id, leg.itinerarioId)} className="border-l border-slate-200 px-2 py-2 text-slate-400 hover:text-red-600" aria-label={`Quitar el asiento de ${p.label}`}>
+                <button type="button" onClick={() => clear(p.id, leg.itinerarioId)} className="border-l border-slate-200 px-2 py-2 text-slate-500 hover:text-red-600" aria-label={`Quitar el asiento de ${p.label}`}>
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
               )}

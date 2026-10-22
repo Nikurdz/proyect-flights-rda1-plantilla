@@ -51,7 +51,7 @@ export const OrderHistoryPage: React.FC = () => {
               <div key={orden.ordenId} className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm transition-all hover:shadow-card">
                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
                   <div>
-                    <span className="block text-xs font-bold uppercase tracking-wider text-slate-400">Orden {orden.numeroOrden}</span>
+                    <span className="block text-xs font-bold uppercase tracking-wider text-slate-500">Orden {orden.numeroOrden}</span>
                     <span className="font-mono text-base font-extrabold text-brand-black">Código de reserva: {orden.pnr || 'pendiente'}</span>
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-bold ${orderStatusTone(orden.estado)}`}>{orderStatusLabel(orden.estado)}</span>

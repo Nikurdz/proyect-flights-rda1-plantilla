@@ -1,12 +1,5 @@
 import React from 'react';
 
-/** Atributos de accesibilidad de un control: id, aria-invalid y aria-describedby hacia el error. */
-export const fieldA11y = (id: string, error?: string) => ({
-  id,
-  'aria-invalid': Boolean(error),
-  'aria-describedby': error ? `${id}-error` : undefined,
-});
-
 export const FieldLabel: React.FC<{ htmlFor: string; children: React.ReactNode; className?: string }> = ({
   htmlFor,
   children,

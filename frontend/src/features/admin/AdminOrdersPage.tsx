@@ -81,8 +81,10 @@ export const AdminOrdersPage: React.FC = () => {
           <tbody className="divide-y divide-slate-100">
             {isLoading && (
               <tr>
-                <td colSpan={6} className="p-4" role="status" aria-busy="true" aria-label="Cargando">
-                  <Skeleton className="h-24 w-full" />
+                <td colSpan={6} className="p-4">
+                  <div role="status" aria-busy="true" aria-label="Cargando">
+                    <Skeleton className="h-24 w-full" />
+                  </div>
                 </td>
               </tr>
             )}
@@ -183,7 +185,7 @@ export const AdminOrdersPage: React.FC = () => {
                         </div>
                       )}
                       {p.qr && (
-                        <div className="break-all font-mono text-[10px] text-slate-400" title="Texto firmado del código QR">
+                        <div className="break-all font-mono text-[10px] text-slate-500" title="Texto firmado del código QR">
                           {p.qr}
                         </div>
                       )}

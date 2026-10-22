@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { clsx } from 'clsx';
 import { X } from 'lucide-react';
 
@@ -13,6 +13,11 @@ export interface DialogProps {
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '5xl';
   /** `dark` usa la cabecera de marca (negro RAM). */
   variant?: 'light' | 'dark';
+  /**
+   * `false` para una decisión obligatoria: sin botón de cerrar, y Escape y el clic en el fondo no
+   * hacen nada. El contenido debe explicar qué opción elegir.
+   */
+  dismissible?: boolean;
 }
 
 const FOCUSABLE =
@@ -40,13 +45,22 @@ export const Dialog: React.FC<DialogProps> = ({
   children,
   maxWidth = 'md',
   variant = 'light',
+  dismissible = true,
 }) => {
   const uid = useId();
   const titleId = `${uid}-title`;
   const descId = `${uid}-description`;
   const panelRef = useRef<HTMLDivElement>(null);
+  // The latest onClose, read by the listeners without re-running the open/close effect on every render.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const dismissibleRef = useRef(dismissible);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+    dismissibleRef.current = dismissible;
+  });
+  const requestClose = () => {
+    if (dismissibleRef.current) onCloseRef.current();
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -63,7 +77,7 @@ export const Dialog: React.FC<DialogProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onCloseRef.current();
+        if (dismissibleRef.current) onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab' || !panelRef.current) return;
@@ -103,12 +117,13 @@ export const Dialog: React.FC<DialogProps> = ({
   const dark = variant === 'dark';
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onCloseRef.current();
-      }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+      {/* Backdrop: a pointer convenience only (keyboard users have Escape and the close button). */}
+      <div
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        aria-hidden="true"
+        onMouseDown={requestClose}
+      />
       <div
         ref={panelRef}
         role="dialog"
@@ -117,7 +132,7 @@ export const Dialog: React.FC<DialogProps> = ({
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
         className={clsx(
-          'relative flex w-full max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none',
+          'relative z-10 flex w-full max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none',
           maxWidths[maxWidth]
         )}
       >
@@ -138,19 +153,21 @@ export const Dialog: React.FC<DialogProps> = ({
               </p>
             )}
           </div>
+          {dismissible && (
           <button
             type="button"
-            onClick={() => onCloseRef.current()}
+            onClick={requestClose}
             className={clsx(
               'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors',
               dark
                 ? 'text-white/70 hover:bg-white/10 hover:text-white'
-                : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-600'
             )}
             aria-label="Cerrar modal"
           >
             <X className="w-5 h-5" aria-hidden="true" />
           </button>
+          )}
         </div>
         <div data-dialog-content className="overflow-y-auto px-6 py-4">
           {children}

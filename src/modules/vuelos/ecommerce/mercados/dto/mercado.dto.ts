@@ -157,7 +157,7 @@ export class IdentificacionFiscalDto {
   @Length(2, 60)
   etiqueta: string;
 
-  @ApiProperty({ example: '^\d{13}$', description: 'Expresión regular que debe cumplir el número completo.' })
+  @ApiProperty({ example: '^\\d{13}$', description: 'Expresión regular que debe cumplir el número completo.' })
   @IsString()
   @Length(1, 100)
   patron: string;

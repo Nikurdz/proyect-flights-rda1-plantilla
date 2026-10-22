@@ -87,7 +87,7 @@ export const FareComparisonModal: React.FC<FareComparisonModalProps> = ({
               </div>
 
               {tarifasData.vigenteHasta && (
-                <p className="mt-6 text-center text-xs text-slate-400">
+                <p className="mt-6 text-center text-xs text-slate-500">
                   Cotización válida hasta:{' '}
                   {new Date(tarifasData.vigenteHasta).toLocaleTimeString('es-EC')}
                 </p>

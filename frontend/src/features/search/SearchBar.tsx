@@ -138,7 +138,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
             Cabina Economy
           </span>
-          <span className="text-xs text-slate-400 hidden sm:inline">
+          <span className="text-xs text-slate-500 hidden sm:inline">
             Solo vuelos directos
           </span>
         </div>

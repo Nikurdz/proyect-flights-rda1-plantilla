@@ -73,7 +73,6 @@ export const AdminFlightsPage: React.FC = () => {
   const [action, setAction] = useState<{ kind: 'edit' | 'reschedule' | 'cancel' | 'delete'; flight: AdminVueloView } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const closeAction = () => setAction(null);
-  const flightFor = (kind: 'edit' | 'reschedule' | 'cancel' | 'delete') => (action?.kind === kind ? action.flight : null);
   const [draft, setDraft] = useState<AdminFlightsFilters>({});
   const [filters, setFilters] = useState<AdminFlightsFilters>({});
 
@@ -142,8 +141,10 @@ export const AdminFlightsPage: React.FC = () => {
           <tbody className="divide-y divide-slate-100">
             {isLoading && (
               <tr>
-                <td colSpan={8} className="p-4" role="status" aria-busy="true" aria-label="Cargando">
-                  <Skeleton className="h-24 w-full" />
+                <td colSpan={8} className="p-4">
+                  <div role="status" aria-busy="true" aria-label="Cargando">
+                    <Skeleton className="h-24 w-full" />
+                  </div>
                 </td>
               </tr>
             )}
@@ -207,11 +208,13 @@ export const AdminFlightsPage: React.FC = () => {
       )}
 
       <p className="mt-3 text-[11px] text-slate-500">Haz clic en un vuelo para ver su mapa de asientos y cuáles están reservados.</p>
-      <CreateFlightDialog isOpen={creating} onClose={() => setCreating(false)} onDone={setNotice} />
-      <EditFlightDialog flight={flightFor('edit')} onClose={closeAction} onDone={setNotice} />
-      <RescheduleFlightDialog flight={flightFor('reschedule')} onClose={closeAction} onDone={setNotice} />
-      <CancelFlightDialog flight={flightFor('cancel')} onClose={closeAction} onDone={setNotice} />
-      <DeleteFlightDialog flight={flightFor('delete')} onClose={closeAction} onDone={setNotice} onSwitchToCancel={(flight) => setAction({ kind: 'cancel', flight })} />
+      {creating && <CreateFlightDialog onClose={() => setCreating(false)} onDone={setNotice} />}
+      {action?.kind === 'edit' && <EditFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
+      {action?.kind === 'reschedule' && <RescheduleFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
+      {action?.kind === 'cancel' && <CancelFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
+      {action?.kind === 'delete' && (
+        <DeleteFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} onSwitchToCancel={(flight) => setAction({ kind: 'cancel', flight })} />
+      )}
       <FlightSeatsDialog flight={openFlight} ownerId={session?.ownerId} onClose={() => setOpenFlight(null)} />
     </section>
   );

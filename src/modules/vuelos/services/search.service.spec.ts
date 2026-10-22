@@ -115,12 +115,20 @@ describe('SearchService', () => {
 
   it('keeps the cheapest bundles when the combination cap truncates the list', async () => {
     flights = [vuelo('1', 500), vuelo('2', 100), vuelo('3', 300)];
+    // The return leg flies the next day, so every pairing is in order and only the cap trims the list.
+    const nextDay = (v: Vuelo): Vuelo => ({ ...v, fechaSalida: new Date(v.fechaSalida.getTime() + 86_400_000), fechaLlegada: new Date(v.fechaLlegada.getTime() + 86_400_000) });
+    queryBuilder.getMany.mockResolvedValueOnce(flights).mockResolvedValueOnce(flights.map(nextDay));
     const result = await service.search(request({}, 2));
 
     expect(result.totalOffers).toBe(5); // 3 x 3 = 9 combinations, capped at 5
     const totals = result.offers.map((o) => Number(o.grandTotal.total));
     expect(totals).toEqual([...totals].sort((a, b) => a - b));
     expect(totals[0]).toBe(230); // 2 x (100 + 15%)
+  });
+
+  it('drops a combination whose second leg leaves before the first one lands (M8)', async () => {
+    flights = [vuelo('1', 100)]; // 08:00-13:00 on both legs: the return would leave before the outbound lands
+    expect((await service.search(request({}, 2))).totalOffers).toBe(0);
   });
 
   it('rejects a request where origin equals destination (RN-01)', async () => {

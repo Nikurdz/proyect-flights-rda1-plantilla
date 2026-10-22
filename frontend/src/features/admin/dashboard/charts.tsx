@@ -2,7 +2,7 @@ import React, { useId, useState } from 'react';
 import { compactUsd, niceMax, sharePct, shortDay, type Slice } from '../../../lib/dashboard';
 
 /** Palette: gold/black/greys plus green and red; legends and tables never rely on colour alone. */
-export const PALETTE = ['#B8860B', '#111111', '#6B7280', '#047857', '#B91C1C', '#D4AF37', '#9CA3AF', '#374151'];
+const PALETTE = ['#B8860B', '#111111', '#6B7280', '#047857', '#B91C1C', '#D4AF37', '#9CA3AF', '#374151'];
 
 export interface TableData {
   headers: string[];
@@ -256,30 +256,32 @@ export const HBarsChart: React.FC<{
       ) : (
         <ul className="space-y-2.5">
           {items.map((it, i) => (
-            <li
-              key={it.label}
-              tabIndex={0}
-              aria-label={`${it.label}: ${it.display}${it.highlight ? `, ${flagText}` : ''}`}
-              className="rounded text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
-              title={`${it.label}: ${it.display}`}
-              onMouseEnter={() => setActive(i)}
-              onMouseLeave={() => setActive(null)}
-              onFocus={() => setActive(i)}
-              onBlur={() => setActive(null)}
-            >
-              <div className="mb-1 flex justify-between gap-2">
-                <span className="font-medium text-slate-800">
-                  {it.label}
-                  {it.highlight && <span className="ml-1.5 rounded bg-red-100 px-1 py-px text-[10px] font-bold uppercase text-red-800">{flagText}</span>}
+            <li key={it.label}>
+              {/* A real button, so keyboard users reach each bar and get the same readout as on hover. */}
+              <button
+                type="button"
+                aria-label={`${it.label}: ${it.display}${it.highlight ? `, ${flagText}` : ''}`}
+                className="block w-full rounded text-left text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+                title={`${it.label}: ${it.display}`}
+                onMouseEnter={() => setActive(i)}
+                onMouseLeave={() => setActive(null)}
+                onFocus={() => setActive(i)}
+                onBlur={() => setActive(null)}
+              >
+                <span className="mb-1 flex justify-between gap-2">
+                  <span className="font-medium text-slate-800">
+                    {it.label}
+                    {it.highlight && <span className="ml-1.5 rounded bg-red-100 px-1 py-px text-[10px] font-bold uppercase text-red-800">{flagText}</span>}
+                  </span>
+                  <span className="font-mono font-bold text-slate-900">{it.display}</span>
                 </span>
-                <span className="font-mono font-bold text-slate-900">{it.display}</span>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
-                <div
-                  className={`h-full rounded-full motion-safe:transition-[width] motion-safe:duration-500 ${it.highlight ? 'bg-red-700' : 'bg-brand-gold-dark'}`}
-                  style={{ width: `${top > 0 ? Math.min(100, Math.max(it.value > 0 ? 2 : 0, (it.value / top) * 100)) : 0}%` }}
-                />
-              </div>
+                <span className="block h-2.5 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+                  <span
+                    className={`block h-full rounded-full motion-safe:transition-[width] motion-safe:duration-500 ${it.highlight ? 'bg-red-700' : 'bg-brand-gold-dark'}`}
+                    style={{ width: `${top > 0 ? Math.min(100, Math.max(it.value > 0 ? 2 : 0, (it.value / top) * 100)) : 0}%` }}
+                  />
+                </span>
+              </button>
             </li>
           ))}
         </ul>
@@ -294,7 +296,9 @@ export const DonutChart: React.FC<{ title: string; slices: Slice[]; unit?: strin
   const total = slices.reduce((n, s) => n + s.value, 0);
   const R = 52;
   const C = 2 * Math.PI * R;
-  let acc = 0;
+  // Arc length of each slice and where it starts (the sum of the previous ones), computed up front.
+  const lengths = slices.map((s) => (total > 0 ? (s.value / total) * C : 0));
+  const offsets = lengths.map((_, i) => -lengths.slice(0, i).reduce((sum, l) => sum + l, 0));
   const readout = active !== null && slices[active] ? `${slices[active].label}: ${slices[active].value}${unit} (${sharePct(slices[active].value, total)})` : undefined;
   return (
     <ChartCard
@@ -310,9 +314,8 @@ export const DonutChart: React.FC<{ title: string; slices: Slice[]; unit?: strin
           <svg viewBox="0 0 140 140" className="h-36 w-36 shrink-0 -rotate-90" focusable="false">
             <circle cx="70" cy="70" r={R} fill="none" stroke="#F3F4F6" strokeWidth="20" />
             {slices.map((s, i) => {
-              const len = (s.value / total) * C;
-              const offset = -acc;
-              acc += len;
+              const len = lengths[i];
+              const offset = offsets[i];
               return (
                 <circle
                   key={s.key}

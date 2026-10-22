@@ -1,10 +1,57 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldCheck, ArrowRight, ArrowLeft, ExternalLink, FileText } from 'lucide-react';
+import { ShieldCheck, ArrowRight, ArrowLeft, ExternalLink, FileText, type LucideIcon } from 'lucide-react';
 import { useMercado } from '../../api/endpoints/markets';
 import { aceptarCondiciones } from '../../api/endpoints/offers';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import type { OfertaViewDto, AceptarCondicionesDto } from '../../api/types';
+
+/**
+ * One required checkbox. The label holds only the title (so the checkbox's name is short), the
+ * explanation is its description, and the link to the full text sits outside the label so clicking
+ * it never toggles the box.
+ */
+const ConditionItem: React.FC<{
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  title: string;
+  description: string;
+  link?: { to: string; label: string; icon: LucideIcon };
+}> = ({ checked, onChange, title, description, link }) => {
+  const id = useId();
+  const LinkIcon = link?.icon;
+  return (
+    <div className="flex items-start gap-3 p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+      <input
+        id={id}
+        type="checkbox"
+        aria-required="true"
+        aria-describedby={`${id}-desc`}
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-slate-300 text-brand-black focus:ring-brand-gold"
+      />
+      <div className="text-xs">
+        <label htmlFor={id} className="block cursor-pointer font-bold text-slate-900">
+          {title} <span aria-hidden="true">*</span>
+        </label>
+        <p id={`${id}-desc`} className="mt-0.5 text-slate-600">
+          {description}
+        </p>
+        {link && LinkIcon && (
+          <Link
+            to={link.to}
+            target="_blank"
+            className="mt-1.5 inline-flex min-h-[24px] items-center gap-1 text-xs font-bold text-brand-gold-dark hover:underline"
+          >
+            <LinkIcon className="w-3 h-3" aria-hidden="true" />
+            <span>{link.label}</span>
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+};
 
 interface ConditionsFormProps {
   oferta: OfertaViewDto;
@@ -69,81 +116,26 @@ export const ConditionsForm: React.FC<ConditionsFormProps> = ({ oferta, onSucces
         </div>
 
         <div className="space-y-4 pt-2">
-          {/* Terminos y Condiciones */}
-          <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={acceptTerms}
-                onChange={(e) => setAcceptTerms(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-black focus:ring-brand-gold"
-              />
-              <div className="text-xs">
-                <span className="font-bold text-slate-900 block">
-                  Acepto los Términos y Condiciones Generales {versionTerminos ? `(versión ${versionTerminos})` : ''} *
-                </span>
-                <span className="text-slate-500 block mt-0.5">
-                  Declaro conocer las reglas de reserva, cambios y reembolsos de la tarifa elegida.
-                </span>
-                <Link
-                  to="/terminos"
-                  target="_blank"
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-gold-dark hover:underline mt-1.5"
-                >
-                  <FileText className="w-3 h-3" aria-hidden="true" />
-                  <span>Leer los Términos de uso (se abre en otra pestaña)</span>
-                </Link>
-              </div>
-            </label>
-          </div>
-
-          {/* Contrato de Transporte */}
-          <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={acceptCarriage}
-                onChange={(e) => setAcceptCarriage(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-black focus:ring-brand-gold"
-              />
-              <div className="text-xs">
-                <span className="font-bold text-slate-900 block">
-                  Acepto las Condiciones del Contrato de Transporte Aéreo {versionCondiciones ? `(versión ${versionCondiciones})` : ''} *
-                </span>
-                <span className="text-slate-500 block mt-0.5">
-                  Equipaje, presentación en el aeropuerto, documentos de viaje y deberes del pasajero.
-                </span>
-                <Link
-                  to="/condiciones-transporte"
-                  target="_blank"
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-gold-dark hover:underline mt-1.5"
-                >
-                  <ExternalLink className="w-3 h-3" aria-hidden="true" />
-                  <span>Leer las Condiciones de transporte (se abre en otra pestaña)</span>
-                </Link>
-              </div>
-            </label>
-          </div>
-
-          {/* Declaración de Veracidad */}
-          <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 hover:bg-slate-50 transition-colors">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={acceptDeclaration}
-                onChange={(e) => setAcceptDeclaration(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-black focus:ring-brand-gold"
-              />
-              <div className="text-xs">
-                <span className="font-bold text-slate-900 block">
-                  Declaración de veracidad de datos y documentación de viaje *
-                </span>
-                <span className="text-slate-500 block mt-0.5">
-                  Confirmo que los nombres y números de documentos ingresados coinciden de forma exacta con los pasaportes o identificaciones oficiales de cada viajero.
-                </span>
-              </div>
-            </label>
-          </div>
+          <ConditionItem
+            checked={acceptTerms}
+            onChange={setAcceptTerms}
+            title={`Acepto los Términos y Condiciones Generales${versionTerminos ? ` (versión ${versionTerminos})` : ''}`}
+            description="Declaro conocer las reglas de reserva, cambios y reembolsos de la tarifa elegida."
+            link={{ to: '/terminos', label: 'Leer los Términos de uso (se abre en otra pestaña)', icon: FileText }}
+          />
+          <ConditionItem
+            checked={acceptCarriage}
+            onChange={setAcceptCarriage}
+            title={`Acepto las Condiciones del Contrato de Transporte Aéreo${versionCondiciones ? ` (versión ${versionCondiciones})` : ''}`}
+            description="Equipaje, presentación en el aeropuerto, documentos de viaje y deberes del pasajero."
+            link={{ to: '/condiciones-transporte', label: 'Leer las Condiciones de transporte (se abre en otra pestaña)', icon: ExternalLink }}
+          />
+          <ConditionItem
+            checked={acceptDeclaration}
+            onChange={setAcceptDeclaration}
+            title="Declaración de veracidad de datos y documentación de viaje"
+            description="Confirmo que los nombres y números de documentos ingresados coinciden de forma exacta con los pasaportes o identificaciones oficiales de cada viajero."
+          />
         </div>
       </div>
 

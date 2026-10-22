@@ -34,22 +34,14 @@ function useDebounced<T>(value: T, ms: number): T {
   return debounced;
 }
 
-const CreateUserDialog: React.FC<{ isOpen: boolean; onClose: () => void; onCreated: (correo: string) => void }> = ({ isOpen, onClose, onCreated }) => {
+/** Mounted only while open, so the form and the mutation start clean every time. */
+const CreateUserDialog: React.FC<{ onClose: () => void; onCreated: (correo: string) => void }> = ({ onClose, onCreated }) => {
   const crear = useCrearUsuario();
   const {
     register,
     handleSubmit,
-    reset,
     formState: { errors },
   } = useForm<NewUserForm>({ resolver: zodResolver(newUserSchema), defaultValues: { esAdmin: false } });
-
-  useEffect(() => {
-    if (isOpen) {
-      reset({ esAdmin: false });
-      crear.reset();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
 
   const onSubmit = (form: NewUserForm) => {
     const roles: RolUsuario[] = form.esAdmin ? ['CUSTOMER', 'ADMIN'] : ['CUSTOMER'];
@@ -73,7 +65,7 @@ const CreateUserDialog: React.FC<{ isOpen: boolean; onClose: () => void; onCreat
   };
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} title="Crear usuario" description="La cuenta nace con el correo verificado." maxWidth="lg">
+    <Dialog isOpen onClose={onClose} title="Crear usuario" description="La cuenta nace con el correo verificado." maxWidth="lg">
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         {crear.error != null && <ProblemAlert error={crear.error} message={adminErrorMessage(crear.error, 'crear-usuario')} />}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -117,13 +109,16 @@ export const AdminUsersPage: React.FC = () => {
   const session = useSession();
   const [q, setQ] = useState('');
   const [rol, setRol] = useState<RolUsuario | ''>('');
-  const [pagina, setPagina] = useState(1);
   const [creating, setCreating] = useState(false);
   const [target, setTarget] = useState<AdminUsuario | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const debouncedQ = useDebounced(q.trim(), 350);
 
-  useEffect(() => setPagina(1), [debouncedQ, rol]);
+  // The page belongs to one set of filters: changing the search or the role goes back to page 1.
+  const filterKey = `${debouncedQ}|${rol}`;
+  const [page, setPage] = useState({ key: filterKey, n: 1 });
+  const pagina = page.key === filterKey ? page.n : 1;
+  const setPagina = (next: (current: number) => number) => setPage({ key: filterKey, n: next(pagina) });
 
   const { data, isLoading, isFetching, error, refetch } = useAdminUsuarios({ q: debouncedQ, rol, pagina, limite: PAGE_SIZE }, session?.ownerId);
   const cambiar = useCambiarRoles();
@@ -213,8 +208,10 @@ export const AdminUsersPage: React.FC = () => {
           <tbody className="divide-y divide-slate-100">
             {isLoading && (
               <tr>
-                <td colSpan={5} className="p-4" role="status" aria-busy="true" aria-label="Cargando">
-                  <Skeleton className="h-24 w-full" />
+                <td colSpan={5} className="p-4">
+                  <div role="status" aria-busy="true" aria-label="Cargando">
+                    <Skeleton className="h-24 w-full" />
+                  </div>
                 </td>
               </tr>
             )}
@@ -285,7 +282,7 @@ export const AdminUsersPage: React.FC = () => {
         </div>
       </nav>
 
-      <CreateUserDialog isOpen={creating} onClose={() => setCreating(false)} onCreated={(correo) => setNotice(`Usuario ${correo} creado.`)} />
+      {creating && <CreateUserDialog onClose={() => setCreating(false)} onCreated={(correo) => setNotice(`Usuario ${correo} creado.`)} />}
 
       <ConfirmDialog
         isOpen={Boolean(target)}

@@ -166,7 +166,6 @@ export class DashboardService {
     const total = (c: Record<string, number>) => Object.values(c).reduce((a, b) => a + b, 0);
     const emitidas = serie.reduce((n, p) => n + p.emitidas, 0);
     const ingresosMinor = serie.reduce((n, p) => n + p.ingresosMinor, 0);
-    const reservas = rutas.reduce((n, r) => n + Number(r.reservas), 0);
     const canceladas = Number(cancelacionesDia.size ? [...cancelacionesDia.values()].reduce((a, b) => a + b, 0) : 0);
     const capacidad = ocupacion.reduce((n, r) => n + Number(r.capacidad), 0);
     const libres = ocupacion.reduce((n, r) => n + Number(r.libres), 0);
