@@ -8,7 +8,9 @@ import { runtimeMetrics } from '../common/runtime-metrics';
 import { IdempotencyService } from './idempotency.service';
 import { OffersService } from './offers.service';
 
-const SWEEP_INTERVAL_MS = 30_000;
+// Expiry is also enforced lazily per request, so a slow sweep only delays seats returning to search results.
+// Override with HOLDS_SWEEP_INTERVAL_MS.
+const SWEEP_INTERVAL_MS = Math.max(30_000, Number(process.env.HOLDS_SWEEP_INTERVAL_MS) || 5 * 60_000);
 // Expired search offers, change offers and quotes are only kept this long (they are dead the moment they expire).
 const STALE_RETENTION_MS = 24 * 60 * 60 * 1000;
 

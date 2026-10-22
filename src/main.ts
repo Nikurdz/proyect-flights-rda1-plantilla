@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { createGlobalRateLimit } from './modules/vuelos/ecommerce/common/global-rate-limit.middleware';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -32,6 +33,9 @@ async function bootstrap() {
     });
   }
 
+  // Registered after `trust proxy` so req.ip is the real client; it runs before any route touches the database.
+  app.use(createGlobalRateLimit());
+
   app.setGlobalPrefix('api/v1');
 
   app.useGlobalPipes(
@@ -54,4 +58,8 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT || 3000);
 }
-bootstrap();
+// A failed start must stop the process with a readable error, not leave an unhandled rejection behind.
+bootstrap().catch((error: unknown) => {
+  console.error(error);
+  process.exit(1);
+});

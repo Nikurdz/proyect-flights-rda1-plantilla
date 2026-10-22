@@ -15,8 +15,6 @@ info:
   title: RAM Alliance · API de Vuelos (sistema completo)
   version: '1.0'
 servers:
-  - description: Producción (Railway)
-    url: https://proyect-flights-rda1-plantilla-production.up.railway.app/api/v1
   - description: Desarrollo local
     url: http://localhost:3000/api/v1
 tags: []

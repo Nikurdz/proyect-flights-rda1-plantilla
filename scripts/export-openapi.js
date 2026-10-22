@@ -15,7 +15,6 @@ const yaml = require('js-yaml');
 
 const SOURCE = process.env.OPENAPI_URL || 'http://localhost:3000/api/docs-json';
 const TARGET = path.join(__dirname, '..', 'contracts', 'vuelos-ecommerce-openapi.yaml');
-const PRODUCTION_URL = 'https://proyect-flights-rda1-plantilla-production.up.railway.app/api/v1';
 
 const HEADER = `# GENERADO por scripts/export-openapi.js desde el /api/docs-json de la API en ejecución. No editar a mano:
 # cambia el código y vuelve a ejecutar \`npm run contract:export\`. Describe TODO el sistema actual de Vuelos:
@@ -48,7 +47,7 @@ const sortKeys = (value) => {
       'las escrituras críticas exigen `Idempotency-Key` (UUID); los importes en el borde de la API son cadenas decimales y en el sistema son enteros en unidades menores.',
     version: doc.info?.version || '1.0',
   };
-  doc.servers = [{ url: PRODUCTION_URL, description: 'Producción (Railway)' }, { url: 'http://localhost:3000/api/v1', description: 'Desarrollo local' }];
+  doc.servers = [{ url: 'http://localhost:3000/api/v1', description: 'Desarrollo local' }];
   // The API publishes full paths (/api/v1/...); the server URL already carries the prefix.
   doc.paths = Object.fromEntries(Object.entries(doc.paths).map(([route, item]) => [route.replace(/^\/api\/v1/, '') || '/', item]));
 

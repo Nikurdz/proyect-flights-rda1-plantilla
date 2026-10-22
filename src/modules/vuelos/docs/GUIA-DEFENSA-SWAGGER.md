@@ -3,7 +3,7 @@
 Guía para recorrer en vivo, sin tocar código ni datos a mano, todo lo que hace el e-commerce de vuelos.
 Cada paso dice **qué pulsar**, **qué escribir** y **qué decir**. Imprímela o ábrela en otra pantalla.
 
-- **Swagger:** `https://proyect-flights-rda1-plantilla-production.up.railway.app/api/docs` (en local: `http://localhost:3000/api/docs`).
+- **Swagger:** `http://localhost:3000/api/docs` (o la URL del despliegue vigente).
 - **Frontend:** la URL de Netlify (para mostrar la misma compra con interfaz).
 - Las secciones del Swagger están **numeradas en el orden de esta guía** (1 a 6). La 7 (núcleo GDS) y las `⛔ No implementado` no se usan para comprar.
 

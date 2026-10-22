@@ -8,7 +8,8 @@ import { PagosService } from '../pagos/pagos.service';
 import { ComprasService } from './compras.service';
 import { Orden } from './entities/orden.entity';
 
-const INTERVAL_MS = 60_000;
+// Every tick queries the database, which keeps a serverless Postgres (Neon) awake; override with RECONCILIATION_INTERVAL_MS.
+const INTERVAL_MS = Math.max(30_000, Number(process.env.RECONCILIATION_INTERVAL_MS) || 5 * 60_000);
 // An order younger than this may simply still be announcing itself; older than the window is not chased.
 const ANNOUNCE_GRACE_MS = 2 * 60_000;
 const ANNOUNCE_WINDOW_MS = 24 * 60 * 60_000;
