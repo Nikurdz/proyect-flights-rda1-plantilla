@@ -1,5 +1,6 @@
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 import { bigintNumber } from '../../../common/bigint.transformer';
+import { ReservaExterna } from '../../integracion/entities/reserva-externa.entity';
 import { Mercado } from '../../mercados/entities/mercado.entity';
 import { Oferta } from '../../ofertas/entities/oferta.entity';
 import { Orden } from '../../ordenes/entities/orden.entity';
@@ -30,16 +31,25 @@ export interface ResultadoAntifraude {
 @Entity('ecom_pagos')
 @Index('IDX_ecom_pagos_oferta', ['ofertaId', 'creadoEn'])
 @Index('IDX_ecom_pagos_creado', ['creadoEn'])
+// A payment pays an offer (a flight) or a reservation of a partner product, never both and never neither.
+@Check('CHK_ecom_pagos_origen', '("ofertaId" IS NOT NULL) <> ("reservaExternaId" IS NOT NULL)')
 export class Pago {
   @PrimaryGeneratedColumn('uuid')
   pagoId: string;
 
-  @Column({ type: 'uuid' })
-  ofertaId: string;
+  @Column({ type: 'uuid', nullable: true })
+  ofertaId: string | null;
 
-  @ManyToOne(() => Oferta, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => Oferta, { onDelete: 'RESTRICT', nullable: true })
   @JoinColumn({ name: 'ofertaId' })
-  oferta?: Oferta;
+  oferta?: Oferta | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  reservaExternaId: string | null;
+
+  @ManyToOne(() => ReservaExterna, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'reservaExternaId' })
+  reservaExterna?: ReservaExterna | null;
 
   // Filled once the order exists, so a payment can be traced to its order and back.
   @Column({ type: 'uuid', nullable: true })

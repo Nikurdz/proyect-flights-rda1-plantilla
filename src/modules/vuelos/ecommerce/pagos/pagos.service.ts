@@ -10,7 +10,9 @@ import { PagoAntifraudeMotivo } from './entities/pago-antifraude-motivo.entity';
 import { ANTIFRAUDE, Antifraude, PASARELA_PAGO, PasarelaPago } from './ports/pagos.ports';
 
 export interface SolicitudPago {
-  ofertaId: string;
+  /** What is being paid: an offer (a flight) or a reservation of a partner product. Exactly one. */
+  ofertaId?: string;
+  reservaExternaId?: string;
   ownerId: string;
   mercado: Mercado;
   montoMinor: number;
@@ -84,11 +86,14 @@ export class PagosService implements OnModuleInit {
   /** RF-PAY-006/007/009: fraud check first, then the authorisation; a refusal leaves the offer payable. */
   async autorizar(solicitud: SolicitudPago): Promise<ResultadoAutorizacion> {
     const { mercado } = solicitud;
-    const previos = await this.pagos.count({ where: { ofertaId: solicitud.ofertaId, estado: In(['RECHAZADO', 'RECHAZADO_ANTIFRAUDE']) } });
+    const previos = await this.pagos.count({
+      where: { ...(solicitud.ofertaId ? { ofertaId: solicitud.ofertaId } : { reservaExternaId: solicitud.reservaExternaId }), estado: In(['RECHAZADO', 'RECHAZADO_ANTIFRAUDE']) },
+    });
 
     let pago = await this.pagos.save(
       this.pagos.create({
-        ofertaId: solicitud.ofertaId,
+        ofertaId: solicitud.ofertaId ?? null,
+        reservaExternaId: solicitud.reservaExternaId ?? null,
         ownerId: solicitud.ownerId,
         mercado: mercado.codigo,
         moneda: mercado.moneda,
@@ -159,6 +164,11 @@ export class PagosService implements OnModuleInit {
   }
 
   /** The authorised, not-yet-captured payment of an offer, if a previous attempt got that far (resume after a crash). */
+  /** The live payment of a partner-product reservation (authorised, captured or waiting to be captured). */
+  async autorizadoDeReservaExterna(reservaExternaId: string): Promise<Pago | null> {
+    return this.pagos.findOne({ where: { reservaExternaId, estado: In(['AUTORIZADO', 'CAPTURADO', 'CAPTURA_PENDIENTE']) }, order: { creadoEn: 'DESC' } });
+  }
+
   async autorizadoDeOferta(ofertaId: string): Promise<Pago | null> {
     return this.pagos.findOne({ where: { ofertaId, estado: In(['AUTORIZADO', 'CAPTURADO', 'CAPTURA_PENDIENTE']) }, order: { creadoEn: 'DESC' } });
   }

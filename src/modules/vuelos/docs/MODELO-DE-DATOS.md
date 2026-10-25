@@ -2,7 +2,7 @@
 
 > Generado por `npm run docs:modelo` desde las entidades TypeORM: no se edita a mano.
 
-Esquema **real** de PostgreSQL (56 tablas, 73 llaves foráneas) versionado con migraciones (`src/modules/vuelos/migrations/`). Está en **tercera forma normal**: cada dato vive en una sola tabla, los arreglos y documentos se modelan como tablas hijas y toda relación es una `FOREIGN KEY` real.
+Esquema **real** de PostgreSQL (61 tablas, 82 llaves foráneas) versionado con migraciones (`src/modules/vuelos/migrations/`). Está en **tercera forma normal**: cada dato vive en una sola tabla, los arreglos y documentos se modelan como tablas hijas y toda relación es una `FOREIGN KEY` real.
 
 Reglas del modelo:
 
@@ -61,6 +61,7 @@ erDiagram
     ecom_mercados ||--o{ ecom_clientes : "mercadoPreferido"
     ecom_facturas ||--o{ ecom_factura_detalles : "facturaId"
     ecom_ordenes ||--o| ecom_facturas : "ordenId"
+    reservas_externas ||--o| ecom_facturas : "reservaExternaId"
     ecom_datos_facturacion ||--o{ ecom_facturas : "datosFacturacionId"
     ecom_mercados ||--o{ ecom_mercado_documentos_legales : "mercadoCodigo"
     ecom_mercados ||--o{ ecom_mercado_identificaciones : "mercadoCodigo"
@@ -93,9 +94,23 @@ erDiagram
     ecom_datos_facturacion ||--o{ ecom_ordenes : "datosFacturacionId"
     ecom_pagos ||--o{ ecom_pago_antifraude_motivos : "pagoId"
     ecom_ofertas ||--o{ ecom_pagos : "ofertaId"
+    reservas_externas ||--o{ ecom_pagos : "reservaExternaId"
     ecom_ordenes ||--o{ ecom_pagos : "ordenId"
     ecom_mercados ||--o{ ecom_pagos : "mercado"
     ecom_mercados ||--o{ ecom_plantillas_notificacion : "mercado"
+```
+
+### Integración con proveedores
+
+```mermaid
+erDiagram
+    proveedores ||--o{ catalogo_externo : "proveedorId"
+    catalogo_externo ||--o{ catalogo_externo_categorias : "catalogoId"
+    proveedores ||--o{ proveedor_salud : "proveedorId"
+    ecom_clientes ||--o{ reservas_externas : "clienteId"
+    proveedores ||--o{ reservas_externas : "proveedorId"
+    catalogo_externo ||--o{ reservas_externas : "catalogoId"
+    ecom_datos_facturacion ||--o{ reservas_externas : "datosFacturacionId"
 ```
 
 ### Observabilidad y auditoría
@@ -143,7 +158,7 @@ erDiagram
 | `ecom_clientes` | Cuentas de cliente (credenciales con hash, bloqueo por intentos) | `clienteId` | `correo`, `correoVerificado`, `hashContrasena`, `nombres`, `apellidos`, `fechaNacimiento`, `telefono`, `numeroSocio`, `mercadoPreferido`, `idiomaPreferido`, `canalNotificacion`, `consentimientoMarketing`, `terminosVersionAceptada`, `terminosAceptadosEn`, `intentosFallidos`, `bloqueadoHasta`, `tokenVerificacionHash`, `tokenVerificacionVenceEn`, `creadoEn`, `actualizadoEn` | `mercadoPreferido` → `ecom_mercados` (restringe) |
 | `ecom_datos_facturacion` | Identidad de facturación (cifrada); la comparten oferta, orden y factura | `datosFacturacionId` | `tipoIdentificacion`, `numeroIdentificacion`, `razonSocial`, `direccion`, `pais`, `creadoEn` | — |
 | `ecom_factura_detalles` | Líneas de la factura: tramo y tipo de pasajero | `id` | `facturaId`, `linea`, `tipo`, `concepto`, `cantidad`, `precioUnitarioMinor`, `ivaMinor`, `totalMinor` | `facturaId` → `ecom_facturas` (cascada) |
-| `ecom_facturas` | Factura de cada orden emitida (subtotal, IVA, total) | `facturaId` | `numeroFactura`, `ordenId`, `datosFacturacionId`, `moneda`, `subtotalMinor`, `ivaMinor`, `totalMinor`, `estado`, `emitidaEn` | `ordenId` → `ecom_ordenes` (restringe); `datosFacturacionId` → `ecom_datos_facturacion` (restringe) |
+| `ecom_facturas` | Factura de cada orden emitida (subtotal, IVA, total) | `facturaId` | `numeroFactura`, `ordenId`, `reservaExternaId`, `datosFacturacionId`, `moneda`, `subtotalMinor`, `ivaMinor`, `totalMinor`, `estado`, `emitidaEn` | `ordenId` → `ecom_ordenes` (restringe); `reservaExternaId` → `reservas_externas` (restringe); `datosFacturacionId` → `ecom_datos_facturacion` (restringe) |
 | `ecom_localidades` | Catálogo de aeropuertos y ciudades por código IATA | `iata` | `ciudad`, `nombre`, `pais`, `paisNombre`, `zonaHoraria`, `ciudadNorm`, `nombreNorm` | — |
 | `ecom_mercado_documentos_legales` | Términos, privacidad y condiciones de transporte (versión y URL) | `mercadoCodigo + tipo` | `version`, `url` | `mercadoCodigo` → `ecom_mercados` (cascada) |
 | `ecom_mercado_identificaciones` | Tipos de identificación fiscal aceptados y su patrón | `mercadoCodigo + tipo` | `etiqueta`, `patron`, `orden` | `mercadoCodigo` → `ecom_mercados` (cascada) |
@@ -166,9 +181,19 @@ erDiagram
 | `ecom_orden_historial` | Historial de estados de la orden | `id` | `ordenId`, `secuencia`, `estado`, `en`, `motivo` | `ordenId` → `ecom_ordenes` (cascada) |
 | `ecom_ordenes` | Orden de compra: número, estado, PNR, reserva, facturación, contacto cifrado | `ordenId` | `numeroOrden`, `ofertaId`, `ownerId`, `clienteId`, `mercado`, `moneda`, `totalMinor`, `estado`, `canal`, `pnr`, `bookingId`, `datosFacturacionId`, `contactoCorreo`, `contactoTelefono`, `creadaEn`, `actualizadaEn` | `ofertaId` → `ecom_ofertas` (restringe); `clienteId` → `ecom_clientes` (restringe); `mercado` → `ecom_mercados` (restringe); `bookingId` → `vuelos_bookings` (restringe); `datosFacturacionId` → `ecom_datos_facturacion` (restringe) |
 | `ecom_pago_antifraude_motivos` | Motivos del motor antifraude por pago | `id` | `pagoId`, `motivo` | `pagoId` → `ecom_pagos` (cascada) |
-| `ecom_pagos` | Pagos: autorización, captura, anulación y reembolso (monto en unidades menores) | `pagoId` | `ofertaId`, `ordenId`, `ownerId`, `mercado`, `moneda`, `montoMinor`, `reembolsoMinor`, `marca`, `ultimos4`, `cuotas`, `estado`, `autorizacionRef`, `codigoRechazo`, `antifraudeVeredicto`, `antifraudePuntaje`, `claveIdempotencia`, `creadoEn`, `actualizadoEn` | `ofertaId` → `ecom_ofertas` (restringe); `ordenId` → `ecom_ordenes` (restringe); `mercado` → `ecom_mercados` (restringe) |
+| `ecom_pagos` | Pagos: autorización, captura, anulación y reembolso (monto en unidades menores) | `pagoId` | `ofertaId`, `reservaExternaId`, `ordenId`, `ownerId`, `mercado`, `moneda`, `montoMinor`, `reembolsoMinor`, `marca`, `ultimos4`, `cuotas`, `estado`, `autorizacionRef`, `codigoRechazo`, `antifraudeVeredicto`, `antifraudePuntaje`, `claveIdempotencia`, `creadoEn`, `actualizadoEn` | `ofertaId` → `ecom_ofertas` (restringe); `reservaExternaId` → `reservas_externas` (restringe); `ordenId` → `ecom_ordenes` (restringe); `mercado` → `ecom_mercados` (restringe) |
 | `ecom_plantillas_notificacion` | Plantillas versionadas por tipo, mercado e idioma | `plantillaId` | `tipo`, `mercado`, `idioma`, `version`, `asunto`, `cuerpo`, `activa` | `mercado` → `ecom_mercados` (cascada) |
 | `ecom_roles` | Catálogo de roles (CUSTOMER, ADMIN) | `codigo` | `descripcion` | — |
+
+### Integración con proveedores
+
+| Tabla | Para qué sirve | Clave | Columnas | Llaves foráneas (borrado) |
+|---|---|---|---|---|
+| `catalogo_externo` | Productos del proveedor importados con «sincronizar» (lo que ven los clientes) | `id` | `proveedorId`, `externalId`, `tipo`, `nombre`, `descripcion`, `duracion`, `precioMinor`, `moneda`, `imagenUrl`, `cancelacionGratis`, `activo`, `sincronizadoEn` | `proveedorId` → `proveedores` (cascada) |
+| `catalogo_externo_categorias` | Categorías de cada producto externo | `catalogoId + categoria` | — | `catalogoId` → `catalogo_externo` (cascada) |
+| `proveedor_salud` | Historial de comprobaciones de cada proveedor: estado y latencia | `id` | `proveedorId`, `estado`, `latenciaMs`, `detalle`, `comprobadoEn` | `proveedorId` → `proveedores` (cascada) |
+| `proveedores` | Servicios de otros equipos con los que se integra la plataforma (kill-switch en `activo`) | `id` | `nombre`, `equipo`, `baseUrl`, `tipoServicio`, `activo`, `creadoEn`, `actualizadoEn` | — |
+| `reservas_externas` | Reservas de productos de un proveedor pagadas y facturadas aquí (datos del comprador cifrados) | `id` | `ownerId`, `clienteId`, `proveedorId`, `catalogoId`, `externalReservationId`, `estado`, `fecha`, `hora`, `cantidad`, `nombreCliente`, `correoCliente`, `totalMinor`, `moneda`, `datosFacturacionId`, `motivo`, `creadaEn`, `actualizadaEn` | `clienteId` → `ecom_clientes` (restringe); `proveedorId` → `proveedores` (restringe); `catalogoId` → `catalogo_externo` (restringe); `datosFacturacionId` → `ecom_datos_facturacion` (restringe) |
 
 ### Observabilidad y auditoría
 

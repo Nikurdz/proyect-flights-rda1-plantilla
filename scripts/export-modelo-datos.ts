@@ -13,11 +13,12 @@ import { DataSource } from 'typeorm';
 
 config({ quiet: true });
 
-type Dominio = 'gds' | 'ecom' | 'obs';
+type Dominio = 'gds' | 'ecom' | 'integ' | 'obs';
 
 const DOMINIOS: Record<Dominio, string> = {
   gds: 'Núcleo de vuelos (GDS)',
   ecom: 'E-commerce R1',
+  integ: 'Integración con proveedores',
   obs: 'Observabilidad y auditoría',
 };
 
@@ -79,9 +80,15 @@ const PROPOSITO: Record<string, string> = {
   auditoria_sagas: 'Ejecuciones de sagas con su resultado',
   auditoria_saga_pasos: 'Pasos de cada saga y su duración',
   peticiones_http: 'Muestra acotada del tráfico HTTP (se purga por antigüedad)',
+  proveedores: 'Servicios de otros equipos con los que se integra la plataforma (kill-switch en `activo`)',
+  proveedor_salud: 'Historial de comprobaciones de cada proveedor: estado y latencia',
+  catalogo_externo: 'Productos del proveedor importados con «sincronizar» (lo que ven los clientes)',
+  catalogo_externo_categorias: 'Categorías de cada producto externo',
+  reservas_externas: 'Reservas de productos de un proveedor pagadas y facturadas aquí (datos del comprador cifrados)',
 };
 
-const dominioDe = (tabla: string): Dominio => (tabla.startsWith('vuelos') ? 'gds' : tabla.startsWith('ecom_') ? 'ecom' : 'obs');
+const dominioDe = (tabla: string): Dominio =>
+  tabla.startsWith('vuelos') ? 'gds' : tabla.startsWith('ecom_') ? 'ecom' : /^(proveedor|catalogo_externo|reservas_externas)/.test(tabla) ? 'integ' : 'obs';
 
 async function main(): Promise<void> {
   const dataSource = new DataSource({

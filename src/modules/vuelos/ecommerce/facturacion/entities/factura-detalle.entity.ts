@@ -2,7 +2,7 @@ import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Unique }
 import { bigintNumber } from '../../../common/bigint.transformer';
 import { Factura } from './factura.entity';
 
-export type TipoLineaFactura = 'TARIFA' | 'EQUIPAJE';
+export type TipoLineaFactura = 'TARIFA' | 'EQUIPAJE' | 'EXPERIENCIA';
 
 /** One invoice line: a leg and a passenger type (or a baggage purchase) with its quantity, unit price and IVA. */
 @Entity('ecom_factura_detalles')

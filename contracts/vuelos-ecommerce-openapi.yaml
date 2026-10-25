@@ -417,6 +417,433 @@ paths:
       summary: Detalle completo de una orden (ADMIN)
       tags:
         - E-commerce · Back-office
+  /admin/proveedores:
+    get:
+      description: Estado de la última comprobación (UP, DEGRADADO, DOWN), latencia en ms, estado del circuit breaker y productos sincronizados.
+      operationId: ProveedoresController_listar
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ProveedorViewDto'
+                type: array
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Listar proveedores con su semáforo (ADMIN)
+      tags:
+        - E-commerce · Proveedores
+    post:
+      description: >-
+        Nombre, equipo, URL base (con o sin /api/v2) y tipo de servicio. La URL pasa la defensa SSRF: https público (http y redes privadas
+        solo con PROVEEDORES_ALLOW_PRIVATE_HOSTS fuera de producción).
+      operationId: ProveedoresController_registrar
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarProveedorDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProveedorViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Registrar un proveedor (ADMIN)
+      tags:
+        - E-commerce · Proveedores
+  /admin/proveedores/reservas/todas:
+    get:
+      operationId: ProveedoresController_reservasTodas
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservasExternasPaginaViewDto'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Reservas de experiencias de todos los clientes (ADMIN)
+      tags:
+        - E-commerce · Proveedores
+  /admin/proveedores/{id}:
+    delete:
+      description: Solo si nunca vendió nada; si no, 409 PROVIDER_IN_USE y hay que apagarlo.
+      operationId: ProveedoresController_eliminar
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '204':
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Eliminar un proveedor (ADMIN)
+      tags:
+        - E-commerce · Proveedores
+    get:
+      operationId: ProveedoresController_obtener
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProveedorViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Detalle de un proveedor (ADMIN)
+      tags:
+        - E-commerce · Proveedores
+    patch:
+      description: >-
+        Con `activo: false` (kill-switch) no se le llama, su catálogo se oculta y no se aceptan reservas; `activo: true` lo reactiva y
+        cierra su circuito.
+      operationId: ProveedoresController_actualizar
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarProveedorDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProveedorViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Editar o apagar un proveedor (ADMIN)
+      tags:
+        - E-commerce · Proveedores
+  /admin/proveedores/{id}/ping:
+    post:
+      description: Llama a su healthcheck, guarda el resultado y devuelve el semáforo con la latencia en ms.
+      operationId: ProveedoresController_ping
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaludViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: 🔄 Comprobar el proveedor ahora (ADMIN)
+      tags:
+        - E-commerce · Proveedores
+  /admin/proveedores/{id}/salud:
+    get:
+      operationId: ProveedoresController_salud
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SaludViewDto'
+                type: array
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Historial de comprobaciones (ADMIN)
+      tags:
+        - E-commerce · Proveedores
+  /admin/proveedores/{id}/sincronizar:
+    post:
+      description: Importa el catálogo del socio a la caché local que ven los clientes (Experiencias). Lo que el socio deja de listar queda oculto.
+      operationId: ProveedoresController_sincronizar
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SincronizacionViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Servicio no disponible
+      security:
+        - bearer: []
+      summary: 📥 Sincronizar el catálogo del proveedor (ADMIN)
+      tags:
+        - E-commerce · Proveedores
   /admin/usuarios:
     get:
       description: Más recientes primero, con búsqueda por correo o nombre y filtro por rol. Nunca incluye contraseñas ni tokens.
@@ -2362,6 +2789,176 @@ paths:
       summary: Buscar vuelos disponibles
       tags:
         - E-commerce · Búsqueda
+  /experiencias:
+    get:
+      description: Productos de los proveedores sincronizados (atracciones, tours…). Público. Solo los de proveedores encendidos.
+      operationId: ExperienciasController_listar
+      parameters:
+        - description: Texto a buscar en el nombre.
+          in: query
+          name: q
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 24
+            maximum: 100
+            minimum: 1
+            type: number
+        - in: query
+          name: desde
+          required: false
+          schema:
+            default: 0
+            minimum: 0
+            type: number
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperienciasPaginaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+      summary: Catálogo de experiencias
+      tags:
+        - E-commerce · Experiencias
+  /experiencias/{id}:
+    get:
+      operationId: ExperienciasController_obtener
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperienciaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      summary: Detalle de una experiencia
+      tags:
+        - E-commerce · Experiencias
+  /experiencias/{id}/reservas:
+    post:
+      description: >-
+        Saga: autoriza el pago (antifraude + pasarela) → reserva en la API del proveedor → confirma y factura aquí (una transacción) →
+        captura el cobro. Si el proveedor rechaza o falla se anula la autorización (no se cobra); si falla la confirmación local se cancela
+        la reserva del proveedor. Un reintento con la misma Idempotency-Key devuelve el resultado original.
+      operationId: ExperienciasController_reservar
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservarExperienciaDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaExternaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '402':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Error
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Demasiadas peticiones
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Error
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Servicio no disponible
+      security:
+        - bearer: []
+      summary: Reservar y pagar una experiencia
+      tags:
+        - E-commerce · Experiencias
   /flights/{flightNumber}/status:
     get:
       operationId: VuelosController_getFlightStatus
@@ -3587,6 +4184,137 @@ paths:
       summary: Consultar una orden propia
       tags:
         - E-commerce · Compra y órdenes
+  /reservas-externas:
+    get:
+      operationId: ReservasExternasController_listar
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservasExternasPaginaViewDto'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+      security:
+        - bearer: []
+      summary: Mis reservas de experiencias
+      tags:
+        - E-commerce · Experiencias
+  /reservas-externas/{id}:
+    get:
+      operationId: ReservasExternasController_obtener
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaExternaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Detalle de una reserva de experiencia (solo el dueño)
+      tags:
+        - E-commerce · Experiencias
+  /reservas-externas/{id}/cancelar:
+    post:
+      description: Cancela primero en el proveedor (si no puede, no cambia nada) y devuelve el pago. Solo experiencias con cancelación gratuita.
+      operationId: ReservasExternasController_cancelar
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelarReservaExternaDto'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservaExternaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Servicio no disponible
+      security:
+        - bearer: []
+      summary: Cancelar una reserva de experiencia
+      tags:
+        - E-commerce · Experiencias
   /search:
     post:
       description: Vuelos directos. Se devuelven como máximo OFFER_MAX_COMBINATIONS ofertas (por defecto 5), las más baratas primero.
@@ -3818,7 +4546,7 @@ components:
         productosBuscador:
           example:
             - VUELOS
-            - ALOJAMIENTOS
+            - ATRACCIONES
           items:
             type: string
           type: array
@@ -3834,6 +4562,18 @@ components:
           type: number
       required:
         - versionEsperada
+      type: object
+    ActualizarProveedorDto:
+      properties:
+        activo:
+          description: 'Kill-switch: false apaga el proveedor (no se le llama, su catálogo se oculta y no se aceptan reservas).'
+          type: boolean
+        baseUrl:
+          type: string
+        equipo:
+          type: string
+        nombre:
+          type: string
       type: object
     AddBaggageRequestDto:
       properties:
@@ -4657,6 +5397,12 @@ components:
         - penaltyAmount
         - currency
       type: object
+    CancelarReservaExternaDto:
+      properties:
+        motivo:
+          example: Cambio de planes
+          type: string
+      type: object
     CancellationQuoteResponseDto:
       properties:
         currency:
@@ -4954,6 +5700,58 @@ components:
         - version
         - url
       type: object
+    ExperienciaViewDto:
+      properties:
+        cancelacionGratis:
+          type: boolean
+        categorias:
+          items:
+            type: string
+          type: array
+        descripcion:
+          type: string
+        duracion:
+          nullable: true
+          type: string
+        id:
+          format: uuid
+          type: string
+        imagenUrl:
+          nullable: true
+          type: string
+        nombre:
+          type: string
+        precio:
+          allOf:
+            - $ref: '#/components/schemas/MontoDto'
+          description: Precio por persona.
+        proveedor:
+          description: Quién la ofrece.
+          type: string
+        tipo:
+          type: string
+      required:
+        - id
+        - proveedor
+        - tipo
+        - nombre
+        - descripcion
+        - precio
+        - cancelacionGratis
+        - categorias
+      type: object
+    ExperienciasPaginaViewDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ExperienciaViewDto'
+          type: array
+        total:
+          type: number
+      required:
+        - items
+        - total
+      type: object
     ExtraBaggageDto:
       properties:
         itineraryId:
@@ -5201,7 +5999,7 @@ components:
           type: string
         patron:
           description: Expresión regular que debe cumplir el número completo.
-          example: ^d{13}$
+          example: ^\d{13}$
           type: string
         tipo:
           example: RUC
@@ -6079,6 +6877,48 @@ components:
         - status
         - code
       type: object
+    ProveedorViewDto:
+      properties:
+        activo:
+          type: boolean
+        baseUrl:
+          type: string
+        circuito:
+          description: 'Circuit breaker: ABIERTO = se rechazan las llamadas sin intentarlas.'
+          enum:
+            - CERRADO
+            - ABIERTO
+            - SEMIABIERTO
+          type: string
+        equipo:
+          type: string
+        id:
+          format: uuid
+          type: string
+        nombre:
+          type: string
+        productos:
+          description: Productos activos del catálogo sincronizado.
+          type: number
+        salud:
+          $ref: '#/components/schemas/SaludViewDto'
+        tipoServicio:
+          enum:
+            - ATRACCIONES
+            - AUTOS
+            - ALOJAMIENTOS
+          type: string
+      required:
+        - id
+        - nombre
+        - equipo
+        - baseUrl
+        - tipoServicio
+        - activo
+        - salud
+        - circuito
+        - productos
+      type: object
     RegistrarPasajerosDto:
       properties:
         contacto:
@@ -6090,6 +6930,30 @@ components:
       required:
         - pasajeros
         - contacto
+      type: object
+    RegistrarProveedorDto:
+      properties:
+        baseUrl:
+          description: 'Con o sin el prefijo /api/v2: se completa solo.'
+          example: https://atracciones.example.com/api/v2
+          type: string
+        equipo:
+          example: Equipo Atracciones
+          type: string
+        nombre:
+          example: Atracciones Quito
+          type: string
+        tipoServicio:
+          enum:
+            - ATRACCIONES
+            - AUTOS
+            - ALOJAMIENTOS
+          type: string
+      required:
+        - nombre
+        - equipo
+        - baseUrl
+        - tipoServicio
       type: object
     RegistroClienteDto:
       properties:
@@ -6142,6 +7006,91 @@ components:
         traspaso:
           $ref: '#/components/schemas/TraspasoDto'
       type: object
+    ReservaExternaViewDto:
+      properties:
+        cantidad:
+          type: number
+        creadaEn:
+          type: string
+        estado:
+          enum:
+            - PENDIENTE
+            - CONFIRMADA
+            - CANCELADA
+            - FALLIDA_COMPENSADA
+          type: string
+        experiencia:
+          type: object
+        factura:
+          nullable: true
+          type: string
+        fecha:
+          format: date
+          type: string
+        hora:
+          nullable: true
+          type: string
+        id:
+          format: uuid
+          type: string
+        motivo:
+          nullable: true
+          type: string
+        referenciaProveedor:
+          description: Identificador de la reserva en el sistema del proveedor.
+          nullable: true
+          type: string
+        total:
+          $ref: '#/components/schemas/MontoDto'
+      required:
+        - id
+        - estado
+        - experiencia
+        - fecha
+        - cantidad
+        - total
+        - creadaEn
+      type: object
+    ReservarExperienciaDto:
+      properties:
+        cantidad:
+          description: Personas.
+          maximum: 10
+          minimum: 1
+          type: number
+        correo:
+          format: email
+          type: string
+        facturacion:
+          $ref: '#/components/schemas/FacturacionDto'
+        fecha:
+          example: '2026-12-20'
+          format: date
+          type: string
+        hora:
+          example: '10:30'
+          type: string
+        medio:
+          $ref: '#/components/schemas/MedioCompraDto'
+        nombre:
+          type: string
+      required:
+        - fecha
+        - cantidad
+        - nombre
+        - correo
+        - facturacion
+        - medio
+      type: object
+    ReservasExternasPaginaViewDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ReservaExternaViewDto'
+          type: array
+      required:
+        - items
+      type: object
     RetractoDto:
       properties: {}
       type: object
@@ -6164,6 +7113,29 @@ components:
         - precioAnterior
         - precioNuevo
         - venceEn
+      type: object
+    SaludViewDto:
+      properties:
+        comprobadoEn:
+          nullable: true
+          type: string
+        detalle:
+          nullable: true
+          type: string
+        estado:
+          description: 'Semáforo: UP verde, DEGRADADO ámbar (responde lento), DOWN rojo.'
+          enum:
+            - UP
+            - DEGRADADO
+            - DOWN
+            - SIN_DATOS
+            - APAGADO
+          type: string
+        latenciaMs:
+          nullable: true
+          type: number
+      required:
+        - estado
       type: object
     SearchRequestDto:
       properties:
@@ -6217,6 +7189,23 @@ components:
       required:
         - itinerarioId
         - familia
+      type: object
+    SincronizacionViewDto:
+      properties:
+        actualizados:
+          type: number
+        desactivados:
+          description: 'Productos que el proveedor ya no lista: quedan ocultos.'
+          type: number
+        importados:
+          type: number
+        nuevos:
+          type: number
+      required:
+        - importados
+        - nuevos
+        - actualizados
+        - desactivados
       type: object
     TarifasViewDto:
       properties:

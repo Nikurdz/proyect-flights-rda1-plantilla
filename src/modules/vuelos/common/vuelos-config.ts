@@ -21,6 +21,19 @@ export interface VuelosConfig {
   dataEncryptionKey: Buffer;
   postSale: PostSaleConfig;
   webhooks: WebhooksConfig;
+  integraciones: IntegracionesConfig;
+}
+
+/** Calls to partner services (providers): bounded in time and size, and private hosts only for the course network and tests. */
+export interface IntegracionesConfig {
+  /** Allow http and private/loopback addresses for provider URLs. Refused in production (SSRF). */
+  allowPrivateHosts: boolean;
+  timeoutMs: number;
+  maxResponseBytes: number;
+  /** Most products one synchronisation imports. */
+  syncMaxItems: number;
+  /** How long an open circuit stays open before one trial call. */
+  breakerResetMs: number;
 }
 
 /**
@@ -112,6 +125,18 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
     allowPrivateHosts,
   };
 
+  const providersPrivate = config.get<string>('PROVEEDORES_ALLOW_PRIVATE_HOSTS', 'false') === 'true';
+  if (providersPrivate && config.get<string>('NODE_ENV') === 'production') {
+    errors.push('PROVEEDORES_ALLOW_PRIVATE_HOSTS=true is not allowed in production (it would open the server to SSRF through provider URLs)');
+  }
+  const integraciones: IntegracionesConfig = {
+    allowPrivateHosts: providersPrivate,
+    timeoutMs: parseNumber(config, 'PROVEEDORES_TIMEOUT_MS', '8000', errors, (v) => isPositiveInt(v) && v <= 60_000, 'an integer in 1..60000'),
+    maxResponseBytes: parseNumber(config, 'PROVEEDORES_MAX_RESPONSE_BYTES', '2000000', errors, (v) => isPositiveInt(v) && v <= 20_000_000, 'an integer in 1..20000000'),
+    syncMaxItems: parseNumber(config, 'PROVEEDORES_SYNC_MAX_ITEMS', '500', errors, (v) => isPositiveInt(v) && v <= 5000, 'an integer in 1..5000'),
+    breakerResetMs: parseNumber(config, 'PROVEEDORES_BREAKER_RESET_MS', '30000', errors, (v) => isPositiveInt(v) && v <= 3_600_000, 'an integer in 1..3600000'),
+  };
+
   const currency = config.get<string>('DEFAULT_CURRENCY', 'USD');
   if (!/^[A-Z]{3}$/.test(currency)) {
     errors.push(`DEFAULT_CURRENCY="${currency}" is invalid: expected a 3-letter ISO-4217 code`);
@@ -155,5 +180,6 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
     dataEncryptionKey,
     postSale,
     webhooks,
+    integraciones,
   };
 }

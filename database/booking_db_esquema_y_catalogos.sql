@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict boBC1VFs1FvcZOZPWu9Ufd4o11CNEzem0TSkvH5LVXiZ5LLj9cRTzgqnaXF7cY0
+\restrict jmzpu7aIwed1sbAJOmmrOP0ULa7Sc7FCLU9BlZf5CfcuOdEgtOWC5XeBANa4aba
 
 -- Dumped from database version 16.15 (Debian 16.15-1.pgdg13+2)
 -- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg13+2)
@@ -104,6 +104,37 @@ CREATE TABLE public.auditoria_transacciones (
 
 
 --
+-- Name: catalogo_externo; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.catalogo_externo (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    "proveedorId" uuid NOT NULL,
+    "externalId" character varying(100) NOT NULL,
+    tipo character varying(30) NOT NULL,
+    nombre character varying(200) NOT NULL,
+    descripcion text NOT NULL,
+    duracion character varying(60),
+    "precioMinor" bigint NOT NULL,
+    moneda character(3) NOT NULL,
+    "imagenUrl" character varying(500),
+    "cancelacionGratis" boolean DEFAULT false NOT NULL,
+    activo boolean DEFAULT true NOT NULL,
+    "sincronizadoEn" timestamp with time zone NOT NULL
+);
+
+
+--
+-- Name: catalogo_externo_categorias; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.catalogo_externo_categorias (
+    "catalogoId" uuid NOT NULL,
+    categoria character varying(60) NOT NULL
+);
+
+
+--
 -- Name: ecom_aceptaciones_condiciones; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -193,14 +224,16 @@ CREATE TABLE public.ecom_factura_detalles (
 CREATE TABLE public.ecom_facturas (
     "facturaId" uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     "numeroFactura" character varying(20) NOT NULL,
-    "ordenId" uuid NOT NULL,
+    "ordenId" uuid,
     "datosFacturacionId" uuid NOT NULL,
     moneda character(3) NOT NULL,
     "subtotalMinor" bigint NOT NULL,
     "ivaMinor" bigint NOT NULL,
     "totalMinor" bigint NOT NULL,
     estado character varying(10) DEFAULT 'EMITIDA'::character varying NOT NULL,
-    "emitidaEn" timestamp with time zone DEFAULT now() NOT NULL
+    "emitidaEn" timestamp with time zone DEFAULT now() NOT NULL,
+    "reservaExternaId" uuid,
+    CONSTRAINT "CHK_ecom_facturas_origen" CHECK ((("ordenId" IS NOT NULL) <> ("reservaExternaId" IS NOT NULL)))
 );
 
 
@@ -535,7 +568,7 @@ CREATE TABLE public.ecom_pago_antifraude_motivos (
 
 CREATE TABLE public.ecom_pagos (
     "pagoId" uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    "ofertaId" uuid NOT NULL,
+    "ofertaId" uuid,
     "ordenId" uuid,
     "ownerId" character varying(100) NOT NULL,
     mercado character varying(5) NOT NULL,
@@ -552,7 +585,9 @@ CREATE TABLE public.ecom_pagos (
     marca character varying(20) NOT NULL,
     ultimos4 character(4),
     "antifraudeVeredicto" character varying(10),
-    "antifraudePuntaje" integer
+    "antifraudePuntaje" integer,
+    "reservaExternaId" uuid,
+    CONSTRAINT "CHK_ecom_pagos_origen" CHECK ((("ofertaId" IS NOT NULL) <> ("reservaExternaId" IS NOT NULL)))
 );
 
 
@@ -614,6 +649,81 @@ CREATE SEQUENCE public.peticiones_http_id_seq
 --
 
 ALTER SEQUENCE public.peticiones_http_id_seq OWNED BY public.peticiones_http.id;
+
+
+--
+-- Name: proveedor_salud; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.proveedor_salud (
+    id bigint NOT NULL,
+    "proveedorId" uuid NOT NULL,
+    estado character varying(10) NOT NULL,
+    "latenciaMs" integer,
+    detalle character varying(200),
+    "comprobadoEn" timestamp(3) with time zone NOT NULL
+);
+
+
+--
+-- Name: proveedor_salud_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.proveedor_salud_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: proveedor_salud_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.proveedor_salud_id_seq OWNED BY public.proveedor_salud.id;
+
+
+--
+-- Name: proveedores; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.proveedores (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    nombre character varying(100) NOT NULL,
+    equipo character varying(100) NOT NULL,
+    "baseUrl" character varying(300) NOT NULL,
+    "tipoServicio" character varying(20) NOT NULL,
+    activo boolean DEFAULT true NOT NULL,
+    "creadoEn" timestamp with time zone DEFAULT now() NOT NULL,
+    "actualizadoEn" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: reservas_externas; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.reservas_externas (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    "ownerId" character varying(100) NOT NULL,
+    "clienteId" uuid,
+    "proveedorId" uuid NOT NULL,
+    "catalogoId" uuid NOT NULL,
+    "externalReservationId" uuid,
+    estado character varying(20) DEFAULT 'PENDIENTE'::character varying NOT NULL,
+    fecha date NOT NULL,
+    hora character varying(10),
+    cantidad integer NOT NULL,
+    "nombreCliente" text NOT NULL,
+    "correoCliente" text NOT NULL,
+    "totalMinor" bigint NOT NULL,
+    moneda character(3) NOT NULL,
+    "datosFacturacionId" uuid NOT NULL,
+    motivo character varying(300),
+    "creadaEn" timestamp with time zone DEFAULT now() NOT NULL,
+    "actualizadaEn" timestamp with time zone DEFAULT now() NOT NULL
+);
 
 
 --
@@ -989,6 +1099,13 @@ ALTER TABLE ONLY public.peticiones_http ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
+-- Name: proveedor_salud id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.proveedor_salud ALTER COLUMN id SET DEFAULT nextval('public.proveedor_salud_id_seq'::regclass);
+
+
+--
 -- Name: vuelos_migrations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1036,6 +1153,14 @@ ALTER TABLE ONLY public.vuelos_webhook_deliveries
 
 
 --
+-- Name: catalogo_externo PK_0e91ad1aabd0de68b0e97b16af7; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalogo_externo
+    ADD CONSTRAINT "PK_0e91ad1aabd0de68b0e97b16af7" PRIMARY KEY (id);
+
+
+--
 -- Name: ecom_ordenes PK_0ed6bc9b11179e735e0ce960c43; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1057,6 +1182,22 @@ ALTER TABLE ONLY public.vuelos_flight_offer_itineraries
 
 ALTER TABLE ONLY public.ecom_mercado_idiomas
     ADD CONSTRAINT "PK_19958fa58d6c79be017e7c4ee01" PRIMARY KEY ("mercadoCodigo", idioma);
+
+
+--
+-- Name: proveedores PK_1dcf121f19f362fb1b4c0a493a9; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.proveedores
+    ADD CONSTRAINT "PK_1dcf121f19f362fb1b4c0a493a9" PRIMARY KEY (id);
+
+
+--
+-- Name: proveedor_salud PK_248f7f58105f0a27d3ccc733e23; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.proveedor_salud
+    ADD CONSTRAINT "PK_248f7f58105f0a27d3ccc733e23" PRIMARY KEY (id);
 
 
 --
@@ -1089,6 +1230,14 @@ ALTER TABLE ONLY public.vuelos_migrations
 
 ALTER TABLE ONLY public.ecom_plantillas_notificacion
     ADD CONSTRAINT "PK_331dd4e1eee6421a15b6f32736d" PRIMARY KEY ("plantillaId");
+
+
+--
+-- Name: catalogo_externo_categorias PK_3471b5cfb9781393ac707565168; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalogo_externo_categorias
+    ADD CONSTRAINT "PK_3471b5cfb9781393ac707565168" PRIMARY KEY ("catalogoId", categoria);
 
 
 --
@@ -1273,6 +1422,14 @@ ALTER TABLE ONLY public.ecom_mercados
 
 ALTER TABLE ONLY public.ecom_mercado_regla_familias
     ADD CONSTRAINT "PK_9f7b395ee7eeab8a078bd3f1c73" PRIMARY KEY ("reglaId", familia);
+
+
+--
+-- Name: reservas_externas PK_a085570bcf485a4cb2aaeee0f3c; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservas_externas
+    ADD CONSTRAINT "PK_a085570bcf485a4cb2aaeee0f3c" PRIMARY KEY (id);
 
 
 --
@@ -1468,6 +1625,14 @@ ALTER TABLE ONLY public.vuelos_bookings
 
 
 --
+-- Name: ecom_facturas UQ_1c8b1048bb913701bf1cd0279a8; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ecom_facturas
+    ADD CONSTRAINT "UQ_1c8b1048bb913701bf1cd0279a8" UNIQUE ("reservaExternaId");
+
+
+--
 -- Name: ecom_facturas UQ_55123faa63aed0ae13ef2aac1b9; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1497,6 +1662,14 @@ ALTER TABLE ONLY public.vuelos_bookings
 
 ALTER TABLE ONLY public.auditoria_saga_pasos
     ADD CONSTRAINT "UQ_auditoria_saga_paso" UNIQUE ("sagaId", secuencia);
+
+
+--
+-- Name: catalogo_externo UQ_catalogo_externo_proveedor_id; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalogo_externo
+    ADD CONSTRAINT "UQ_catalogo_externo_proveedor_id" UNIQUE ("proveedorId", "externalId");
 
 
 --
@@ -1701,6 +1874,13 @@ CREATE INDEX "IDX_booking_cambio_booking" ON public.vuelos_booking_cambios USING
 
 
 --
+-- Name: IDX_catalogo_externo_tipo; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_catalogo_externo_tipo" ON public.catalogo_externo USING btree (tipo, activo);
+
+
+--
 -- Name: IDX_ecom_auditoria_entidad; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1855,6 +2035,27 @@ CREATE INDEX "IDX_peticiones_http_creada" ON public.peticiones_http USING btree 
 
 
 --
+-- Name: IDX_proveedor_salud_proveedor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_proveedor_salud_proveedor" ON public.proveedor_salud USING btree ("proveedorId", "comprobadoEn");
+
+
+--
+-- Name: IDX_reservas_externas_owner; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_reservas_externas_owner" ON public.reservas_externas USING btree ("ownerId", "creadaEn");
+
+
+--
+-- Name: IDX_reservas_externas_proveedor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "IDX_reservas_externas_proveedor" ON public.reservas_externas USING btree ("proveedorId", estado);
+
+
+--
 -- Name: IDX_vuelos_baggage_booking; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1995,6 +2196,13 @@ CREATE UNIQUE INDEX "UQ_ecom_ordenes_oferta_activa" ON public.ecom_ordenes USING
 
 
 --
+-- Name: UQ_proveedores_nombre; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX "UQ_proveedores_nombre" ON public.proveedores USING btree (nombre);
+
+
+--
 -- Name: ecom_oferta_pasajero_asientos FK_0015b7a7b6b69a8081343ec8248; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2059,6 +2267,14 @@ ALTER TABLE ONLY public.ecom_mercado_productos
 
 
 --
+-- Name: ecom_facturas FK_1c8b1048bb913701bf1cd0279a8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ecom_facturas
+    ADD CONSTRAINT "FK_1c8b1048bb913701bf1cd0279a8" FOREIGN KEY ("reservaExternaId") REFERENCES public.reservas_externas(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: vuelos_date_change_offers FK_1d5c0bb21dcd7f5314df2201477; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2096,6 +2312,14 @@ ALTER TABLE ONLY public.vuelos_cancellation_quotes
 
 ALTER TABLE ONLY public.ecom_cliente_roles
     ADD CONSTRAINT "FK_2a5c9f792d9737aa9dc49edae55" FOREIGN KEY ("clienteId") REFERENCES public.ecom_clientes("clienteId") ON DELETE CASCADE;
+
+
+--
+-- Name: reservas_externas FK_2aeccd97871812e7bd8106df16d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservas_externas
+    ADD CONSTRAINT "FK_2aeccd97871812e7bd8106df16d" FOREIGN KEY ("catalogoId") REFERENCES public.catalogo_externo(id) ON DELETE RESTRICT;
 
 
 --
@@ -2187,6 +2411,14 @@ ALTER TABLE ONLY public.ecom_oferta_trayecto_precios
 
 
 --
+-- Name: reservas_externas FK_5345810031dfa6374555e62cef9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservas_externas
+    ADD CONSTRAINT "FK_5345810031dfa6374555e62cef9" FOREIGN KEY ("clienteId") REFERENCES public.ecom_clientes("clienteId") ON DELETE RESTRICT;
+
+
+--
 -- Name: ecom_facturas FK_55123faa63aed0ae13ef2aac1b9; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2248,6 +2480,14 @@ ALTER TABLE ONLY public.ecom_mercado_identificaciones
 
 ALTER TABLE ONLY public.vuelos_passengers
     ADD CONSTRAINT "FK_62805bcc117e59825423ccdeae9" FOREIGN KEY ("bookingId") REFERENCES public.vuelos_bookings("bookingId") ON DELETE CASCADE;
+
+
+--
+-- Name: catalogo_externo_categorias FK_664fb28bd6da1b766079f18736e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalogo_externo_categorias
+    ADD CONSTRAINT "FK_664fb28bd6da1b766079f18736e" FOREIGN KEY ("catalogoId") REFERENCES public.catalogo_externo(id) ON DELETE CASCADE;
 
 
 --
@@ -2395,6 +2635,22 @@ ALTER TABLE ONLY public.vuelos
 
 
 --
+-- Name: catalogo_externo FK_a699077001e55c72072a4f4854c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalogo_externo
+    ADD CONSTRAINT "FK_a699077001e55c72072a4f4854c" FOREIGN KEY ("proveedorId") REFERENCES public.proveedores(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ecom_pagos FK_a6c26390f26d08746efff4f0f00; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ecom_pagos
+    ADD CONSTRAINT "FK_a6c26390f26d08746efff4f0f00" FOREIGN KEY ("reservaExternaId") REFERENCES public.reservas_externas(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: vuelos_check_ins FK_a730e64a13cbb260401c57c45b7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2424,6 +2680,14 @@ ALTER TABLE ONLY public.ecom_pagos
 
 ALTER TABLE ONLY public.ecom_ordenes
     ADD CONSTRAINT "FK_aee9c37ea11864b2ef95f247435" FOREIGN KEY (mercado) REFERENCES public.ecom_mercados(codigo) ON DELETE RESTRICT;
+
+
+--
+-- Name: proveedor_salud FK_b90e34d1c46b727f041013a3aaa; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.proveedor_salud
+    ADD CONSTRAINT "FK_b90e34d1c46b727f041013a3aaa" FOREIGN KEY ("proveedorId") REFERENCES public.proveedores(id) ON DELETE CASCADE;
 
 
 --
@@ -2472,6 +2736,14 @@ ALTER TABLE ONLY public.vuelos_seat_assignments
 
 ALTER TABLE ONLY public.vuelos_seat_assignments
     ADD CONSTRAINT "FK_d2cc868056d91ca3a5867a91098" FOREIGN KEY ("bookingId") REFERENCES public.vuelos_bookings("bookingId") ON DELETE CASCADE;
+
+
+--
+-- Name: reservas_externas FK_d51c36e5782d7991eed429ed1e9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservas_externas
+    ADD CONSTRAINT "FK_d51c36e5782d7991eed429ed1e9" FOREIGN KEY ("proveedorId") REFERENCES public.proveedores(id) ON DELETE RESTRICT;
 
 
 --
@@ -2555,6 +2827,14 @@ ALTER TABLE ONLY public.vuelos_seat_assignments
 
 
 --
+-- Name: reservas_externas FK_eed08c76e8df5e62d53e64dd10a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.reservas_externas
+    ADD CONSTRAINT "FK_eed08c76e8df5e62d53e64dd10a" FOREIGN KEY ("datosFacturacionId") REFERENCES public.ecom_datos_facturacion("datosFacturacionId") ON DELETE RESTRICT;
+
+
+--
 -- Name: ecom_ordenes FK_fc9cffaa121dd234afbca935287; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2582,13 +2862,13 @@ ALTER TABLE ONLY public.ecom_facturas
 -- PostgreSQL database dump complete
 --
 
-\unrestrict boBC1VFs1FvcZOZPWu9Ufd4o11CNEzem0TSkvH5LVXiZ5LLj9cRTzgqnaXF7cY0
+\unrestrict jmzpu7aIwed1sbAJOmmrOP0ULa7Sc7FCLU9BlZf5CfcuOdEgtOWC5XeBANa4aba
 
 --
 -- PostgreSQL database dump
 --
 
-\restrict 5jV7tYi4syo2UKmYeEmhUn0NR7Mfuj7DNldWG8d5wqFtsY4R4JEy5mDNEG2ljAy
+\restrict II10YaxbjhVTUxeb0bfohGhDOvnMlXjHocfC6c0mydcCnB1d4zFcOyv4BgtWw5Z
 
 -- Dumped from database version 16.15 (Debian 16.15-1.pgdg13+2)
 -- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg13+2)
@@ -2638,7 +2918,7 @@ INSERT INTO public.ecom_localidades VALUES ('MAD', 'Madrid', 'Adolfo Suárez Mad
 -- Data for Name: ecom_mercados; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.ecom_mercados VALUES ('ec', 'EC', 'Ecuador', 'es', 'USD', 1.000000, true, 1, '2026-10-25 23:37:41.679465+00', 'RAM Alliance (proyecto académico, sin venta real)');
+INSERT INTO public.ecom_mercados VALUES ('ec', 'EC', 'Ecuador', 'es', 'USD', 1.000000, true, 1, '2026-10-25 23:56:23.887214+00', 'RAM Alliance (proyecto académico, sin venta real)');
 
 
 --
@@ -2670,35 +2950,35 @@ INSERT INTO public.ecom_mercado_idiomas VALUES ('ec', 'es', 0);
 -- Data for Name: ecom_mercado_medios_pago; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.ecom_mercado_medios_pago VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 'ec', 'TARJETA', 0);
+INSERT INTO public.ecom_mercado_medios_pago VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 'ec', 'TARJETA', 0);
 
 
 --
 -- Data for Name: ecom_mercado_medio_cuotas; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.ecom_mercado_medio_cuotas VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 1);
-INSERT INTO public.ecom_mercado_medio_cuotas VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 3);
-INSERT INTO public.ecom_mercado_medio_cuotas VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 6);
-INSERT INTO public.ecom_mercado_medio_cuotas VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 12);
+INSERT INTO public.ecom_mercado_medio_cuotas VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 1);
+INSERT INTO public.ecom_mercado_medio_cuotas VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 3);
+INSERT INTO public.ecom_mercado_medio_cuotas VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 6);
+INSERT INTO public.ecom_mercado_medio_cuotas VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 12);
 
 
 --
 -- Data for Name: ecom_mercado_medio_marcas; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.ecom_mercado_medio_marcas VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 'VISA', 0);
-INSERT INTO public.ecom_mercado_medio_marcas VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 'MASTERCARD', 1);
-INSERT INTO public.ecom_mercado_medio_marcas VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 'AMEX', 2);
-INSERT INTO public.ecom_mercado_medio_marcas VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 'DINERS', 3);
+INSERT INTO public.ecom_mercado_medio_marcas VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 'VISA', 0);
+INSERT INTO public.ecom_mercado_medio_marcas VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 'MASTERCARD', 1);
+INSERT INTO public.ecom_mercado_medio_marcas VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 'AMEX', 2);
+INSERT INTO public.ecom_mercado_medio_marcas VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 'DINERS', 3);
 
 
 --
 -- Data for Name: ecom_mercado_medio_productos; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.ecom_mercado_medio_productos VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 'PASAJE');
-INSERT INTO public.ecom_mercado_medio_productos VALUES ('2e5d844c-867a-4a1c-8bec-14f4c3f3828f', 'ADICIONAL');
+INSERT INTO public.ecom_mercado_medio_productos VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 'PASAJE');
+INSERT INTO public.ecom_mercado_medio_productos VALUES ('08a8a4cb-cadd-40aa-b4d1-38fae1964e2e', 'ADICIONAL');
 
 
 --
@@ -2712,7 +2992,7 @@ INSERT INTO public.ecom_mercado_productos VALUES ('ec', 'VUELOS', 0);
 -- Data for Name: ecom_plantillas_notificacion; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.ecom_plantillas_notificacion VALUES ('d215a91c-fe77-4a75-aaef-fbe006b3a9fa', 'CONFIRMACION_COMPRA', NULL, 'es', 1, 'Confirmación de tu compra {{numeroOrden}}', 'Hola {{nombre}},
+INSERT INTO public.ecom_plantillas_notificacion VALUES ('b1763681-d2af-4d00-ac1d-a3b09821f002', 'CONFIRMACION_COMPRA', NULL, 'es', 1, 'Confirmación de tu compra {{numeroOrden}}', 'Hola {{nombre}},
 
 ¡Tu compra fue confirmada!
 
@@ -2731,7 +3011,7 @@ Puedes gestionar tu viaje con el número de orden o el código de reserva y el a
 
 {{razonSocial}}
 Términos y condiciones: {{urlTerminos}}', true);
-INSERT INTO public.ecom_plantillas_notificacion VALUES ('019f84bb-96de-4904-b7a5-cc6a357e27cc', 'CONFIRMACION_COMPRA', NULL, 'en', 1, 'Your purchase {{numeroOrden}} is confirmed', 'Hello {{nombre}},
+INSERT INTO public.ecom_plantillas_notificacion VALUES ('1dcbeada-16b1-4789-8b68-fb59a40faa2f', 'CONFIRMACION_COMPRA', NULL, 'en', 1, 'Your purchase {{numeroOrden}} is confirmed', 'Hello {{nombre}},
 
 Your purchase is confirmed!
 
@@ -2750,7 +3030,7 @@ Manage your trip with the order number or booking reference and the passenger su
 
 {{razonSocial}}
 Términos y condiciones: {{urlTerminos}}', true);
-INSERT INTO public.ecom_plantillas_notificacion VALUES ('34fc1451-4fda-476f-b140-7797c6fc6a7f', 'EMISION_FALLIDA', NULL, 'es', 1, 'No pudimos emitir tu orden {{numeroOrden}}', 'Hola,
+INSERT INTO public.ecom_plantillas_notificacion VALUES ('50e4a6ca-0d8d-4bd2-b383-f77683739cca', 'EMISION_FALLIDA', NULL, 'es', 1, 'No pudimos emitir tu orden {{numeroOrden}}', 'Hola,
 
 No pudimos emitir los billetes de tu orden {{numeroOrden}}. La autorización de tu pago fue liberada: no se te cobró.
 
@@ -2758,7 +3038,7 @@ Puedes volver a intentar la compra o elegir otro vuelo.
 
 {{razonSocial}}
 Términos y condiciones: {{urlTerminos}}', true);
-INSERT INTO public.ecom_plantillas_notificacion VALUES ('cf1d3cc8-c2e2-406c-baeb-67b14e433cf6', 'VERIFICACION_CORREO', NULL, 'es', 1, 'Confirma tu correo', 'Hola {{nombre}},
+INSERT INTO public.ecom_plantillas_notificacion VALUES ('2fa60f6f-7e45-4c73-aeec-638da2359f9f', 'VERIFICACION_CORREO', NULL, 'es', 1, 'Confirma tu correo', 'Hola {{nombre}},
 
 Confirma tu correo con este enlace (vale 24 horas):
 {{enlace}}
@@ -2767,7 +3047,7 @@ Si no creaste una cuenta, ignora este mensaje.
 
 {{razonSocial}}
 Términos y condiciones: {{urlTerminos}}', true);
-INSERT INTO public.ecom_plantillas_notificacion VALUES ('e1db698b-2ba8-430e-bc17-1824c52ebdc0', 'CUENTA_BLOQUEADA', NULL, 'es', 1, 'Bloqueamos temporalmente tu cuenta', 'Hola {{nombre}},
+INSERT INTO public.ecom_plantillas_notificacion VALUES ('7bedce6f-6cdd-4981-b87d-64d5c181a1a6', 'CUENTA_BLOQUEADA', NULL, 'es', 1, 'Bloqueamos temporalmente tu cuenta', 'Hola {{nombre}},
 
 Detectamos varios intentos fallidos de inicio de sesión y bloqueamos tu cuenta por {{minutos}} minutos. Si no fuiste tú, recupera tu acceso.
 
@@ -2815,18 +3095,19 @@ INSERT INTO public.vuelos_migrations VALUES (4, 1791430000000, 'ObservabilityInd
 INSERT INTO public.vuelos_migrations VALUES (5, 1791520000000, 'PostSaleAndWebhooks1791520000000');
 INSERT INTO public.vuelos_migrations VALUES (6, 1791610000000, 'HoldLockedTaxes1791610000000');
 INSERT INTO public.vuelos_migrations VALUES (7, 1792970623866, 'NormalizeSchema1792970623866');
+INSERT INTO public.vuelos_migrations VALUES (8, 1792972360174, 'AddProveedores1792972360174');
 
 
 --
 -- Name: vuelos_migrations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
 
-SELECT pg_catalog.setval('public.vuelos_migrations_id_seq', 7, true);
+SELECT pg_catalog.setval('public.vuelos_migrations_id_seq', 8, true);
 
 
 --
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 5jV7tYi4syo2UKmYeEmhUn0NR7Mfuj7DNldWG8d5wqFtsY4R4JEy5mDNEG2ljAy
+\unrestrict II10YaxbjhVTUxeb0bfohGhDOvnMlXjHocfC6c0mydcCnB1d4zFcOyv4BgtWw5Z
 

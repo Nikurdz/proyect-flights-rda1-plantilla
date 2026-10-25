@@ -4,6 +4,7 @@ import { EntityManager } from 'typeorm';
 import { PASSENGER_TYPES, PassengerType } from '../../common/pricing.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import type { Oferta } from '../ofertas/entities/oferta.entity';
+import type { ReservaExterna } from '../integracion/entities/reserva-externa.entity';
 import type { Orden } from '../ordenes/entities/orden.entity';
 import { FacturaDetalle } from './entities/factura-detalle.entity';
 import { Factura } from './entities/factura.entity';
@@ -63,6 +64,34 @@ export class FacturacionService {
         totalMinor,
         estado: 'EMITIDA',
         detalles,
+      }),
+    );
+  }
+
+  /**
+   * Invoice of a partner-product reservation, one line. The partner quotes a final price, so the platform's IVA
+   * (TAX_RATE) is taken out of it: subtotal = total / (1 + rate), IVA = the rest. Written in the same transaction
+   * that confirms the reservation.
+   */
+  async emitirExterna(manager: EntityManager, reserva: ReservaExterna, concepto: string, taxRate: number): Promise<Factura> {
+    const totalMinor = reserva.totalMinor;
+    const subtotalMinor = Math.round(totalMinor / (1 + taxRate));
+    const ivaMinor = totalMinor - subtotalMinor;
+    const precioUnitarioMinor = Math.round(subtotalMinor / reserva.cantidad);
+    return manager.save(
+      manager.create(Factura, {
+        numeroFactura: await this.nuevoNumero(manager),
+        ordenId: null,
+        reservaExternaId: reserva.id,
+        datosFacturacionId: reserva.datosFacturacionId,
+        moneda: reserva.moneda,
+        subtotalMinor,
+        ivaMinor,
+        totalMinor,
+        estado: 'EMITIDA',
+        detalles: [
+          manager.create(FacturaDetalle, { linea: 1, tipo: 'EXPERIENCIA', concepto: concepto.slice(0, 200), cantidad: reserva.cantidad, precioUnitarioMinor, ivaMinor, totalMinor }),
+        ],
       }),
     );
   }

@@ -57,7 +57,14 @@ export type ExtensionProblemCode =
   | 'ISSUANCE_FAILED_COMPENSATED'
   // Back office: account and flight management.
   | 'LAST_ADMIN'
-  | 'FLIGHT_IN_USE';
+  | 'FLIGHT_IN_USE'
+  // Partner integration (providers).
+  | 'PROVIDER_IN_USE'
+  | 'PROVIDER_DISABLED'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'PROVIDER_ACTION_NOT_SUPPORTED'
+  | 'EXTERNAL_RESERVATION_FAILED_COMPENSATED'
+  | 'EXTERNAL_RESERVATION_NOT_REFUNDABLE';
 
 // Nest's HttpStatus has no 423; used for temporarily locked accounts.
 export const HTTP_LOCKED = 423 as HttpStatus;

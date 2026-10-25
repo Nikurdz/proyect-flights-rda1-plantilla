@@ -93,6 +93,64 @@ export interface PostResult {
   snippet: string;
 }
 
+export interface HttpResult {
+  status: number;
+  /** The answer body, cut off at `maxResponseBytes`. */
+  body: string;
+}
+
+/**
+ * A JSON request (any method) to a target already validated by resolveSafeTarget, connecting to its resolved address.
+ * Same protections as `postJson`; it returns the (bounded) body so the caller can read the answer.
+ */
+export function requestJson(
+  target: SafeTarget,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  body: string | null,
+  headers: Record<string, string>,
+  options: { timeoutMs: number; maxResponseBytes: number },
+): Promise<HttpResult> {
+  const { url } = target;
+  const secure = url.protocol === 'https:';
+  const transport = secure ? https : http;
+
+  return new Promise((resolve, reject) => {
+    const request = transport.request(
+      {
+        host: target.address,
+        family: target.family,
+        port: url.port || (secure ? 443 : 80),
+        path: `${url.pathname}${url.search}`,
+        method,
+        headers: { Accept: 'application/json', ...headers, Host: url.host, ...(body !== null ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {}) },
+        ...(secure ? { servername: url.hostname } : {}),
+        timeout: options.timeoutMs,
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        let finished = false;
+        const done = () => {
+          if (finished) return;
+          finished = true;
+          resolve({ status: response.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') });
+        };
+        response.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size <= options.maxResponseBytes) chunks.push(chunk);
+          else response.destroy();
+        });
+        response.on('end', done);
+        response.on('close', done);
+        response.on('error', done);
+      },
+    );
+    request.on('timeout', () => request.destroy(new Error(`no answer within ${options.timeoutMs} ms`)));
+    request.on('error', reject);
+    request.end(body ?? undefined);
+  });
+}
+
 /** POSTs JSON to a target already validated by resolveSafeTarget, connecting to its resolved address. */
 export function postJson(
   target: SafeTarget,
