@@ -187,7 +187,7 @@ export class ActualizarMercadoDto {
   @IsOptional()
   activo?: boolean;
 
-  @ApiPropertyOptional({ example: ['VUELOS', 'ALOJAMIENTOS'] })
+  @ApiPropertyOptional({ example: ['VUELOS', 'ATRACCIONES'] })
   @IsArray()
   @ArrayNotEmpty()
   @ArrayUnique()

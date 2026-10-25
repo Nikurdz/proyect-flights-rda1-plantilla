@@ -1,6 +1,5 @@
-// ESLint (flat config) for the backend. Scope: the Vuelos module, the code all teams share (src/common, main.ts,
-// app.module.ts) and the repo scripts. The modules of the other teams (alojamientos, autos, atracciones) are theirs
-// and stay out; the frontend has its own config in frontend/.
+// ESLint (flat config) for the backend: the Vuelos module, src/common, main.ts, app.module.ts and the repo scripts.
+// The frontend has its own config in frontend/.
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -13,9 +12,6 @@ export default tseslint.config(
       'coverage/**',
       'frontend/**',
       'graphify-out/**',
-      'src/modules/alojamientos/**',
-      'src/modules/autos/**',
-      'src/modules/atracciones/**',
     ],
   },
   js.configs.recommended,

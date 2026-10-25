@@ -1,7 +1,7 @@
 {
-  "name": "booking-prototipo-plantilla",
+  "name": "ram-alliance-vuelos",
   "version": "1.0.0",
-  "description": "Plantilla base para el sistema de Booking Prototipo",
+  "description": "RAM Alliance: sistema de venta de vuelos (NestJS, TypeORM, PostgreSQL, React)",
   "author": "",
   "private": true,
   "license": "UNLICENSED",

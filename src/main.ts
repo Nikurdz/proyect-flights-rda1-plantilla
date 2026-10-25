@@ -47,8 +47,8 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('Booking Prototipo API')
-    .setDescription('API base para los dominios de Alojamientos, Autos, Atracciones y Vuelos.')
+    .setTitle('RAM Alliance · API de Vuelos')
+    .setDescription('Venta de vuelos: núcleo GDS (búsqueda, retención de cupos, reservas, billetes, posventa, check-in, webhooks), e-commerce y administración.')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

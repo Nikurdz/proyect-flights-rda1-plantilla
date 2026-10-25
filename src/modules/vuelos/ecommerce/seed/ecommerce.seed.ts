@@ -18,7 +18,7 @@ const MERCADOS: Partial<Mercado>[] = [
     idiomaPorDefecto: 'es',
     moneda: 'USD',
     tipoCambioDesdeUsd: 1,
-    productosBuscador: ['VUELOS', 'PAQUETES', 'ALOJAMIENTOS', 'CARROS', 'UPGRADE', 'ESIM', 'UNIVERSAL'],
+    productosBuscador: ['VUELOS'],
     // RF-PAY-002: Visa, Mastercard and Amex everywhere; Diners in EC, CO, BR, CL and AR.
     mediosPago: [{ tipo: 'TARJETA', marcas: ['VISA', 'MASTERCARD', 'AMEX', 'DINERS'], cuotasPermitidas: [1, 3, 6, 12], productos: ['PASAJE', 'ADICIONAL'] }],
     // A-13 (arrepentimiento in Ecuador) is an open legal question: nothing configured yet.
