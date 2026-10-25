@@ -1,5 +1,6 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
 import { encryptedJson } from '../../../common/cifrado';
+import { Mercado } from '../../mercados/entities/mercado.entity';
 
 export type TipoNotificacion = 'CONFIRMACION_COMPRA' | 'VERIFICACION_CORREO' | 'CUENTA_BLOQUEADA' | 'EMISION_FALLIDA';
 export type EstadoNotificacion = 'ENVIADO' | 'FALLIDO';
@@ -29,6 +30,10 @@ export class Notificacion {
 
   @Column({ type: 'varchar', length: 5, nullable: true })
   mercado: string | null;
+
+  @ManyToOne(() => Mercado, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'mercado' })
+  mercadoRef?: Relation<Mercado> | null;
 
   @Column({ type: 'varchar', length: 5 })
   idioma: string;

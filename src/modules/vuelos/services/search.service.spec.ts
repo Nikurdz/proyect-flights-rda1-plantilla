@@ -23,6 +23,7 @@ const config: VuelosConfig = {
 const vuelo = (id: string, precioBase: number): Vuelo => ({
   id,
   aerolinea: 'LATAM Airlines',
+  aerolineaRef: { codigo: 'LA', nombre: 'LATAM Airlines' },
   codigoAerolinea: 'LA',
   codigoVuelo: `LA${id}`,
   origenIATA: 'BOG',
@@ -55,6 +56,7 @@ describe('SearchService', () => {
   let families: FareFamily[];
 
   const queryBuilder = {
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
@@ -116,7 +118,7 @@ describe('SearchService', () => {
   it('keeps the cheapest bundles when the combination cap truncates the list', async () => {
     flights = [vuelo('1', 500), vuelo('2', 100), vuelo('3', 300)];
     // The return leg flies the next day, so every pairing is in order and only the cap trims the list.
-    const nextDay = (v: Vuelo): Vuelo => ({ ...v, fechaSalida: new Date(v.fechaSalida.getTime() + 86_400_000), fechaLlegada: new Date(v.fechaLlegada.getTime() + 86_400_000) });
+    const nextDay = (v: Vuelo): Vuelo => ({ ...v, aerolinea: v.aerolinea, fechaSalida: new Date(v.fechaSalida.getTime() + 86_400_000), fechaLlegada: new Date(v.fechaLlegada.getTime() + 86_400_000) });
     queryBuilder.getMany.mockResolvedValueOnce(flights).mockResolvedValueOnce(flights.map(nextDay));
     const result = await service.search(request({}, 2));
 

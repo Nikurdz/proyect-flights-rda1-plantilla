@@ -2,16 +2,19 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VuelosCoreModule } from '../../vuelos-core.module';
 import { MercadosModule } from '../mercados/mercados.module';
+import { ObservabilidadModule } from '../observabilidad/observabilidad.module';
 import { OfertasModule } from '../ofertas/ofertas.module';
 import { PagosModule } from '../pagos/pagos.module';
 import { ComprasService } from './compras.service';
+import { FacturacionModule } from '../facturacion/facturacion.module';
 import { Orden } from './entities/orden.entity';
+import { OrdenHistorial } from './entities/orden-historial.entity';
 import { ClienteOrdenesController, ComprasController, OrdenesController, VerificacionBilletesController } from './ordenes.controller';
 import { OrdenesService } from './ordenes.service';
 import { ReconciliacionService } from './reconciliacion.service';
 
 @Module({
-  imports: [VuelosCoreModule, MercadosModule, OfertasModule, PagosModule, TypeOrmModule.forFeature([Orden])],
+  imports: [VuelosCoreModule, MercadosModule, OfertasModule, PagosModule, FacturacionModule, ObservabilidadModule, TypeOrmModule.forFeature([Orden, OrdenHistorial])],
   controllers: [ComprasController, OrdenesController, ClienteOrdenesController, VerificacionBilletesController],
   providers: [OrdenesService, ComprasService, ReconciliacionService],
   exports: [OrdenesService, TypeOrmModule],

@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { Booking } from '../entities/booking.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
+import { findHold } from '../common/hold-loader';
 import { Vuelo } from '../entities/vuelo.entity';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { OffersService } from '../services/offers.service';
@@ -13,7 +14,12 @@ import { MercadosService } from '../ecommerce/mercados/mercados.service';
 import { Localidad } from '../ecommerce/catalogo/entities/localidad.entity';
 import { Cliente } from '../ecommerce/identidad/entities/cliente.entity';
 import { Mercado } from '../ecommerce/mercados/entities/mercado.entity';
+import { cargarMercado, escribirConfiguracion } from '../ecommerce/mercados/mercado-loader';
 import { Oferta } from '../ecommerce/ofertas/entities/oferta.entity';
+import { Factura } from '../ecommerce/facturacion/entities/factura.entity';
+import { AuditoriaSaga, AuditoriaTransaccion, PeticionHttp } from '../ecommerce/observabilidad/entities/auditoria.entity';
+import { PeticionesHttpService } from '../ecommerce/observabilidad/peticiones-http.service';
+import { OfertaPasajero } from '../ecommerce/ofertas/entities/oferta-pasajero.entity';
 import { Orden } from '../ecommerce/ordenes/entities/orden.entity';
 import { Pago } from '../ecommerce/pagos/entities/pago.entity';
 import { PASARELA_PAGO, PasarelaPago } from '../ecommerce/pagos/ports/pagos.ports';
@@ -145,7 +151,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
   }
 
   const pagos = (ofertaId: string) => ds.getRepository(Pago).find({ where: { ofertaId }, order: { creadoEn: 'ASC' } });
-  const ordenes = (ofertaId: string) => ds.getRepository(Orden).find({ where: { ofertaId }, order: { creadaEn: 'ASC' } });
+  const ordenes = (ofertaId: string) => ds.getRepository(Orden).find({ where: { ofertaId }, relations: { historial: true }, order: { creadaEn: 'ASC' } });
   const ofertaRow = (ofertaId: string) => ds.getRepository(Oferta).findOneByOrFail({ ofertaId });
 
   beforeAll(async () => {
@@ -393,9 +399,9 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(res.body.segundosRestantes).toBeGreaterThan(800);
 
       const row = await ofertaRow(res.body.ofertaId);
-      const hold = await ds.getRepository(FlightHold).findOneByOrFail({ holdId: row.holdId });
-      expect(hold.status).toBe('HELD');
-      expect(hold.inventory.reduce((s, i) => s + i.seats, 0)).toBe(4); // 2 seats x 2 legs (the infant-less party of 2)
+      const hold = await findHold(ds.manager, row.holdId);
+      expect(hold!.status).toBe('HELD');
+      expect(hold!.inventory.reduce((s, i) => s + i.seats, 0)).toBe(4); // 2 seats x 2 legs (the infant-less party of 2)
 
       const seatsAfter = (await ds.getRepository(Vuelo).findOneByOrFail({ id: ida.itinerarioId })).asientosDisponibles;
       const replay = await api().post('/api/v1/ofertas').set(bearer(token)).set('Idempotency-Key', key).send({
@@ -661,7 +667,8 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_review', marca: 'VISA' } }).expect(402);
       const rows = await pagos(ofertaId);
       expect(rows.map((p) => p.estado)).toEqual(['RECHAZADO_ANTIFRAUDE', 'RECHAZADO_ANTIFRAUDE']);
-      expect(rows[0].antifraude).toMatchObject({ veredicto: 'RECHAZAR', motivos: ['blocked_token'] });
+      expect(rows[0]).toMatchObject({ antifraudeVeredicto: 'RECHAZAR' });
+      expect((await ds.query(`SELECT "motivo" FROM ${q('ecom_pago_antifraude_motivos')} WHERE "pagoId" = $1`, [rows[0].pagoId])).map((m: { motivo: string }) => m.motivo)).toEqual(['blocked_token']);
 
       const brand = await comprar(token, ofertaId, { medio: { tipo: 'TARJETA', token: 'tok_visa_ok', marca: 'HIPERCARD' } }).expect(422);
       expect(brand.body.code).toBe('PAYMENT_METHOD_NOT_ALLOWED');
@@ -692,7 +699,10 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       const [failed] = await ordenes(ofertaId);
       expect(failed).toMatchObject({ estado: 'FALLIDA_COMPENSADA', pnr: null });
       expect(res.body.detail).toContain(failed.numeroOrden);
-      expect(failed.historial.map((h) => h.estado)).toEqual(['PENDIENTE_PAGO', 'PAGADA', 'FALLIDA_COMPENSADA']);
+      const [sagaFallida] = await ds.getRepository(AuditoriaSaga).find({ where: { referencia: ofertaId }, relations: { pasos: true } });
+      expect(sagaFallida).toMatchObject({ tipo: 'COMPRA', estado: 'COMPENSADA', error: 'unexpected_error' });
+      expect(sagaFallida.pasos.map((p) => `${p.nombre}:${p.estado}`)).toEqual(expect.arrayContaining(['EMITIR_ORDEN:ERROR', 'ANULAR_PAGO:COMPENSADO', 'REGISTRAR_ORDEN_FALLIDA:OK']));
+      expect([...failed.historial].sort((a, b) => a.secuencia - b.secuencia).map((h) => h.estado)).toEqual(['PENDIENTE_PAGO', 'PAGADA', 'FALLIDA_COMPENSADA']);
       expect((await pagos(ofertaId)).map((p) => p.estado)).toEqual(['ANULADO']); // the authorisation was released
       expect(await ds.getRepository(Booking).count({ where: { ownerId: (await ofertaRow(ofertaId)).ownerId } })).toBe(0); // atomic: nothing leaked
       expect((await ofertaRow(ofertaId)).estado).toBe('ABIERTA'); // the hold survived, so the customer can try again
@@ -1355,18 +1365,40 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       const order = (await comprar(token, ofertaId).expect(201)).body;
 
       const rows = {
-        oferta: (await ds.query(`SELECT "datosPasajeros", "facturacion" FROM ${q('ecom_ofertas')} WHERE "ofertaId" = $1`, [ofertaId]))[0],
-        orden: (await ds.query(`SELECT "pasajeros", "contacto", "facturacion" FROM ${q('ecom_ordenes')} WHERE "ordenId" = $1`, [order.ordenId]))[0],
+        pasajeros: await ds.query(`SELECT "nombres", "apellidos", "fechaNacimiento", "documentoNumero" FROM ${q('ecom_oferta_pasajeros')} WHERE "ofertaId" = $1`, [ofertaId]),
+        oferta: (await ds.query(`SELECT "contactoCorreo", "contactoTelefono" FROM ${q('ecom_ofertas')} WHERE "ofertaId" = $1`, [ofertaId]))[0],
+        facturacion: await ds.query(`SELECT "numeroIdentificacion", "razonSocial", "direccion" FROM ${q('ecom_datos_facturacion')}`),
+        orden: (await ds.query(`SELECT "contactoCorreo", "contactoTelefono" FROM ${q('ecom_ordenes')} WHERE "ordenId" = $1`, [order.ordenId]))[0],
         mail: (await ds.query(`SELECT "cuerpo" FROM ${q('ecom_notificaciones')} WHERE "referencia" = $1`, [order.numeroOrden]))[0],
       };
       const raw = JSON.stringify(rows);
       for (const secret of ['PENA', 'MARIA', 'ABA1', 'comprador@example.com', '1712345678', order.pasajeros[0].eTicket]) {
         expect(raw).not.toContain(secret);
       }
-      expect(rows.orden.pasajeros).toMatch(/^v1:/);
+      expect(rows.pasajeros[0].nombres).toMatch(/^v1:/);
+      expect(rows.orden.contactoCorreo).toMatch(/^v1:/);
       // ...and the application still reads it back.
       expect((await api().get(`/api/v1/ordenes/${order.numeroOrden}`).set(bearer(token)).expect(200)).body.contacto.correo).toBe('comprador@example.com');
-      expect((await ds.getRepository(Orden).findOneByOrFail({ ordenId: order.ordenId })).pasajeros[0].nombres).toBe('MARIA JOSE');
+      expect((await ds.getRepository(OfertaPasajero).findOneByOrFail({ ofertaId })).nombres).toBe('MARIA JOSE');
+
+      // The order is issued together with its invoice: subtotal + IVA is exactly what was charged, one line per leg and passenger type.
+      const factura = await ds.getRepository(Factura).findOneOrFail({ where: { ordenId: order.ordenId }, relations: { detalles: true } });
+      const [pago] = await pagos(ofertaId);
+      expect(factura).toMatchObject({ estado: 'EMITIDA', moneda: 'USD', totalMinor: pago.montoMinor });
+      expect(factura.numeroFactura).toMatch(/^FAC-[A-Z0-9]{10}$/);
+      expect(factura.subtotalMinor + factura.ivaMinor).toBe(factura.totalMinor);
+      expect(factura.ivaMinor).toBeGreaterThan(0);
+      expect(factura.detalles.reduce((sum, d) => sum + d.totalMinor, 0)).toBe(factura.totalMinor);
+      expect(factura.detalles.map((d) => d.linea).sort()).toEqual(factura.detalles.map((_, i) => i + 1));
+
+      // The audit trail: the issued order is a recorded event (identifiers only, no e-mail) and the purchase saga ran to the end.
+      const eventos = await ds.getRepository(AuditoriaTransaccion).find({ where: { agregadoId: order.ordenId } });
+      expect(eventos.map((e) => e.tipo)).toContain('OrdenEmitida');
+      expect(JSON.stringify(eventos)).not.toContain('comprador@example.com');
+      expect(eventos.find((e) => e.tipo === 'OrdenEmitida')!.resumen).toContain(order.numeroOrden);
+      const [saga] = await ds.getRepository(AuditoriaSaga).find({ where: { referencia: ofertaId }, relations: { pasos: true } });
+      expect(saga).toMatchObject({ tipo: 'COMPRA', estado: 'COMPLETADA', propietarioId: expect.any(String) });
+      expect([...saga.pasos].sort((a, b) => a.secuencia - b.secuencia).map((p) => p.nombre)).toEqual(['REVALIDAR_PRECIO', 'AUTORIZAR_PAGO', 'EMITIR_ORDEN', 'CAPTURAR_PAGO', 'ANUNCIAR_EMISION']);
     });
 
     it('rate-limits the public order lookup per client (RNF-19)', async () => {
@@ -1380,6 +1412,21 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     });
   });
 
+  it('keeps a bounded sample of the HTTP traffic and purges what is past the retention', async () => {
+    const log = app.get(PeticionesHttpService);
+    await api().get('/api/v1/mercados/ec').expect(200);
+    await api().get('/api/v1/health').catch(() => undefined);
+    expect(await log.vaciar()).toBeGreaterThan(0);
+    const rows = await ds.getRepository(PeticionHttp).find({ order: { id: 'DESC' }, take: 20 });
+    expect(rows.some((r) => r.metodo === 'GET' && r.ruta.endsWith('/mercados/:codigo') && r.estado === 200)).toBe(true);
+    expect(rows.every((r) => !r.ruta.includes('/ec'))).toBe(true); // the route pattern, never the raw path
+    expect(rows.every((r) => !r.ruta.endsWith('/health'))).toBe(true);
+
+    await ds.getRepository(PeticionHttp).insert({ metodo: 'GET', ruta: '/viejo', estado: 200, duracionMs: 1, correlationId: 'purge-me-0001', creadaEn: new Date(Date.now() - 40 * 86_400_000) });
+    expect(await log.purgar()).toBe(1);
+    expect(await ds.getRepository(PeticionHttp).count({ where: { ruta: '/viejo' } })).toBe(0);
+  });
+
   it('seeded reference data is complete and the seed is idempotent', async () => {
     const before = await ds.getRepository(Localidad).count();
     const second = await seedEcommerce(ds, ADMIN);
@@ -1389,17 +1436,17 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
   });
 
   it('replaces the placeholder legal data of an old seed, but never an admin edit', async () => {
-    const repo = ds.getRepository(Mercado);
-    const current = await repo.findOneByOrFail({ codigo: 'ec' });
+    const leer = async () => (await cargarMercado(ds.manager, 'ec'))!;
+    const current = await leer();
     const old = { ...current.textosLegales, razonSocial: 'Booking Hub Vuelos Ecuador S.A. (dato de ejemplo)', terminos: { version: '2026-10', url: 'https://www.example.com/ec/es/terminos' } };
 
-    await repo.update({ codigo: 'ec' }, { textosLegales: old });
+    await ds.transaction((manager) => escribirConfiguracion(manager, 'ec', { textosLegales: old }));
     await seedEcommerce(ds, ADMIN);
-    expect((await repo.findOneByOrFail({ codigo: 'ec' })).textosLegales.terminos.url).toBe('/terminos');
+    expect((await leer()).textosLegales.terminos.url).toBe('/terminos');
 
     const edited = { ...current.textosLegales, razonSocial: 'Empresa real S.A.' };
-    await repo.update({ codigo: 'ec' }, { textosLegales: edited });
+    await ds.transaction((manager) => escribirConfiguracion(manager, 'ec', { textosLegales: edited }));
     await seedEcommerce(ds, ADMIN);
-    expect((await repo.findOneByOrFail({ codigo: 'ec' })).textosLegales.razonSocial).toBe('Empresa real S.A.');
+    expect((await leer()).textosLegales.razonSocial).toBe('Empresa real S.A.');
   });
 });

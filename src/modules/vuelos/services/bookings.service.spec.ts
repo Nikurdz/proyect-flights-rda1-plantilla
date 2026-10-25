@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { Booking } from '../entities/booking.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
+import { FlightHoldItem } from '../entities/flight-hold-item.entity';
 import { Ticket } from '../entities/ticket.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import type { BookingRequestDto, PassengerItemDto } from '../dto/booking.dto';
@@ -30,7 +31,8 @@ const adult: PassengerItemDto = {
 
 describe('BookingsService', () => {
   let service: BookingsService;
-  let hold: Partial<FlightHold>;
+  let hold: FlightHold;
+  const party = (adults: number, infants: number) => Object.assign(hold, { adults, youths: 0, children: 0, infants });
   let vuelos: Partial<Vuelo>[];
   let paymentAlreadyUsed: boolean;
   let consumeAffected: number;
@@ -38,7 +40,7 @@ describe('BookingsService', () => {
 
   const manager = {
     findOne: jest.fn(async (entity: unknown) => (entity === FlightHold ? hold : null)),
-    find: jest.fn(async (entity: unknown) => (entity === Vuelo ? vuelos : [])),
+    find: jest.fn(async (entity: unknown) => (entity === Vuelo ? vuelos : entity === FlightHoldItem ? hold.items : [])),
     exists: jest.fn(async (entity: unknown, options: { where: Record<string, unknown> }) =>
       entity === Booking && 'paymentReference' in options.where ? paymentAlreadyUsed : false,
     ),
@@ -83,17 +85,19 @@ describe('BookingsService', () => {
     saved = { bookings: [], seats: [] };
     paymentAlreadyUsed = false;
     consumeAffected = 1;
-    hold = {
+    hold = Object.assign(new FlightHold(), {
       holdId: HOLD_ID,
       ownerId: 'owner-1',
       status: 'HELD',
-      lockedPrice: '345.00',
+      lockedPriceMinor: 34500,
       currency: 'USD',
       expiresAt: new Date(Date.now() + 60_000),
-      inventory: [{ vueloId: VUELO_ID, seats: 1 }],
-      itinerarySelections: [{ itineraryId: 'itinerary-1', cabinClass: 'ECONOMY', fareBrand: 'LIGHT' }],
-      passengersBreakdown: { adults: 1, youths: 0, children: 0, infants: 0 },
-    };
+      adults: 1,
+      youths: 0,
+      children: 0,
+      infants: 0,
+      items: [Object.assign(new FlightHoldItem(), { holdId: HOLD_ID, orden: 0, vueloId: VUELO_ID, seats: 1, itineraryId: 'itinerary-1', cabinClass: 'ECONOMY', fareBrand: 'LIGHT' })],
+    });
     vuelos = [
       {
         id: VUELO_ID,
@@ -130,7 +134,7 @@ describe('BookingsService', () => {
     expect(result.tickets).toHaveLength(1);
     expect(result.tickets![0].eTicketNumber).toMatch(/^\d{13}$/);
     expect(manager.update).toHaveBeenCalledWith(FlightHold, { holdId: HOLD_ID, status: 'HELD' }, { status: 'CONSUMED' });
-    expect(saved.bookings[0]).toMatchObject({ ownerId: 'owner-1', origin: 'BOG', destination: 'SCL' });
+    expect(saved.bookings[0]).toMatchObject({ ownerId: 'owner-1', totalMinor: 34500 });
     expect(events.publish).toHaveBeenCalledWith('booking.confirmed', 'booking-1', expect.objectContaining({ holdId: HOLD_ID }));
   });
 
@@ -151,7 +155,7 @@ describe('BookingsService', () => {
     await book({ passengers: [withSeat] });
     expect(saved.seats).toHaveLength(1);
 
-    hold.passengersBreakdown = { adults: 1, youths: 0, children: 0, infants: 1 };
+    party(1, 1);
     const infant = {
       ...adult,
       passengerId: 'p2',
@@ -196,14 +200,14 @@ describe('BookingsService', () => {
   });
 
   it('rejects duplicate passengers, infants without an adult, and unknown seats', async () => {
-    hold.passengersBreakdown = { adults: 2, youths: 0, children: 0, infants: 0 };
+    party(2, 0);
     await expect(book({ passengers: [adult, { ...adult, passengerId: 'p2' }] })).rejects.toMatchObject({ status: 422 });
 
-    hold.passengersBreakdown = { adults: 1, youths: 0, children: 0, infants: 1 };
+    party(1, 1);
     const orphan = { ...adult, passengerId: 'p2', passengerType: 'INFANT', firstName: 'Bebe', documentNumber: 'X7654321', birthDate: '2026-06-01' };
     await expect(book({ passengers: [adult, orphan] })).rejects.toMatchObject({ status: 422 });
 
-    hold.passengersBreakdown = { adults: 1, youths: 0, children: 0, infants: 0 };
+    party(1, 0);
     await expect(book({ passengers: [{ ...adult, assignedSeats: [{ segmentId: VUELO_ID, seatNumber: '99Z' }] }] })).rejects.toMatchObject({ status: 422 });
   });
 

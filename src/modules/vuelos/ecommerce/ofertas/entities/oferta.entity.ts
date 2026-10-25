@@ -1,6 +1,14 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn, ValueTransformer } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { bigintNumber } from '../../../common/bigint.transformer';
 import { encryptedJson } from '../../../common/cifrado';
+import { toIso } from '../../../common/date.util';
 import type { PassengerType } from '../../../common/pricing.util';
+import { FlightHold } from '../../../entities/flight-hold.entity';
+import { DatosFacturacion } from '../../facturacion/entities/datos-facturacion.entity';
+import { Mercado } from '../../mercados/entities/mercado.entity';
+import { AceptacionCondiciones } from './aceptacion-condiciones.entity';
+import { OfertaPasajero } from './oferta-pasajero.entity';
+import { OfertaTrayecto } from './oferta-trayecto.entity';
 
 export type EstadoOferta = 'ABIERTA' | 'EN_REVISION_PRECIO' | 'EN_PAGO' | 'PAGADA' | 'VENCIDA' | 'CANCELADA';
 
@@ -17,26 +25,18 @@ export interface PrecioUnitarioSnapshot {
   totalMinor: number;
 }
 
-/** One quoted leg of the offer: what was chosen, as it was priced when the offer was built. */
-export interface TrayectoOferta {
-  /** Vuelo.id — the stable itinerary id the portal selected. */
+/** A leg as it was quoted: the shape the pricing code produces (it becomes an `OfertaTrayecto` row plus its prices). */
+export interface TrayectoCotizado {
+  /** Vuelo.id: the stable itinerary id the portal selected. */
   itinerarioId: string;
   /** The itineraryId the flight core issued for the same flight inside its own offer/hold. */
   gdsItinerarioId: string;
   familia: string;
-  numeroVuelo: string;
-  operadorCodigo: string;
-  operadorNombre: string;
-  origen: string;
-  destino: string;
-  salida: string;
-  llegada: string;
-  duracionMinutos: number;
   unitarios: Partial<Record<PassengerType, PrecioUnitarioSnapshot>>;
   totalMinor: number;
 }
 
-/** A seat the passenger picked on one leg; `trayectoId` is `TrayectoOferta.itinerarioId` (the Vuelo.id). */
+/** A seat the passenger picked on one leg; `trayectoId` is the leg's Vuelo.id. */
 export interface AsientoElegido {
   trayectoId: string;
   asiento: string;
@@ -81,12 +81,6 @@ export interface CondicionesAceptadas {
   aceptadoEn: string;
 }
 
-// bigint columns come back as strings from the driver; amounts here are well inside Number's safe range.
-const bigintNumber: ValueTransformer = {
-  to: (value: number | null | undefined) => value,
-  from: (value: string | null | undefined) => (value === null || value === undefined ? value : Number(value)),
-};
-
 @Entity('ecom_ofertas')
 @Index('IDX_ecom_ofertas_owner', ['ownerId', 'creadaEn'])
 @Index('IDX_ecom_ofertas_hold', ['holdId'])
@@ -98,22 +92,33 @@ export class Oferta {
   @Column({ type: 'varchar', length: 5 })
   mercado: string;
 
+  @ManyToOne(() => Mercado, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'mercado' })
+  mercadoRef?: Mercado;
+
   // RN-01: fixed when the offer is built and used for the quote and the charge alike.
   @Column({ type: 'char', length: 3 })
   moneda: string;
 
-  // Verified `sub` of the visitor (customer or guest) that built the offer.
+  // Verified `sub` of the visitor (customer or guest) that built the offer. A guest is not a row: no foreign key.
   @Column({ type: 'varchar', length: 100 })
   ownerId: string;
 
   @Column({ type: 'varchar', length: 20, default: 'ABIERTA' })
   estado: EstadoOferta;
 
-  @Column({ type: 'jsonb' })
-  trayectos: TrayectoOferta[];
+  // The party that was priced and held.
+  @Column({ type: 'int' })
+  adultos: number;
 
-  @Column({ type: 'jsonb' })
-  composicion: Composicion;
+  @Column({ type: 'int', default: 0 })
+  jovenes: number;
+
+  @Column({ type: 'int', default: 0 })
+  ninos: number;
+
+  @Column({ type: 'int', default: 0 })
+  infantes: number;
 
   @Column({ type: 'bigint', transformer: bigintNumber })
   totalMinor: number;
@@ -129,18 +134,36 @@ export class Oferta {
   @Column({ type: 'uuid' })
   holdId: string;
 
+  @ManyToOne(() => FlightHold, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'holdId' })
+  hold?: FlightHold;
+
   @Column({ type: 'timestamptz' })
   venceEn: Date;
 
-  // Personal data is encrypted at rest (RNF-18); see common/cifrado.ts.
-  @Column({ type: 'text', nullable: true, transformer: encryptedJson<DatosPasajeros>() })
-  datosPasajeros: DatosPasajeros | null;
+  // Contact data is personal data: encrypted at rest (RNF-18).
+  @Column({ type: 'text', nullable: true, transformer: encryptedJson<string>() })
+  contactoCorreo: string | null;
 
-  @Column({ type: 'text', nullable: true, transformer: encryptedJson<Facturacion>() })
-  facturacion: Facturacion | null;
+  @Column({ type: 'text', nullable: true, transformer: encryptedJson<string>() })
+  contactoTelefono: string | null;
 
-  @Column({ type: 'jsonb', nullable: true })
-  condicionesAceptadas: CondicionesAceptadas | null;
+  // Billing identity, stored once (see DatosFacturacion); the order points at the same row.
+  @Column({ type: 'uuid', nullable: true })
+  datosFacturacionId: string | null;
+
+  @ManyToOne(() => DatosFacturacion, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'datosFacturacionId' })
+  datosFacturacion?: DatosFacturacion | null;
+
+  @OneToOne(() => AceptacionCondiciones, (a) => a.oferta, { cascade: true })
+  aceptacion?: AceptacionCondiciones | null;
+
+  @OneToMany(() => OfertaTrayecto, (trayecto) => trayecto.oferta, { cascade: true })
+  trayectos: OfertaTrayecto[];
+
+  @OneToMany(() => OfertaPasajero, (pasajero) => pasajero.oferta, { cascade: true })
+  pasajeros?: OfertaPasajero[];
 
   @Column({ type: 'timestamptz', nullable: true })
   revalidadaEn: Date | null;
@@ -154,4 +177,45 @@ export class Oferta {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   actualizadaEn: Date;
+
+  // ---- read model: the shapes the services already work with, built from the rows (use cargarOferta) ----
+
+  get composicion(): Composicion {
+    return { adultos: this.adultos, jovenes: this.jovenes, ninos: this.ninos, infantes: this.infantes };
+  }
+
+  /** The passengers and the contact the buyer entered, or null while there are none. */
+  get datosPasajeros(): DatosPasajeros | null {
+    if (!this.pasajeros || this.pasajeros.length === 0 || this.contactoCorreo === null || this.contactoTelefono === null) return null;
+    const ordenados = [...this.pasajeros].sort((a, b) => a.orden - b.orden);
+    return {
+      pasajeros: ordenados.map((p) => ({
+        id: p.idCliente,
+        tipo: p.tipo,
+        ...(p.asociadoA ? { asociadoA: p.asociadoA } : {}),
+        nombres: p.nombres,
+        apellidos: p.apellidos,
+        fechaNacimiento: p.fechaNacimiento,
+        genero: p.genero,
+        nacionalidad: p.nacionalidad,
+        documento: { tipo: p.documentoTipo, numero: p.documentoNumero, ...(p.documentoVencimiento ? { vencimiento: p.documentoVencimiento } : {}) },
+        ...(p.numeroSocio ? { numeroSocio: p.numeroSocio } : {}),
+        ...(p.necesidades?.length ? { necesidades: p.necesidades.map((n) => n.necesidad) } : {}),
+        ...(p.asientos?.length ? { asientos: p.asientos.map((a) => ({ trayectoId: a.vueloId, asiento: a.asiento })) } : {}),
+      })),
+      contacto: { correo: this.contactoCorreo, telefono: this.contactoTelefono },
+    };
+  }
+
+  get facturacion(): Facturacion | null {
+    const d = this.datosFacturacion;
+    return d
+      ? { tipoIdentificacion: d.tipoIdentificacion, numeroIdentificacion: d.numeroIdentificacion, razonSocial: d.razonSocial, direccion: d.direccion, pais: d.pais }
+      : null;
+  }
+
+  get condicionesAceptadas(): CondicionesAceptadas | null {
+    const a = this.aceptacion;
+    return a ? { terminos: a.terminos, condicionesTransporte: a.condicionesTransporte, aceptadoEn: toIso(a.aceptadoEn) } : null;
+  }
 }

@@ -13,7 +13,7 @@ import { DateChangeOffer } from '../entities/date-change-offer.entity';
 import { Ticket } from '../entities/ticket.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
-import { WebhookSubscription } from '../entities/webhook-subscription.entity';
+import { WebhookSubscription, WebhookSubscriptionEvent } from '../entities/webhook-subscription.entity';
 import { seedFlights } from '../seed/flights.seed';
 import { WebhookDispatcherService } from '../services/webhook-dispatcher.service';
 import { IntegrationApp, createIntegrationApp, describeIntegration } from './integration-app';
@@ -83,10 +83,10 @@ describeIntegration('After-sale (baggage, date change, cancellation, check-in) a
   /** The leg's flight id, read from the hold behind the booking. */
   async function legFlightId(bookingId: string): Promise<string> {
     const rows = await ds.query(
-      `SELECT h.inventory FROM "${ctx.schema}"."vuelos_flight_holds" h JOIN "${ctx.schema}"."vuelos_bookings" b ON b."holdId" = h."holdId" WHERE b."bookingId" = $1`,
+      `SELECT i."vueloId" FROM "${ctx.schema}"."vuelos_flight_hold_items" i JOIN "${ctx.schema}"."vuelos_bookings" b ON b."holdId" = i."holdId" WHERE b."bookingId" = $1 ORDER BY i.orden`,
       [bookingId],
     );
-    return rows[0].inventory[0].vueloId;
+    return rows[0].vueloId;
   }
 
   const payRef = () => `pay_${randomUUID().slice(0, 12)}`;
@@ -242,7 +242,7 @@ describeIntegration('After-sale (baggage, date change, cancellation, check-in) a
 
       const quote = await api().get(`/api/v1/bookings/${bookingId}/cancellation-quote`).set(auth(owner)).expect(200);
       expect(quote.body.isRefundable).toBe(true);
-      const total = Number(row.grandTotal ?? 0) || Number(quote.body.refundAmount) + Number(quote.body.penaltyAmount);
+      const total = row.totalMinor / 100 || Number(quote.body.refundAmount) + Number(quote.body.penaltyAmount);
       expect(Number(quote.body.penaltyAmount)).toBeCloseTo(total * 0.1, 1);
 
       const key = randomUUID();
@@ -391,7 +391,7 @@ describeIntegration('Webhook delivery against a local receiver', () => {
   });
 
   // The registration route accepts https only, on purpose; the local receiver is plain http, so it is stored directly.
-  const subscribe = (ownerId: string, events: string[]) => ds.getRepository(WebhookSubscription).save(ds.getRepository(WebhookSubscription).create({ ownerId, url, events, secret: SECRET, active: true }));
+  const subscribe = (ownerId: string, events: string[]) => ds.getRepository(WebhookSubscription).save(ds.getRepository(WebhookSubscription).create({ ownerId, url, eventos: events.map((evento) => ds.manager.create(WebhookSubscriptionEvent, { evento })), secret: SECRET, active: true }));
 
   async function confirmBooking(owner: string, offsetDays: number) {
     const date = dayAhead(offsetDays);
@@ -486,7 +486,7 @@ describeIntegration('Webhook delivery against a local receiver', () => {
 
     const bookings = await ds.getRepository(Booking).find({ where: { ownerId: owner }, order: { createdAt: 'ASC' } });
     const flightIds = await Promise.all(
-      bookings.map(async (b) => (await ds.query(`SELECT h.inventory FROM "${ctx.schema}"."vuelos_flight_holds" h WHERE h."holdId" = $1`, [b.holdId]))[0].inventory[0].vueloId as string),
+      bookings.map(async (b) => (await ds.query(`SELECT i."vueloId" FROM "${ctx.schema}"."vuelos_flight_hold_items" i WHERE i."holdId" = $1 ORDER BY i.orden`, [b.holdId]))[0].vueloId as string),
     );
 
     const admin = { Authorization: `Bearer ${tokens.sign({ ownerId: 'admin-1', kind: 'customer', roles: ['ADMIN'] }).accessToken}` };

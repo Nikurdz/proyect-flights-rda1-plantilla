@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
+import { Booking } from './booking.entity';
 
 export type CancellationQuoteStatus = 'OPEN' | 'USED';
 
@@ -11,6 +12,10 @@ export class CancellationQuote {
 
   @Column({ type: 'uuid' })
   bookingId: string;
+
+  @ManyToOne(() => Booking, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'bookingId' })
+  booking?: Relation<Booking>;
 
   @Column({ type: 'varchar', length: 100 })
   ownerId: string;

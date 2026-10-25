@@ -1,6 +1,13 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn, ValueTransformer } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { bigintNumber } from '../../../common/bigint.transformer';
 import { encryptedJson } from '../../../common/cifrado';
-import type { CondicionesAceptadas, Contacto, Facturacion, PasajeroDatos, TrayectoOferta } from '../../ofertas/entities/oferta.entity';
+import { Booking } from '../../../entities/booking.entity';
+import { Cliente } from '../../identidad/entities/cliente.entity';
+import { DatosFacturacion } from '../../facturacion/entities/datos-facturacion.entity';
+import { Mercado } from '../../mercados/entities/mercado.entity';
+import type { Contacto } from '../../ofertas/entities/oferta.entity';
+import { Oferta } from '../../ofertas/entities/oferta.entity';
+import { OrdenHistorial } from './orden-historial.entity';
 
 // SRS §8.5. PAGO_EN_VERIFICACION belongs to asynchronous payment methods (R4); it is part of the
 // model so the transition table is complete, but nothing enters it in this phase.
@@ -32,30 +39,18 @@ export const TRANSICIONES: Record<EstadoOrden, EstadoOrden[]> = {
   FALLIDA_COMPENSADA: [],
 };
 
-export interface PasajeroOrden extends PasajeroDatos {
-  /** The e-ticket issued for this passenger (one per passenger, RF-ORD-003). */
-  eTicket: string | null;
-  ticketId: string | null;
-}
-
 export interface HistorialEstado {
   estado: EstadoOrden;
   en: string;
   motivo?: string;
 }
 
-export interface ResumenPago {
-  pagoId: string;
-  marca: string;
-  ultimos4: string | null;
-  cuotas: number;
-}
-
-const bigintNumber: ValueTransformer = {
-  to: (value: number | null | undefined) => value,
-  from: (value: string | null | undefined) => (value === null || value === undefined ? value : Number(value)),
-};
-
+/**
+ * The commercial record of a purchase: number, state machine and the links to everything else. It copies nothing:
+ * the legs come from the booking (or, for a failed attempt, from the offer), the travellers from the offer, the
+ * tickets and seats from the booking, the payment from `ecom_pagos`, the billing identity is shared, and the terms
+ * accepted are the offer's.
+ */
 @Entity('ecom_ordenes')
 @Index('UQ_ecom_ordenes_numero', ['numeroOrden'], { unique: true })
 @Index('IDX_ecom_ordenes_pnr', ['pnr'])
@@ -75,14 +70,27 @@ export class Orden {
   @Column({ type: 'uuid' })
   ofertaId: string;
 
+  @ManyToOne(() => Oferta, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'ofertaId' })
+  oferta?: Oferta;
+
+  // Verified `sub` of the buyer (customer or guest). A guest is not a row, so there is no foreign key.
   @Column({ type: 'varchar', length: 100 })
   ownerId: string;
 
   @Column({ type: 'uuid', nullable: true })
   clienteId: string | null;
 
+  @ManyToOne(() => Cliente, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'clienteId' })
+  cliente?: Cliente | null;
+
   @Column({ type: 'varchar', length: 5 })
   mercado: string;
+
+  @ManyToOne(() => Mercado, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'mercado' })
+  mercadoRef?: Mercado;
 
   @Column({ type: 'char', length: 3 })
   moneda: string;
@@ -96,37 +104,42 @@ export class Orden {
   @Column({ type: 'varchar', length: 10, default: 'WEB' })
   canal: string;
 
-  @Column({ type: 'jsonb' })
-  pago: ResumenPago;
-
   // The record locator and booking in the flight core (RN-20: both identify the same purchase).
   @Column({ type: 'char', length: 6, nullable: true })
   pnr: string | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid', nullable: true, unique: true })
   bookingId: string | null;
 
-  @Column({ type: 'jsonb' })
-  trayectos: TrayectoOferta[];
+  @ManyToOne(() => Booking, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'bookingId' })
+  booking?: Booking | null;
 
-  @Column({ type: 'text', transformer: encryptedJson<PasajeroOrden[]>() })
-  pasajeros: PasajeroOrden[];
+  @Column({ type: 'uuid' })
+  datosFacturacionId: string;
 
-  @Column({ type: 'text', transformer: encryptedJson<Contacto>() })
-  contacto: Contacto;
+  @ManyToOne(() => DatosFacturacion, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'datosFacturacionId' })
+  datosFacturacion?: DatosFacturacion;
 
-  @Column({ type: 'text', transformer: encryptedJson<Facturacion>() })
-  facturacion: Facturacion;
+  // Contact data is personal data: encrypted at rest (RNF-18).
+  @Column({ type: 'text', transformer: encryptedJson<string>() })
+  contactoCorreo: string;
 
-  @Column({ type: 'jsonb' })
-  condicionesAceptadas: CondicionesAceptadas;
+  @Column({ type: 'text', transformer: encryptedJson<string>() })
+  contactoTelefono: string;
 
-  @Column({ type: 'jsonb' })
-  historial: HistorialEstado[];
+  // One row per state change. Load with `relations: { historial: true }` (OrdenesService.cargar does).
+  @OneToMany(() => OrdenHistorial, (h) => h.orden, { cascade: true })
+  historial?: OrdenHistorial[];
 
   @CreateDateColumn({ type: 'timestamptz', precision: 3 })
   creadaEn: Date;
 
   @UpdateDateColumn({ type: 'timestamptz', precision: 3 })
   actualizadaEn: Date;
+
+  get contacto(): Contacto {
+    return { correo: this.contactoCorreo, telefono: this.contactoTelefono };
+  }
 }

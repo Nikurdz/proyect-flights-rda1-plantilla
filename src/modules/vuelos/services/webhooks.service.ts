@@ -8,7 +8,7 @@ import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { WEBHOOK_EVENTS } from '../dto/enums';
 import type { WebhookSubscriptionDto } from '../dto/webhooks.dto';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
-import { WebhookSubscription } from '../entities/webhook-subscription.entity';
+import { WebhookSubscription, WebhookSubscriptionEvent } from '../entities/webhook-subscription.entity';
 
 export const WEBHOOK_API_VERSION = '1.5.0.0';
 
@@ -58,12 +58,18 @@ export class WebhooksService implements OnModuleInit {
     if (existing >= this.config.webhooks.maxPerOwner) {
       throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', 'Too many webhooks', `An account can have at most ${this.config.webhooks.maxPerOwner} webhooks; delete one first.`);
     }
-    const saved = await this.subscriptions.save(this.subscriptions.create({ ownerId, url: request.url, events: [...new Set(request.events)], secret: request.secret, active: true }));
+    const saved = await this.subscriptions.save(this.subscriptions.create({
+        ownerId,
+        url: request.url,
+        eventos: [...new Set(request.events)].map((evento) => this.subscriptions.manager.create(WebhookSubscriptionEvent, { evento })),
+        secret: request.secret,
+        active: true,
+      }));
     return view(saved);
   }
 
   async list(ownerId: string): Promise<WebhookSubscriptionView[]> {
-    const rows = await this.subscriptions.find({ where: { ownerId, active: true }, order: { createdAt: 'ASC' } });
+    const rows = await this.subscriptions.find({ where: { ownerId, active: true }, relations: { eventos: true }, order: { createdAt: 'ASC' } });
     return rows.map(view);
   }
 
@@ -85,9 +91,9 @@ export class WebhooksService implements OnModuleInit {
 
     const subscribers = await this.subscriptions
       .createQueryBuilder('s')
+      .innerJoin('s.eventos', 'e', 'e.evento = :tipo', { tipo: event.type })
       .where('s."ownerId" IN (:...owners)', { owners })
       .andWhere('s.active = true')
-      .andWhere('s.events @> :wanted::jsonb', { wanted: JSON.stringify([event.type]) })
       .getMany();
     if (subscribers.length === 0) return;
 

@@ -1,40 +1,46 @@
 import { randomInt } from 'node:crypto';
 import { DataSource, Not } from 'typeorm';
 import { Localidad } from '../catalogo/entities/localidad.entity';
+import { ClienteRol, Rol } from '../identidad/entities/cliente-rol.entity';
 import { Cliente } from '../identidad/entities/cliente.entity';
 import { hashPassword } from '../identidad/password.util';
-import { Mercado } from '../mercados/entities/mercado.entity';
+import { ConfiguracionMercado, Mercado } from '../mercados/entities/mercado.entity';
+import { cargarMercado, escribirConfiguracion } from '../mercados/mercado-loader';
 import { PlantillaNotificacion } from '../notificaciones/entities/plantilla.entity';
 import { normalizarTexto } from '../common/texto.util';
 
 // Single market, USD only. All values below are EXAMPLE data for the prototype (legal entity, URLs,
 // instalment plans). Real values come from the business through the admin API (RF-ADM-001).
-const MERCADOS: Partial<Mercado>[] = [
+type MercadoSeed = Pick<Mercado, 'codigo' | 'pais' | 'nombre' | 'idiomaPorDefecto' | 'moneda' | 'tipoCambioDesdeUsd' | 'activo'> & { configuracion: ConfiguracionMercado };
+
+const MERCADOS: MercadoSeed[] = [
   {
     codigo: 'ec',
     pais: 'EC',
     nombre: 'Ecuador',
-    idiomas: ['es'],
     idiomaPorDefecto: 'es',
     moneda: 'USD',
     tipoCambioDesdeUsd: 1,
-    productosBuscador: ['VUELOS'],
-    // RF-PAY-002: Visa, Mastercard and Amex everywhere; Diners in EC, CO, BR, CL and AR.
-    mediosPago: [{ tipo: 'TARJETA', marcas: ['VISA', 'MASTERCARD', 'AMEX', 'DINERS'], cuotasPermitidas: [1, 3, 6, 12], productos: ['PASAJE', 'ADICIONAL'] }],
-    // A-13 (arrepentimiento in Ecuador) is an open legal question: nothing configured yet.
-    reglasRegulatorias: {},
-    textosLegales: {
-      razonSocial: 'RAM Alliance (proyecto académico, sin venta real)',
-      terminos: { version: '2026-10', url: '/terminos' },
-      privacidad: { version: '2026-10', url: '/privacidad' },
-      condicionesTransporte: { version: '2026-10', url: '/condiciones-transporte' },
-    },
-    identificacionesFiscales: [
-      { tipo: 'CEDULA', etiqueta: 'Cédula (10 dígitos)', patron: '\\d{10}' },
-      { tipo: 'RUC', etiqueta: 'RUC (13 dígitos)', patron: '\\d{13}' },
-      { tipo: 'PASAPORTE', etiqueta: 'Pasaporte', patron: '[A-Za-z0-9]{5,20}' },
-    ],
     activo: true,
+    configuracion: {
+      idiomas: ['es'],
+      productosBuscador: ['VUELOS'],
+      // RF-PAY-002: Visa, Mastercard and Amex everywhere; Diners in EC, CO, BR, CL and AR.
+      mediosPago: [{ tipo: 'TARJETA', marcas: ['VISA', 'MASTERCARD', 'AMEX', 'DINERS'], cuotasPermitidas: [1, 3, 6, 12], productos: ['PASAJE', 'ADICIONAL'] }],
+      // A-13 (arrepentimiento in Ecuador) is an open legal question: nothing configured yet.
+      reglasRegulatorias: {},
+      textosLegales: {
+        razonSocial: 'RAM Alliance (proyecto académico, sin venta real)',
+        terminos: { version: '2026-10', url: '/terminos' },
+        privacidad: { version: '2026-10', url: '/privacidad' },
+        condicionesTransporte: { version: '2026-10', url: '/condiciones-transporte' },
+      },
+      identificacionesFiscales: [
+        { tipo: 'CEDULA', etiqueta: 'Cédula (10 dígitos)', patron: '\\d{10}' },
+        { tipo: 'RUC', etiqueta: 'RUC (13 dígitos)', patron: '\\d{13}' },
+        { tipo: 'PASAPORTE', etiqueta: 'Pasaporte', patron: '[A-Za-z0-9]{5,20}' },
+      ],
+    },
   },
 ];
 
@@ -115,24 +121,11 @@ const PLANTILLAS: Partial<PlantillaNotificacion>[] = [
 ];
 
 /**
- * Idempotent and non-destructive: reference data is inserted only when missing, so a re-run (the
- * deployment runs this on every start) never overwrites what an admin edited through the API.
+ * The airport catalogue. Flights point at it by IATA code, so the flight seed runs it too (whichever runs first
+ * creates the rows; the other finds them). Returns the insert result: `raw` holds the codes created by this run.
  */
-export async function seedEcommerce(dataSource: DataSource, admin?: { correo: string; contrasena: string }): Promise<Record<string, number>> {
-  const mercados = await dataSource.createQueryBuilder().insert().into(Mercado).values(MERCADOS as Mercado[]).orIgnore().returning('"codigo"').execute();
-
-  // The platform sells in USD only: a market with another currency (an earlier seed had COP) stays
-  // on record for old orders but can no longer be sold from.
-  await dataSource.getRepository(Mercado).update({ moneda: Not('USD') }, { activo: false });
-
-  // An earlier seed wrote placeholder legal data (a made-up company and example.com links). Replace it
-  // only while it is still exactly that: anything an admin edited since is left alone.
-  const ecuador = await dataSource.getRepository(Mercado).findOneBy({ codigo: 'ec' });
-  if (ecuador?.textosLegales?.razonSocial?.startsWith('Booking Hub') && ecuador.textosLegales.terminos?.url?.includes('example.com')) {
-    await dataSource.getRepository(Mercado).update({ codigo: 'ec' }, { textosLegales: MERCADOS[0].textosLegales });
-  }
-
-  const localidades = await dataSource
+export async function seedLocalidades(dataSource: DataSource) {
+  return dataSource
     .createQueryBuilder()
     .insert()
     .into(Localidad)
@@ -151,6 +144,52 @@ export async function seedEcommerce(dataSource: DataSource, admin?: { correo: st
     .orIgnore()
     .returning('"iata"')
     .execute();
+}
+
+/**
+ * Idempotent and non-destructive: reference data is inserted only when missing, so a re-run (the
+ * deployment runs this on every start) never overwrites what an admin edited through the API.
+ */
+export async function seedEcommerce(dataSource: DataSource, admin?: { correo: string; contrasena: string }): Promise<Record<string, number>> {
+  // The market row, then its configuration (languages, payment methods, legal texts…) in its own tables. The
+  // configuration is written only for a market that was just created: an existing one may have been edited by an admin.
+  const mercados = await dataSource
+    .createQueryBuilder()
+    .insert()
+    .into(Mercado)
+    .values(MERCADOS.map(({ configuracion, ...mercado }) => ({ ...mercado, razonSocial: configuracion.textosLegales.razonSocial })))
+    .orIgnore()
+    .returning('"codigo"')
+    .execute();
+  for (const creado of (mercados.raw as { codigo: string }[]) ?? []) {
+    const definicion = MERCADOS.find((m) => m.codigo === creado.codigo)!;
+    await dataSource.transaction((manager) => escribirConfiguracion(manager, definicion.codigo, definicion.configuracion));
+  }
+
+  // The platform sells in USD only: a market with another currency (an earlier seed had COP) stays
+  // on record for old orders but can no longer be sold from.
+  await dataSource.getRepository(Mercado).update({ moneda: Not('USD') }, { activo: false });
+
+  // An earlier seed wrote placeholder legal data (a made-up company and example.com links). Replace it
+  // only while it is still exactly that: anything an admin edited since is left alone.
+  const ecuador = await cargarMercado(dataSource.manager, 'ec');
+  if (ecuador?.textosLegales.razonSocial.startsWith('Booking Hub') && ecuador.textosLegales.terminos.url.includes('example.com')) {
+    await dataSource.transaction((manager) => escribirConfiguracion(manager, 'ec', { textosLegales: MERCADOS[0].configuracion.textosLegales }));
+  }
+
+  // The roles an account can hold (a catalog, so the account-role rows are checked against it).
+  await dataSource
+    .createQueryBuilder()
+    .insert()
+    .into(Rol)
+    .values([
+      { codigo: 'CUSTOMER', descripcion: 'Cliente de la plataforma' },
+      { codigo: 'ADMIN', descripcion: 'Administrador del back-office' },
+    ])
+    .orIgnore()
+    .execute();
+
+  const localidades = await seedLocalidades(dataSource);
 
   const repoPlantillas = dataSource.getRepository(PlantillaNotificacion);
   let plantillas = 0;
@@ -182,7 +221,7 @@ export async function seedEcommerce(dataSource: DataSource, admin?: { correo: st
           idiomaPreferido: 'es',
           terminosVersionAceptada: '2026-10',
           terminosAceptadosEn: new Date(),
-          roles: ['CUSTOMER', 'ADMIN'],
+          rolesRef: ['CUSTOMER', 'ADMIN'].map((rol) => dataSource.manager.create(ClienteRol, { rol })),
         }),
       );
       administradores = 1;

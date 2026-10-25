@@ -13,6 +13,8 @@ import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { CheckIn } from '../entities/check-in.entity';
 import { DateChangeOffer } from '../entities/date-change-offer.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
+import { FlightHold } from '../entities/flight-hold.entity';
+import { FlightHoldItem } from '../entities/flight-hold-item.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import type { BookingDetailResponseDto } from '../dto/booking.dto';
 import type { DateChangeOptionDto, DateChangeRequestDto, DateChangeSearchRequestDto } from '../dto/postventa.dto';
@@ -157,11 +159,12 @@ export class DateChangeService {
     }
 
     // Inventory: take the seats of the new flight first (SEAT_TAKEN rolls everything back), then give the old ones back.
-    const seats = context.hold.inventory[legIndex].seats;
+    const holdItem = context.hold.items![legIndex];
+    const seats = holdItem.seats;
     await this.inventory.reserve(manager, [{ vueloId: newVuelo.id, seats }]);
     await this.inventory.restore(manager, [{ vueloId: leg.vueloId, seats }]);
-    context.hold.inventory = context.hold.inventory.map((item, index) => (index === legIndex ? { ...item, vueloId: newVuelo.id } : item));
-    await manager.save(context.hold);
+    holdItem.vueloId = newVuelo.id;
+    await manager.update(FlightHoldItem, { id: holdItem.id }, { vueloId: newVuelo.id });
 
     // Seats and check-in belong to the old flight: they do not travel. The request may choose seats on the new one.
     await manager.delete(SeatAssignment, { bookingId, vueloId: leg.vueloId });
@@ -171,18 +174,15 @@ export class DateChangeService {
     const old = leg.vuelo;
     leg.vuelo = newVuelo;
     leg.vueloId = newVuelo.id;
-    const first = context.legs.reduce((a, b) => (new Date(a.vuelo.fechaSalida).getTime() <= new Date(b.vuelo.fechaSalida).getTime() ? a : b));
-    context.booking.origin = first.vuelo.origenIATA;
-    context.booking.destination = first.vuelo.destinoIATA;
-    context.booking.departureAt = first.vuelo.fechaSalida;
     // The fare difference raises what the booking is worth (never lowers it: a cheaper flight is not refunded).
     const raise = Math.max(0, offer.fareDifferenceMinor + offer.taxDifferenceMinor);
-    context.booking.grandTotal = formatMinorUnits(toMinorUnits(context.booking.grandTotal) + raise);
+    context.booking.totalMinor += raise;
     if (raise > 0 && context.hold.lockedTaxesMinor !== null) {
       context.hold.lockedTaxesMinor += Math.max(0, offer.taxDifferenceMinor);
-      await manager.save(context.hold);
+      await manager.update(FlightHold, { holdId: context.hold.holdId }, { lockedTaxesMinor: context.hold.lockedTaxesMinor });
     }
-    this.context.addChange(
+    await this.context.addChange(
+      manager,
       context.booking,
       `Cambio de fecha: ${old.codigoVuelo} del ${new Date(old.fechaSalida).toISOString().slice(0, 10)} a ${newVuelo.codigoVuelo} del ${new Date(newVuelo.fechaSalida).toISOString().slice(0, 10)}. Pagado ${formatMinorUnits(offer.totalToPayMinor)} ${offer.currency} (cargo ${formatMinorUnits(offer.changeFeeMinor)}).`,
     );

@@ -4,6 +4,7 @@ import request = require('supertest');
 import { DataSource, In } from 'typeorm';
 import { Booking } from '../entities/booking.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
+import { FlightHoldItem } from '../entities/flight-hold-item.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
 import { Ticket } from '../entities/ticket.entity';
 import { Vuelo } from '../entities/vuelo.entity';
@@ -69,7 +70,7 @@ describeIntegration('Demo scenarios: full flights and the seat hold, against a r
     expect(await seats(full.id)).toBe(full.capacidadTotal); // sold out: every seat taken
     expect(await seats(near.id)).toBe(near.capacidadTotal - 2); // two seats left free
 
-    const bookings = await ds.getRepository(Booking).find({ where: { ownerId: DEMO_OWNER, departureAt: full.fechaSalida } });
+    const bookings = await ds.getRepository(Booking).find({ where: { ownerId: DEMO_OWNER, holdId: In((await ds.getRepository(FlightHoldItem).find({ where: { vueloId: full.id } })).map((i) => i.holdId)) } });
     const tickets = await ds.getRepository(Ticket).count({ where: { bookingId: In(bookings.map((b) => b.bookingId)) } });
     expect(bookings.length).toBeGreaterThan(0);
     expect(tickets).toBe(full.capacidadTotal); // one ticket per seat, nothing half-built

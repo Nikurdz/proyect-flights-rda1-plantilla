@@ -6,6 +6,7 @@ import { ProblemDetailsException } from '../../common/problem-details.exception'
 import { minorDigits } from '../common/moneda.util';
 import { Mercado } from '../mercados/entities/mercado.entity';
 import { Pago } from './entities/pago.entity';
+import { PagoAntifraudeMotivo } from './entities/pago-antifraude-motivo.entity';
 import { ANTIFRAUDE, Antifraude, PASARELA_PAGO, PasarelaPago } from './ports/pagos.ports';
 
 export interface SolicitudPago {
@@ -92,7 +93,8 @@ export class PagosService implements OnModuleInit {
         mercado: mercado.codigo,
         moneda: mercado.moneda,
         montoMinor: solicitud.montoMinor,
-        medio: { tipo: 'TARJETA', marca: solicitud.medio.marca, ultimos4: null },
+        marca: solicitud.medio.marca,
+        ultimos4: null,
         cuotas: solicitud.cuotas,
         estado: 'PENDIENTE',
         claveIdempotencia: solicitud.claveIdempotencia,
@@ -109,7 +111,9 @@ export class PagosService implements OnModuleInit {
       ownerId: solicitud.ownerId,
       intentosFallidosPrevios: previos,
     });
-    pago.antifraude = fraude;
+    pago.antifraudeVeredicto = fraude.veredicto;
+    pago.antifraudePuntaje = fraude.puntaje;
+    pago.motivosAntifraude = [...new Set(fraude.motivos)].map((motivo) => this.pagos.manager.create(PagoAntifraudeMotivo, { motivo }));
 
     if (fraude.veredicto !== 'APROBAR') {
       // RF-PAY-007: only "approve" proceeds. Manual review is not available in this phase, so a
@@ -148,7 +152,7 @@ export class PagosService implements OnModuleInit {
 
     pago.estado = 'AUTORIZADO';
     pago.autorizacionRef = respuesta.autorizacionRef;
-    pago.medio = { tipo: 'TARJETA', marca: solicitud.medio.marca, ultimos4: respuesta.ultimos4 };
+    pago.ultimos4 = respuesta.ultimos4;
     pago = await this.pagos.save(pago);
     await this.events.publish('PagoAutorizado', pago.pagoId, { pagoId: pago.pagoId, ofertaId: pago.ofertaId }, { market: mercado.codigo });
     return { ok: true, pago };

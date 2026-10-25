@@ -1,5 +1,7 @@
-import { Check, Column, Entity, Index, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { Check, Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation, Unique } from 'typeorm';
 import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { Localidad } from '../ecommerce/catalogo/entities/localidad.entity';
+import { Aerolinea } from './aerolinea.entity';
 
 export type VueloEstado = 'SCHEDULED' | 'CANCELLED';
 
@@ -13,11 +15,14 @@ export class Vuelo {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 150 })
-  aerolinea: string;
-
   @Column({ type: 'varchar', length: 2 })
   codigoAerolinea: string;
+
+  // The airline's name lives in its own table. Eager, so a flight read with `find` carries it; a query builder joins it
+  // explicitly (`leftJoinAndSelect('v.aerolineaRef', 'a')`) and a row lock reads it afterwards (locks and joins do not mix).
+  @ManyToOne(() => Aerolinea, { eager: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'codigoAerolinea' })
+  aerolineaRef?: Relation<Aerolinea>;
 
   @Column({ type: 'varchar', length: 20 })
   codigoVuelo: string;
@@ -25,8 +30,16 @@ export class Vuelo {
   @Column({ type: 'char', length: 3 })
   origenIATA: string;
 
+  @ManyToOne(() => Localidad, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'origenIATA' })
+  origen?: Relation<Localidad>;
+
   @Column({ type: 'char', length: 3 })
   destinoIATA: string;
+
+  @ManyToOne(() => Localidad, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'destinoIATA' })
+  destino?: Relation<Localidad>;
 
   // Instants are stored in UTC (RNF-28), hence timestamptz rather than a zone-less timestamp.
   @Column({ type: 'timestamptz' })
@@ -56,4 +69,10 @@ export class Vuelo {
   // CANCELLED flights are closed to search, holds and bookings; an admin cancels or reschedules a flight.
   @Column({ type: 'varchar', length: 12, default: 'SCHEDULED' })
   estado: VueloEstado;
+
+  /** The airline's name (read from its row; needs `aerolineaRef` loaded). */
+  get aerolinea(): string {
+    if (!this.aerolineaRef) throw new Error(`Flight ${this.id}: airline not loaded`);
+    return this.aerolineaRef.nombre;
+  }
 }

@@ -1,5 +1,13 @@
-import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
+import { Column, Entity, OneToMany, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 import { ColumnNumericTransformer } from '../../../../../common/transformers/column-numeric.transformer';
+import {
+  MercadoDocumentoLegal,
+  MercadoIdentificacionFiscal,
+  MercadoIdioma,
+  MercadoMedioPago,
+  MercadoProducto,
+  MercadoRegla,
+} from './mercado-config.entity';
 
 export interface MedioPagoConfig {
   tipo: 'TARJETA';
@@ -38,6 +46,23 @@ export interface TextosLegales {
   condicionesTransporte: DocumentoLegal;
 }
 
+/** Everything configurable about a market besides its own row, in the shape the API and the services use. */
+export interface ConfiguracionMercado {
+  idiomas: string[];
+  productosBuscador: string[];
+  mediosPago: MedioPagoConfig[];
+  reglasRegulatorias: ReglasRegulatorias;
+  textosLegales: TextosLegales;
+  identificacionesFiscales: IdentificacionFiscalConfig[];
+}
+
+const porOrden = <T extends { orden: number }>(rows: T[] | undefined): T[] => [...(rows ?? [])].sort((a, b) => a.orden - b.orden);
+
+/**
+ * A sales market. Its configuration lives in child tables (`mercado-config.entity.ts`); load them with
+ * `cargarMercado` (mercado-loader.ts) and read them through the getters below, which rebuild the shapes the rest of
+ * the code and the API use.
+ */
 @Entity('ecom_mercados')
 export class Mercado {
   // Lowercase market code used in portal routes (/ec/es, /co/es).
@@ -50,9 +75,6 @@ export class Mercado {
   @Column({ type: 'varchar', length: 100 })
   nombre: string;
 
-  @Column({ type: 'text', array: true })
-  idiomas: string[];
-
   @Column({ type: 'varchar', length: 5 })
   idiomaPorDefecto: string;
 
@@ -64,21 +86,9 @@ export class Mercado {
   @Column('numeric', { precision: 14, scale: 6, transformer: new ColumnNumericTransformer() })
   tipoCambioDesdeUsd: number;
 
-  // RF-MKT-005: which tabs the search box shows in this market.
-  @Column({ type: 'text', array: true })
-  productosBuscador: string[];
-
-  @Column({ type: 'jsonb' })
-  mediosPago: MedioPagoConfig[];
-
-  @Column({ type: 'jsonb' })
-  reglasRegulatorias: ReglasRegulatorias;
-
-  @Column({ type: 'jsonb' })
-  textosLegales: TextosLegales;
-
-  @Column({ type: 'jsonb' })
-  identificacionesFiscales: IdentificacionFiscalConfig[];
+  // The legal entity that sells in this market (shown in the footer and the e-mails).
+  @Column({ type: 'varchar', length: 200 })
+  razonSocial: string;
 
   @Column({ type: 'boolean', default: true })
   activo: boolean;
@@ -89,4 +99,77 @@ export class Mercado {
 
   @UpdateDateColumn({ type: 'timestamptz' })
   actualizadoEn: Date;
+
+  @OneToMany(() => MercadoIdioma, (i) => i.mercado)
+  idiomasRef?: MercadoIdioma[];
+
+  @OneToMany(() => MercadoProducto, (p) => p.mercado)
+  productosRef?: MercadoProducto[];
+
+  @OneToMany(() => MercadoMedioPago, (m) => m.mercado)
+  mediosPagoRef?: MercadoMedioPago[];
+
+  @OneToMany(() => MercadoRegla, (r) => r.mercado)
+  reglasRef?: MercadoRegla[];
+
+  @OneToMany(() => MercadoDocumentoLegal, (d) => d.mercado)
+  documentosRef?: MercadoDocumentoLegal[];
+
+  @OneToMany(() => MercadoIdentificacionFiscal, (i) => i.mercado)
+  identificacionesRef?: MercadoIdentificacionFiscal[];
+
+  // ---- read model (needs the child rows loaded: use cargarMercado) ----
+
+  private cargado<T>(rows: T[] | undefined, nombre: string): T[] {
+    if (!rows) throw new Error(`Market ${this.codigo}: ${nombre} not loaded (use cargarMercado)`);
+    return rows;
+  }
+
+  get idiomas(): string[] {
+    return porOrden(this.cargado(this.idiomasRef, 'languages')).map((i) => i.idioma);
+  }
+
+  get productosBuscador(): string[] {
+    return porOrden(this.cargado(this.productosRef, 'products')).map((p) => p.producto);
+  }
+
+  get mediosPago(): MedioPagoConfig[] {
+    return porOrden(this.cargado(this.mediosPagoRef, 'payment methods')).map((m) => ({
+      tipo: m.tipo,
+      marcas: porOrden(m.marcas).map((x) => x.marca),
+      cuotasPermitidas: [...(m.cuotas ?? [])].map((c) => c.cuotas).sort((a, b) => a - b),
+      productos: (m.productos ?? []).map((p) => p.producto).sort(),
+    }));
+  }
+
+  get reglasRegulatorias(): ReglasRegulatorias {
+    const result: ReglasRegulatorias = {};
+    for (const r of this.cargado(this.reglasRef, 'rules')) {
+      if (r.regla === 'RETRACTO') result.retracto = { diasHabiles: r.diasHabiles };
+      if (r.regla === 'DESISTIMIENTO') {
+        result.desistimiento = { retencionPorcentaje: r.retencionPorcentaje, horasAntesDelVuelo: r.horasAntesDelVuelo, familias: (r.familias ?? []).map((f) => f.familia).sort() };
+      }
+      if (r.regla === 'TRASPASO') {
+        result.traspaso = { horasAntesDelVuelo: r.horasAntesDelVuelo, maximoPorPasaje: r.maximoPorPasaje, maximoPorAnio: r.maximoPorAnio };
+      }
+    }
+    return result;
+  }
+
+  get textosLegales(): TextosLegales {
+    const documento = (tipo: string): DocumentoLegal => {
+      const d = this.cargado(this.documentosRef, 'legal documents').find((x) => x.tipo === tipo);
+      return d ? { version: d.version, url: d.url } : { version: '', url: '' };
+    };
+    return {
+      razonSocial: this.razonSocial,
+      terminos: documento('TERMINOS'),
+      privacidad: documento('PRIVACIDAD'),
+      condicionesTransporte: documento('CONDICIONES_TRANSPORTE'),
+    };
+  }
+
+  get identificacionesFiscales(): IdentificacionFiscalConfig[] {
+    return porOrden(this.cargado(this.identificacionesRef, 'tax ids')).map((i) => ({ tipo: i.tipo, etiqueta: i.etiqueta, patron: i.patron }));
+  }
 }

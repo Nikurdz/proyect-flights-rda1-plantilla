@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { VUELOS_CONFIG, VuelosConfig } from '../../common/vuelos-config';
 import { BaggagePurchase } from '../../entities/baggage-purchase.entity';
 import { Booking } from '../../entities/booking.entity';
+import { FlightHoldItem } from '../../entities/flight-hold-item.entity';
 import { CancellationQuote } from '../../entities/cancellation-quote.entity';
 import { CheckIn } from '../../entities/check-in.entity';
 import { DateChangeOffer } from '../../entities/date-change-offer.entity';
@@ -101,14 +102,17 @@ export class DashboardService {
         .getRawMany<{ k: string; n: number }>(),
       m
         .createQueryBuilder(Booking, 'b')
-        .select('b."origin"', 'origen')
-        .addSelect('b."destination"', 'destino')
+        // The route of a booking is the route of the first leg of its hold.
+        .innerJoin(FlightHoldItem, 'i', 'i."holdId" = b."holdId" AND i."orden" = 0')
+        .innerJoin(Vuelo, 'rv', 'rv."id" = i."vueloId"')
+        .select('rv."origenIATA"', 'origen')
+        .addSelect('rv."destinoIATA"', 'destino')
         .addSelect('COUNT(*)::int', 'reservas')
         .addSelect('COUNT(*) FILTER (WHERE b."status" = \'CANCELLED\')::int', 'canceladas')
-        .addSelect('COALESCE(SUM(b."grandTotal"::numeric) FILTER (WHERE b."status" <> \'CANCELLED\'), 0)::float', 'ingresos')
+        .addSelect('COALESCE(SUM(b."totalMinor") FILTER (WHERE b."status" <> \'CANCELLED\'), 0)::float / 100', 'ingresos')
         .where('b."createdAt" >= :desde', { desde })
-        .groupBy('b."origin"')
-        .addGroupBy('b."destination"')
+        .groupBy('rv."origenIATA"')
+        .addGroupBy('rv."destinoIATA"')
         .orderBy('reservas', 'DESC')
         .addOrderBy('ingresos', 'DESC')
         .limit(8)

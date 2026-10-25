@@ -7,6 +7,8 @@ import { TokenService } from '../auth/token.service';
 import { BaggagePurchase } from '../entities/baggage-purchase.entity';
 import { Booking } from '../entities/booking.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
+import { FlightHoldItem } from '../entities/flight-hold-item.entity';
+import { Aerolinea } from '../entities/aerolinea.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import { OffersService } from '../services/offers.service';
 import { seedFlights } from '../seed/flights.seed';
@@ -309,9 +311,9 @@ describeIntegration('Vuelos core against a real Postgres', () => {
     });
 
     it('never oversells: with one seat left, parallel holds give one 201 and one SEAT_TAKEN', async () => {
+      await ds.getRepository(Aerolinea).save({ codigo: 'TA', nombre: 'Test Air' });
       const flight = await ds.getRepository(Vuelo).save(
         ds.getRepository(Vuelo).create({
-          aerolinea: 'Test Air',
           codigoAerolinea: 'TA',
           codigoVuelo: 'TA001',
           origenIATA: 'MDE',
@@ -505,7 +507,7 @@ describeIntegration('Vuelos core against a real Postgres', () => {
     it('does not confirm a hold whose flight has already departed (A8)', async () => {
       const offer = await searchOffer(dayAhead(33));
       const hold = await createHold('owner-a8', holdBody(offer)).expect(201);
-      const { vueloId } = (await holdRow(hold.body.holdId)).inventory[0];
+      const { vueloId } = (await ds.getRepository(FlightHoldItem).findOneByOrFail({ holdId: hold.body.holdId, orden: 0 }));
       await ds.getRepository(Vuelo).update({ id: vueloId }, { fechaSalida: new Date(Date.now() - 3_600_000), fechaLlegada: new Date(Date.now() + 3_600_000) });
 
       const res = await createBooking('owner-a8', hold.body.holdId, [pax('a1')], 'pay_late_000001').expect(410);

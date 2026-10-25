@@ -10,8 +10,11 @@ import { BookingsService } from '../../services/bookings.service';
 import { IdempotencyService, SagaOutcome } from '../../services/idempotency.service';
 import { OffersService } from '../../services/offers.service';
 import { formatAmount } from '../common/moneda.util';
+import { FacturacionService } from '../facturacion/facturacion.service';
 import { SlidingWindowLimiter, assertWithinLimit } from '../common/rate-limiter';
 import { Mercado } from '../mercados/entities/mercado.entity';
+import type { SagaTrace } from '../observabilidad/sagas-registro.service';
+import { SagasRegistroService } from '../observabilidad/sagas-registro.service';
 import { MercadosService } from '../mercados/mercados.service';
 import { Oferta } from '../ofertas/entities/oferta.entity';
 import { OfertasService } from '../ofertas/ofertas.service';
@@ -22,6 +25,10 @@ import { Orden } from './entities/orden.entity';
 import { OrdenesService } from './ordenes.service';
 
 const ROUTE_COMPRA = 'POST /ofertas/{id}/compra';
+
+/** A short, PII-free reason for a failure: the problem code when there is one, else the error message. */
+const motivoDe = (error: unknown): string =>
+  error instanceof ProblemDetailsException ? String((error.getResponse() as ProblemDetailsBody).code) : error instanceof Error ? error.message.slice(0, 200) : 'unknown_error';
 
 const problem = (status: HttpStatus, code: ProblemDetailsBody['code'], title: string, detail: string): ProblemDetailsBody => ({
   type: `https://api.booking-hub.com/errors/${code.toLowerCase().replace(/_/g, '-')}`,
@@ -54,6 +61,8 @@ export class ComprasService {
     private readonly ofertas: OfertasService,
     private readonly pagos: PagosService,
     private readonly ordenes: OrdenesService,
+    private readonly facturacion: FacturacionService,
+    private readonly sagasRegistro: SagasRegistroService,
     private readonly mercados: MercadosService,
     private readonly bookings: BookingsService,
     private readonly gdsOffers: OffersService,
@@ -87,7 +96,7 @@ export class ComprasService {
         throw new ProblemDetailsException(HttpStatus.CONFLICT, 'INVALID_STATE_TRANSITION', 'The offer already has an order', `Its order is ${existente.estado}.`);
       }
       await this.asegurarCaptura(ofertaId);
-      return { status: HttpStatus.CREATED, body: this.ordenes.vista(existente) };
+      return { status: HttpStatus.CREATED, body: await this.ordenes.vista(existente) };
     }
 
     // --- preconditions (thrown, never stored under the key) ---
@@ -103,18 +112,23 @@ export class ComprasService {
     } catch (error) {
       const resuelta = await this.ordenes.deOferta(ofertaId);
       if (resuelta?.estado === 'EMITIDA' && resuelta.ownerId === auth.ownerId) {
-        return { status: HttpStatus.CREATED, body: this.ordenes.vista(resuelta) };
+        return { status: HttpStatus.CREATED, body: await this.ordenes.vista(resuelta) };
       }
       throw error;
     }
 
+    const traza = await this.sagasRegistro.iniciar('COMPRA', ofertaId, auth.ownerId);
     try {
       // RF-CRT-003 / RN-12: price and availability are re-checked right before charging.
       await this.ofertas.revalidarBloqueada(bloqueada);
       // A seat taken by someone else is reported before any charge, so the customer can pick another.
       await this.ofertas.verificarAsientos(bloqueada, bloqueada.datosPasajeros!.pasajeros);
-      return await this.cobrarYEmitir(bloqueada, mercado, dto, key);
+      await traza.paso('REVALIDAR_PRECIO', 'OK');
+      return await this.cobrarYEmitir(bloqueada, mercado, dto, key, traza);
     } catch (error) {
+      const motivo = motivoDe(error);
+      await traza.paso('INTERRUMPIDA', 'ERROR', motivo);
+      await traza.finalizar('FALLIDA', motivo);
       // An unexpected failure outside the compensated paths: free the offer so a retry can proceed.
       // Any authorised payment stays recorded and the retry resumes with it instead of charging again.
       await this.ofertas.liberarPago(ofertaId, 'ABIERTA').catch((releaseError: unknown) =>
@@ -124,7 +138,7 @@ export class ComprasService {
     }
   }
 
-  private async cobrarYEmitir(oferta: Oferta, mercado: Mercado, dto: CompraDto, key: string): Promise<SagaOutcome> {
+  private async cobrarYEmitir(oferta: Oferta, mercado: Mercado, dto: CompraDto, key: string, traza: SagaTrace): Promise<SagaOutcome> {
     // Resume: a previous attempt may have got as far as an authorised payment.
     let pago = await this.pagos.autorizadoDeOferta(oferta.ofertaId);
 
@@ -144,6 +158,8 @@ export class ComprasService {
         const rechazo = resultado as Extract<ResultadoAutorizacion, { ok: false }>;
         // RF-PAY-009: the offer stays valid for another payment method for the time left.
         await this.ofertas.liberarPago(oferta.ofertaId, 'ABIERTA');
+        await traza.paso('AUTORIZAR_PAGO', 'ERROR', rechazo.codigo);
+        await traza.finalizar('FALLIDA', rechazo.codigo);
         return {
           status: HttpStatus.PAYMENT_REQUIRED,
           body: problem(HttpStatus.PAYMENT_REQUIRED, rechazo.codigo, rechazo.codigo === 'PAYMENT_DECLINED' ? 'Payment declined' : 'Payment rejected', rechazo.detalle),
@@ -151,28 +167,35 @@ export class ComprasService {
       }
       pago = resultado.pago;
     }
+    await traza.paso('AUTORIZAR_PAGO', 'OK');
 
     // Order + booking + tickets + hold + offer state change as ONE transaction: all or nothing.
     let emision: { orden: Orden; outcome: Awaited<ReturnType<BookingsService['createBookingWithin']>> };
     try {
       emision = await this.dataSource.transaction(async (manager) => {
-        const orden = await this.ordenes.crearPagada(manager, oferta, pago!);
+        const orden = await this.ordenes.crearPagada(manager, oferta);
         const outcome = await this.bookings.createBookingWithin(manager, oferta.ownerId, this.aSolicitudGds(oferta, pago!));
         await this.ordenes.marcarEmitida(manager, orden, outcome.response);
+        await this.facturacion.emitir(manager, orden, oferta);
         await this.pagos.asociarOrden(manager, pago!.pagoId, orden.ordenId);
         await this.ofertas.marcarPagada(manager, oferta.ofertaId);
         return { orden, outcome };
       });
     } catch (error) {
-      return this.compensar(oferta, pago, error);
+      await traza.paso('EMITIR_ORDEN', 'ERROR', motivoDe(error));
+      return this.compensar(oferta, pago, error, traza);
     }
+    await traza.paso('EMITIR_ORDEN', 'OK', emision.orden.numeroOrden);
 
     pago.ordenId = emision.orden.ordenId;
     await this.bookings.announceConfirmed(oferta.ownerId, emision.outcome);
     await this.pagos.capturar(pago);
+    await traza.paso('CAPTURAR_PAGO', 'OK');
     await this.publicarEmision(emision.orden, mercado);
+    await traza.paso('ANUNCIAR_EMISION', 'OK');
+    await traza.finalizar('COMPLETADA');
 
-    return { status: HttpStatus.CREATED, body: this.ordenes.vista(emision.orden) };
+    return { status: HttpStatus.CREATED, body: await this.ordenes.vista(emision.orden) };
   }
 
   /**
@@ -181,6 +204,7 @@ export class ComprasService {
    * notification (a crash between commit and publish), and the notification consumer is idempotent.
    */
   async publicarEmision(orden: Orden, mercado: Mercado): Promise<void> {
+    const vista = await this.ordenes.vista(orden);
     await this.events.publish(
       'OrdenEmitida',
       orden.ordenId,
@@ -192,8 +216,8 @@ export class ComprasService {
         correo: orden.contacto.correo,
         idioma: mercado.idiomaPorDefecto,
         total: `${formatAmount(orden.totalMinor, orden.moneda)} ${orden.moneda}`,
-        itinerarios: orden.trayectos.map((t) => ({ numeroVuelo: t.numeroVuelo, origen: t.origen, destino: t.destino, salida: t.salida, llegada: t.llegada, familia: t.familia })),
-        pasajeros: orden.pasajeros.map((p) => ({ nombres: p.nombres, apellidos: p.apellidos, tipo: p.tipo, eTicket: p.eTicket })),
+        itinerarios: vista.itinerarios.map((t) => ({ numeroVuelo: t.numeroVuelo, origen: t.origen, destino: t.destino, salida: t.salida, llegada: t.llegada, familia: t.familia })),
+        pasajeros: vista.pasajeros.map((p) => ({ nombres: p.nombres, apellidos: p.apellidos, tipo: p.tipo, eTicket: p.eTicket })),
       },
       { market: mercado.codigo },
     );
@@ -203,7 +227,7 @@ export class ComprasService {
    * RN-19: the charge was authorised but the ticket could not be issued, so the authorisation is
    * voided, the failed attempt is recorded, and the customer is told what happened.
    */
-  private async compensar(oferta: Oferta, pago: Pago, rawError: unknown): Promise<SagaOutcome> {
+  private async compensar(oferta: Oferta, pago: Pago, rawError: unknown, traza: SagaTrace): Promise<SagaOutcome> {
     // A seat/locator race surfaces as a bare unique violation: report it as the typed problem it is.
     const error = mapBookingUniqueViolation(rawError);
     const known = error instanceof ProblemDetailsException ? error : null;
@@ -213,7 +237,10 @@ export class ComprasService {
     }
 
     const anulado = await this.pagos.anular(pago);
+    await traza.paso('ANULAR_PAGO', 'COMPENSADO', anulado ? 'anulada' : 'anulación pendiente');
     const fallida = await this.ordenes.registrarFallida(oferta, pago, motivo);
+    await traza.paso('REGISTRAR_ORDEN_FALLIDA', 'OK', fallida.numeroOrden);
+    await traza.finalizar('COMPENSADA', motivo);
     await this.bookings.announceFailed(oferta.ownerId, oferta.holdId, motivo);
 
     // If the inventory hold survived the failure the customer can simply try again.

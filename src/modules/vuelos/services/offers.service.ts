@@ -11,13 +11,16 @@ import { ProblemDetailsException } from '../common/problem-details.exception';
 import { buildSeatGrid } from '../common/seat-grid';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { FareFamily } from '../entities/fare-family.entity';
+import { attachItemsToMany, findHold } from '../common/hold-loader';
 import { FlightHold, HoldStatus } from '../entities/flight-hold.entity';
+import { FlightHoldItem } from '../entities/flight-hold-item.entity';
 import { FlightOffer } from '../entities/flight-offer.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import type { HoldRequestDto, HoldResponseDto, HoldStatusResponseDto } from '../dto/hold.dto';
 import { IdempotencyService } from './idempotency.service';
 import { InventoryService } from './inventory.service';
+import { breakdownColumns } from './search.service';
 
 const HOLD_ROUTE = 'POST /offers/hold';
 
@@ -205,18 +208,29 @@ export class OffersService {
     await this.inventory.reserve(manager, inventory);
 
     const expiresAt = new Date(Date.now() + this.config.holdTtlMinutes * 60_000);
+    // Legs are stored in the offer's order (0 = outbound), whatever order the request listed them in.
+    const items = offer.itineraries.map((leg, index) => {
+      const selection = request.itinerarySelections.find((s) => s.itineraryId === leg.itineraryId)!;
+      return manager.create(FlightHoldItem, {
+        orden: index,
+        itineraryId: leg.itineraryId,
+        vueloId: leg.vueloId,
+        seats,
+        cabinClass: selection.cabinClass,
+        fareBrand: selection.fareBrand,
+      });
+    });
     const hold = await manager.save(
       manager.create(FlightHold, {
         offerId: offer.offerId,
         ownerId,
         status: 'HELD',
-        lockedPrice: formatMinorUnits(lockedMinor),
+        lockedPriceMinor: lockedMinor,
         lockedTaxesMinor,
         currency: offer.currency,
         ttlMinutes: this.config.holdTtlMinutes,
-        itinerarySelections: request.itinerarySelections,
-        passengersBreakdown: breakdown,
-        inventory,
+        ...breakdownColumns(breakdown),
+        items,
         expiresAt,
       }),
     );
@@ -226,7 +240,7 @@ export class OffersService {
       status: 'HELD',
       expiresAt: expiresAt.toISOString(),
       ttlMinutes: hold.ttlMinutes,
-      lockedPrice: { currency: offer.currency, total: hold.lockedPrice },
+      lockedPrice: { currency: offer.currency, total: formatMinorUnits(hold.lockedPriceMinor) },
     };
   }
 
@@ -241,14 +255,14 @@ export class OffersService {
       status: hold.status,
       expiresAt: toIso(hold.expiresAt),
       remainingSeconds: hold.status === 'HELD' ? Math.max(0, Math.floor((hold.expiresAt.getTime() - Date.now()) / 1000)) : 0,
-      lockedPrice: { currency: hold.currency, total: hold.lockedPrice },
+      lockedPrice: { currency: hold.currency, total: formatMinorUnits(hold.lockedPriceMinor) },
     };
   }
 
   /** DELETE is idempotent: releasing a released hold is a no-op; a consumed or expired one is not releasable. */
   async releaseHold(ownerId: string, holdId: string): Promise<void> {
     const released = await this.dataSource.transaction(async (manager) => {
-      const hold = await manager.findOne(FlightHold, { where: { holdId }, lock: { mode: 'pessimistic_write' } });
+      const hold = await findHold(manager, holdId, { lock: true });
       this.assertOwner(hold, ownerId, holdId);
 
       switch (hold.status) {
@@ -281,7 +295,7 @@ export class OffersService {
   async expireIfDue(holdId: string): Promise<boolean> {
     let ownerId = '';
     const expired = await this.dataSource.transaction(async (manager) => {
-      const hold = await manager.findOne(FlightHold, { where: { holdId }, lock: { mode: 'pessimistic_write' } });
+      const hold = await findHold(manager, holdId, { lock: true });
       if (!hold || hold.status !== 'HELD' || hold.expiresAt.getTime() > Date.now()) return false;
       ownerId = hold.ownerId;
       return this.transition(manager, hold, 'EXPIRED');
@@ -302,6 +316,7 @@ export class OffersService {
         .setOnLocked('skip_locked')
         .where('h.status = :status AND h.expiresAt < :now', { status: 'HELD', now: new Date() })
         .getMany();
+      await attachItemsToMany(manager, due);
 
       const ids: { holdId: string; ownerId: string }[] = [];
       for (const hold of due) {
@@ -331,7 +346,7 @@ export class OffersService {
   }
 
   private async requireLiveOffer(manager: EntityManager, offerId: string): Promise<FlightOffer> {
-    const offer = await manager.findOne(FlightOffer, { where: { offerId } });
+    const offer = await manager.findOne(FlightOffer, { where: { offerId }, relations: { itineraries: true }, order: { itineraries: { orden: 'ASC' } } });
     if (!offer) {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'OFFER_NO_LONGER_AVAILABLE', 'Offer not found', `Offer ${offerId} was not found or has expired.`);
     }

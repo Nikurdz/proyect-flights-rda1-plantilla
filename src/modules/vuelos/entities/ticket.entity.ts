@@ -1,4 +1,6 @@
-import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
+import { Booking } from './booking.entity';
+import { Passenger } from './passenger.entity';
 
 export type TicketStatus = 'PENDING' | 'ISSUING' | 'ISSUED' | 'FAILED' | 'VOIDED' | 'REFUNDED';
 
@@ -13,8 +15,16 @@ export class Ticket {
   @Column({ type: 'uuid' })
   bookingId: string;
 
+  @ManyToOne(() => Booking, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'bookingId' })
+  booking?: Relation<Booking>;
+
   @Column({ type: 'uuid' })
   passengerId: string;
+
+  @ManyToOne(() => Passenger, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'passengerId' })
+  passenger?: Relation<Passenger>;
 
   @Column({ type: 'varchar', length: 13, unique: true })
   eTicketNumber: string;

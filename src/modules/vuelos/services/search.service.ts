@@ -27,6 +27,9 @@ import type {
   SearchResponseDto,
 } from '../dto/search.dto';
 
+/** The party of an offer or a hold, as its four columns. */
+export const breakdownColumns = (b: PassengerBreakdown) => ({ adults: b.adults, youths: b.youths, children: b.children, infants: b.infants });
+
 @Injectable()
 export class SearchService {
   constructor(
@@ -86,10 +89,10 @@ export class SearchService {
       await this.offers.save(
         this.offers.create({
           offerId,
-          itineraries: itineraries.map((itinerary, index) => ({ itineraryId: itinerary.itineraryId, vueloId: combo[index].id })),
-          grandTotal,
+          itineraries: itineraries.map((itinerary, index) => ({ orden: index, itineraryId: itinerary.itineraryId, vueloId: combo[index].id })),
+          grandTotalMinor: total,
           currency,
-          passengersBreakdown: passengers,
+          ...breakdownColumns(passengers),
           expiresAt: new Date(Date.now() + offerTtlMinutes * 60_000),
         }),
       );
@@ -115,10 +118,10 @@ export class SearchService {
 
     return manager.save(
       manager.create(FlightOffer, {
-        itineraries: flights.map((vuelo) => ({ itineraryId: randomUUID(), vueloId: vuelo.id })),
-        grandTotal: formatMinorUnits(total),
+        itineraries: flights.map((vuelo, index) => ({ orden: index, itineraryId: randomUUID(), vueloId: vuelo.id })),
+        grandTotalMinor: total,
         currency: this.config.currency,
-        passengersBreakdown: passengers,
+        ...breakdownColumns(passengers),
         expiresAt: new Date(Date.now() + this.config.offerTtlMinutes * 60_000),
       }),
     );
@@ -127,7 +130,7 @@ export class SearchService {
   /** Direct flights on one calendar day (UTC) that have not departed and can seat the whole party. */
   async findDirectFlights(origin: string | undefined, destination: string | undefined, departureDate: string, seatsNeeded: number, options: { includeSoldOut?: boolean } = {}): Promise<Vuelo[]> {
     const { start, end } = utcDayRange(departureDate);
-    const qb = this.vuelos.createQueryBuilder('v').where('1 = 1');
+    const qb = this.vuelos.createQueryBuilder('v').leftJoinAndSelect('v.aerolineaRef', 'a').where('1 = 1');
     // Omitted origin/destination mean "any": lets a visitor browse without knowing codes.
     if (origin) qb.andWhere('v."origenIATA" = :origin', { origin });
     if (destination) qb.andWhere('v."destinoIATA" = :destination', { destination });

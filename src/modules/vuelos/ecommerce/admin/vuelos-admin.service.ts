@@ -4,7 +4,8 @@ import { DataSource, EntityManager } from 'typeorm';
 import { toIso } from '../../common/date.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { seatExists } from '../../common/seat-grid';
-import { FlightHold } from '../../entities/flight-hold.entity';
+import { Aerolinea } from '../../entities/aerolinea.entity';
+import { FlightHoldItem } from '../../entities/flight-hold-item.entity';
 import { SeatAssignment } from '../../entities/seat-assignment.entity';
 import { Vuelo } from '../../entities/vuelo.entity';
 import { Localidad } from '../catalogo/entities/localidad.entity';
@@ -56,12 +57,14 @@ export class VuelosAdminService {
         ]);
       }
       const capacidad = dto.capacidad ?? 180;
+      // The airline is the flight number's prefix; it is registered on first use and an existing one keeps its name.
+      const codigoAerolinea = dto.codigoVuelo.slice(0, 2);
+      await manager.createQueryBuilder().insert().into(Aerolinea).values({ codigo: codigoAerolinea, nombre: dto.aerolinea.trim() }).orIgnore().execute();
       let vuelo: Vuelo;
       try {
         vuelo = await manager.save(
           manager.create(Vuelo, {
-            aerolinea: dto.aerolinea.trim(),
-            codigoAerolinea: dto.codigoVuelo.slice(0, 2),
+            codigoAerolinea,
             codigoVuelo: dto.codigoVuelo,
             origenIATA: dto.origen,
             destinoIATA: dto.destino,
@@ -81,6 +84,7 @@ export class VuelosAdminService {
         throw error;
       }
       await this.auditar(manager, actorId, vuelo.id, 'CREAR', {}, { codigoVuelo: vuelo.codigoVuelo, origen: vuelo.origenIATA, destino: vuelo.destinoIATA, salida: toIso(vuelo.fechaSalida), capacidad });
+      vuelo.aerolineaRef = (await manager.findOneBy(Aerolinea, { codigo: codigoAerolinea }))!;
       return vista(vuelo, 0);
     });
   }
@@ -106,7 +110,11 @@ export class VuelosAdminService {
         vuelo.capacidadTotal = dto.capacidadTotal;
         vuelo.asientosDisponibles = dto.capacidadTotal - vendidos;
       }
-      if (dto.aerolinea !== undefined) vuelo.aerolinea = dto.aerolinea.trim();
+      // The name belongs to the airline, not to the flight: renaming it renames it on all its flights.
+      if (dto.aerolinea !== undefined) {
+        await manager.update(Aerolinea, { codigo: vuelo.codigoAerolinea }, { nombre: dto.aerolinea.trim() });
+        vuelo.aerolineaRef = (await manager.findOneBy(Aerolinea, { codigo: vuelo.codigoAerolinea }))!;
+      }
       if (dto.precioBaseUsd !== undefined) vuelo.precioBase = dto.precioBaseUsd;
       if (dto.duracionMinutos !== undefined) {
         vuelo.durationMinutes = dto.duracionMinutos;
@@ -127,11 +135,7 @@ export class VuelosAdminService {
     await this.dataSource.transaction(async (manager) => {
       const vuelo = await this.bloquear(manager, vueloId);
       const asientos = await manager.getRepository(SeatAssignment).count({ where: { vueloId } });
-      const holds = await manager
-        .getRepository(FlightHold)
-        .createQueryBuilder('h')
-        .where('h."inventory" @> :inventory::jsonb', { inventory: JSON.stringify([{ vueloId }]) })
-        .getCount();
+      const holds = await manager.getRepository(FlightHoldItem).count({ where: { vueloId } });
       if (asientos > 0 || holds > 0) {
         throw new ProblemDetailsException(HttpStatus.CONFLICT, 'FLIGHT_IN_USE', 'Flight has reservations', 'This flight has holds, bookings or assigned seats. Cancel it instead (POST /admin/vuelos/{vueloId}/cancelar).');
       }
@@ -141,8 +145,10 @@ export class VuelosAdminService {
   }
 
   private async bloquear(manager: EntityManager, vueloId: string): Promise<Vuelo> {
-    const vuelo = await manager.findOne(Vuelo, { where: { id: vueloId }, lock: { mode: 'pessimistic_write' } });
+    // Locked without its airline (a lock cannot apply to the outer side of a join); the airline is read right after.
+    const vuelo = await manager.findOne(Vuelo, { where: { id: vueloId }, lock: { mode: 'pessimistic_write' }, loadEagerRelations: false });
     if (!vuelo) throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'NOT_FOUND', 'Flight not found', `No flight ${vueloId}.`);
+    vuelo.aerolineaRef = (await manager.findOneBy(Aerolinea, { codigo: vuelo.codigoAerolinea }))!;
     return vuelo;
   }
 

@@ -28,11 +28,17 @@ export type DomainEventHandler = (event: DomainEvent) => Promise<void> | void;
 export class DomainEventBus {
   private readonly logger = new Logger('DomainEvents');
   private readonly handlers = new Map<string, DomainEventHandler[]>();
+  private readonly catchAll: DomainEventHandler[] = [];
 
   subscribe(type: string, handler: DomainEventHandler): void {
     const list = this.handlers.get(type) ?? [];
     list.push(handler);
     this.handlers.set(type, list);
+  }
+
+  /** A consumer of every event, whatever its type (the audit trail). */
+  subscribeAll(handler: DomainEventHandler): void {
+    this.catchAll.push(handler);
   }
 
   async publish<T>(
@@ -54,7 +60,7 @@ export class DomainEventBus {
 
     this.logger.log(`${type} aggregate=${aggregateId} [${event.correlationId}]`);
     runtimeMetrics.recordEvent(type);
-    for (const handler of this.handlers.get(type) ?? []) {
+    for (const handler of [...(this.handlers.get(type) ?? []), ...this.catchAll]) {
       try {
         await handler(event);
       } catch (error) {

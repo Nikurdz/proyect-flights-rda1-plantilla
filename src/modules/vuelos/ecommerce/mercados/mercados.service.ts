@@ -6,9 +6,11 @@ import { ProblemDetailsException } from '../../common/problem-details.exception'
 import { convertFromUsd, minorDigits } from '../common/moneda.util';
 import { ActualizarMercadoDto, MercadoViewDto } from './dto/mercado.dto';
 import { AuditoriaCambio } from './entities/auditoria-cambio.entity';
-import { Mercado } from './entities/mercado.entity';
+import { ConfiguracionMercado, Mercado } from './entities/mercado.entity';
+import { cargarMercado, escribirConfiguracion } from './mercado-loader';
 
-const EDITABLE_FIELDS = ['nombre', 'tipoCambioDesdeUsd', 'activo', 'productosBuscador', 'mediosPago', 'reglasRegulatorias', 'textosLegales', 'identificacionesFiscales'] as const;
+const SCALAR_FIELDS = ['nombre', 'tipoCambioDesdeUsd', 'activo'] as const;
+const CONFIG_FIELDS = ['productosBuscador', 'mediosPago', 'reglasRegulatorias', 'textosLegales', 'identificacionesFiscales'] as const satisfies readonly (keyof ConfiguracionMercado)[];
 
 /**
  * D02: every market-dependent decision (currency, payment methods, legal texts, regulatory
@@ -24,7 +26,7 @@ export class MercadosService {
   ) {}
 
   async obtener(codigo: string): Promise<Mercado> {
-    const mercado = await this.mercados.findOne({ where: { codigo } });
+    const mercado = await cargarMercado(this.mercados.manager, codigo);
     if (!mercado) {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'MARKET_NOT_AVAILABLE', 'Market not found', `There is no market "${codigo}".`);
     }
@@ -80,7 +82,7 @@ export class MercadosService {
       }
     }
     const updated = await this.dataSource.transaction(async (manager) => {
-      const actual = await manager.findOne(Mercado, { where: { codigo }, lock: { mode: 'pessimistic_write' } });
+      const actual = await cargarMercado(manager, codigo, { lock: true });
       if (!actual) {
         throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'MARKET_NOT_AVAILABLE', 'Market not found', `There is no market "${codigo}".`);
       }
@@ -95,21 +97,30 @@ export class MercadosService {
 
       const antes: Record<string, unknown> = {};
       const despues: Record<string, unknown> = {};
-      for (const field of EDITABLE_FIELDS) {
+      const escalares: Partial<Pick<Mercado, (typeof SCALAR_FIELDS)[number]>> = {};
+      const configuracion: Partial<ConfiguracionMercado> = {};
+      for (const field of SCALAR_FIELDS) {
         const value = cambios[field];
         if (value === undefined) continue;
         antes[field] = actual[field];
         despues[field] = value;
-        (actual as unknown as Record<string, unknown>)[field] = value;
+        (escalares as Record<string, unknown>)[field] = value;
+      }
+      for (const field of CONFIG_FIELDS) {
+        const value = cambios[field];
+        if (value === undefined) continue;
+        antes[field] = actual[field];
+        despues[field] = value;
+        (configuracion as Record<string, unknown>)[field] = value;
       }
       if (Object.keys(despues).length === 0) {
         throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Nothing to update', 'Send at least one field to change.');
       }
 
-      actual.version += 1;
-      const saved = await manager.save(actual);
+      await escribirConfiguracion(manager, codigo, configuracion);
+      await manager.update(Mercado, { codigo }, { ...escalares, version: actual.version + 1 });
       await manager.save(manager.create(AuditoriaCambio, { entidad: 'mercado', entidadId: codigo, actorId, accion: 'ACTUALIZAR', antes, despues }));
-      return saved;
+      return (await cargarMercado(manager, codigo))!;
     });
 
     await this.events.publish('ConfiguracionMercadoPublicada', codigo, { codigo, version: updated.version }, { market: codigo });

@@ -1,4 +1,5 @@
-import { Column, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation, Unique } from 'typeorm';
+import { Mercado } from '../../mercados/entities/mercado.entity';
 
 // RF-NTF-007: templates by type, market and language, versioned. `mercado` null means "every
 // market"; a market-specific template wins over the generic one. Placeholders are {{name}}.
@@ -13,6 +14,10 @@ export class PlantillaNotificacion {
 
   @Column({ type: 'varchar', length: 5, nullable: true })
   mercado: string | null;
+
+  @ManyToOne(() => Mercado, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'mercado' })
+  mercadoRef?: Relation<Mercado> | null;
 
   @Column({ type: 'varchar', length: 5 })
   idioma: string;

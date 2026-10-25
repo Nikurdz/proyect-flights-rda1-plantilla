@@ -11,6 +11,7 @@ import { HTTP_LOCKED, ProblemDetailsException } from '../../common/problem-detai
 import { SlidingWindowLimiter, assertWithinLimit } from '../common/rate-limiter';
 import { MercadosService } from '../mercados/mercados.service';
 import { ClienteViewDto, LoginDto, PreferenciasDto, RegistroClienteDto } from './dto/identidad.dto';
+import { ClienteRol } from './entities/cliente-rol.entity';
 import { Cliente } from './entities/cliente.entity';
 import { hashPassword, verifyPassword } from './password.util';
 
@@ -60,7 +61,7 @@ export class IdentidadService {
             apellidos: dto.apellidos.trim(),
             fechaNacimiento: dto.fechaNacimiento,
             telefono: dto.telefono ?? null,
-            roles: ['CUSTOMER'],
+            rolesRef: [this.clientes.manager.create(ClienteRol, { rol: 'CUSTOMER' })],
             numeroSocio: this.nuevoNumeroSocio(),
             mercadoPreferido: mercado.codigo,
             idiomaPreferido: mercado.idiomaPorDefecto,
@@ -124,7 +125,7 @@ export class IdentidadService {
             apellidos: dto.apellidos.trim(),
             fechaNacimiento: dto.fechaNacimiento,
             telefono: dto.telefono ?? null,
-            roles: dto.roles,
+            rolesRef: dto.roles.map((rol) => this.clientes.manager.create(ClienteRol, { rol })),
             numeroSocio: this.nuevoNumeroSocio(),
             mercadoPreferido: mercado.codigo,
             idiomaPreferido: mercado.idiomaPorDefecto,

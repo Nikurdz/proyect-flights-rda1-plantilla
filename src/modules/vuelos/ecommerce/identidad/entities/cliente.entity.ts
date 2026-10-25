@@ -1,4 +1,6 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, Relation, UpdateDateColumn } from 'typeorm';
+import { Mercado } from '../../mercados/entities/mercado.entity';
+import type { ClienteRol } from './cliente-rol.entity';
 
 export type CanalNotificacion = 'EMAIL' | 'SMS' | 'PUSH' | 'WHATSAPP';
 
@@ -40,6 +42,10 @@ export class Cliente {
   @Column({ type: 'varchar', length: 5 })
   mercadoPreferido: string;
 
+  @ManyToOne(() => Mercado, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'mercadoPreferido' })
+  mercadoRef?: Relation<Mercado>;
+
   @Column({ type: 'varchar', length: 5 })
   idiomaPreferido: string;
 
@@ -56,10 +62,9 @@ export class Cliente {
   @Column({ type: 'timestamptz' })
   terminosAceptadosEn: Date;
 
-  // Set by the service on registration. No column default: TypeORM reports any array default as
-  // schema drift on every run, which would make `migration:generate --check` unusable.
-  @Column({ type: 'text', array: true })
-  roles: string[];
+  // One row per role. Loaded with the account (eager) except under a row lock, where the roles are read separately.
+  @OneToMany('ClienteRol', 'cliente', { eager: true, cascade: true })
+  rolesRef?: ClienteRol[];
 
   @Column({ type: 'int', default: 0 })
   intentosFallidos: number;
@@ -76,6 +81,12 @@ export class Cliente {
 
   @CreateDateColumn({ type: 'timestamptz' })
   creadoEn: Date;
+
+  /** CUSTOMER first, then ADMIN: the order the roles have always been listed in. */
+  get roles(): string[] {
+    const orden = ['CUSTOMER', 'ADMIN'];
+    return (this.rolesRef ?? []).map((r) => r.rol).sort((a, b) => orden.indexOf(a) - orden.indexOf(b));
+  }
 
   @UpdateDateColumn({ type: 'timestamptz' })
   actualizadoEn: Date;

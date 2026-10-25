@@ -2,12 +2,13 @@ import { Logger, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VuelosCoreModule } from '../../vuelos-core.module';
 import { Pago } from './entities/pago.entity';
+import { PagoAntifraudeMotivo } from './entities/pago-antifraude-motivo.entity';
 import { PagosService } from './pagos.service';
 import { ANTIFRAUDE, PASARELA_PAGO } from './ports/pagos.ports';
 import { AntifraudeSimulado, PasarelaSimulada } from './ports/simulated-adapters';
 
 @Module({
-  imports: [VuelosCoreModule, TypeOrmModule.forFeature([Pago])],
+  imports: [VuelosCoreModule, TypeOrmModule.forFeature([Pago, PagoAntifraudeMotivo])],
   providers: [
     PagosService,
     {

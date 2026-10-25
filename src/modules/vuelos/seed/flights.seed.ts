@@ -1,11 +1,15 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { DataSource, EntityManager } from 'typeorm';
+import { seedLocalidades } from '../ecommerce/seed/ecommerce.seed';
+import { Aerolinea } from '../entities/aerolinea.entity';
 import { buildSeatGrid } from '../common/seat-grid';
 import { Booking } from '../entities/booking.entity';
 import { Passenger } from '../entities/passenger.entity';
 import { Ticket } from '../entities/ticket.entity';
 import { FareFamily } from '../entities/fare-family.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
+import { FlightHoldItem } from '../entities/flight-hold-item.entity';
+import { FlightOffer } from '../entities/flight-offer.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 
@@ -203,6 +207,18 @@ function utcDateAtHour(daysAhead: number, hour: number, now: Date): Date {
 export async function seedFlights(dataSource: DataSource, now: Date = new Date()): Promise<{ families: number; flights: number }> {
   await dataSource.getRepository(FareFamily).upsert(FARE_FAMILIES, ['code']);
 
+  // The airports and airlines the flights point at. Inserted only when missing: an airline an admin renamed keeps its name.
+  await seedLocalidades(dataSource);
+  const aerolineas = new Map<string, string>();
+  for (const entry of NETWORK) aerolineas.set(entry.codigoAerolinea, entry.aerolinea);
+  await dataSource
+    .createQueryBuilder()
+    .insert()
+    .into(Aerolinea)
+    .values([...aerolineas].map(([codigo, nombre]) => ({ codigo, nombre })))
+    .orIgnore()
+    .execute();
+
   const rows: Partial<Vuelo>[] = [];
   for (let day = 1; day <= HORIZON_DAYS; day++) {
     for (const entry of NETWORK) {
@@ -215,7 +231,6 @@ export async function seedFlights(dataSource: DataSource, now: Date = new Date()
         open = Math.max(6, Math.round(capacity * (0.45 + 0.5 * hash01(`${entry.codigoVuelo}:${day}`))));
       }
       rows.push({
-        aerolinea: entry.aerolinea,
         codigoAerolinea: entry.codigoAerolinea,
         codigoVuelo: entry.codigoVuelo,
         origenIATA: entry.origenIATA,
@@ -320,20 +335,36 @@ async function fillSeats(dataSource: DataSource, vuelo: Vuelo, ocupados: number,
       nextSeat += size;
       // Booked some days ago, spread out, so the history does not look like one single instant.
       const createdAt = new Date(now.getTime() - (1 + hash01(`${vuelo.id}:${group}`) * 9) * 86_400_000);
-      const total = (unit * size).toFixed(2);
 
+      const totalMinor = Math.round(unit * size * 100);
+      const itineraryId = randomUUID();
+      const offer = await manager.save(
+        manager.create(FlightOffer, {
+          itineraries: [{ orden: 0, itineraryId, vueloId: vuelo.id }],
+          grandTotalMinor: totalMinor,
+          currency: 'USD',
+          adults: size,
+          youths: 0,
+          children: 0,
+          infants: 0,
+          createdAt,
+          expiresAt: new Date(createdAt.getTime() + 15 * 60_000),
+        }),
+      );
       const hold = await manager.save(
         manager.create(FlightHold, {
-          offerId: randomUUID(),
+          offerId: offer.offerId,
           ownerId: DEMO_OWNER,
           status: 'CONSUMED',
-          lockedPrice: total,
+          lockedPriceMinor: totalMinor,
           lockedTaxesMinor: null,
           currency: 'USD',
           ttlMinutes: 15,
-          itinerarySelections: [{ itineraryId: randomUUID(), cabinClass: 'ECONOMY', fareBrand: 'LIGHT' }],
-          passengersBreakdown: { adults: size, youths: 0, children: 0, infants: 0 },
-          inventory: [{ vueloId: vuelo.id, seats: size }],
+          adults: size,
+          youths: 0,
+          children: 0,
+          infants: 0,
+          items: [manager.create(FlightHoldItem, { orden: 0, itineraryId, vueloId: vuelo.id, seats: size, cabinClass: 'ECONOMY', fareBrand: 'LIGHT' })],
           createdAt,
           expiresAt: new Date(createdAt.getTime() + 15 * 60_000),
         }),
@@ -344,12 +375,9 @@ async function fillSeats(dataSource: DataSource, vuelo: Vuelo, ocupados: number,
           holdId: hold.holdId,
           status: 'CONFIRMED',
           ownerId: DEMO_OWNER,
-          grandTotal: total,
+          totalMinor,
           currency: 'USD',
           paymentReference: `demo_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
-          origin: vuelo.origenIATA,
-          destination: vuelo.destinoIATA,
-          departureAt: vuelo.fechaSalida,
           createdAt,
         }),
       );
@@ -399,10 +427,10 @@ export async function seedDemoScenarios(dataSource: DataSource, now: Date = new 
       const used =
         (await dataSource.getRepository(SeatAssignment).count({ where: { vueloId: vuelo.id } })) > 0 ||
         (await dataSource
-          .getRepository(FlightHold)
-          .createQueryBuilder('h')
-          .where('h."status" IN (:...states)', { states: ['HELD', 'CONSUMED'] })
-          .andWhere('h."inventory" @> :inventory::jsonb', { inventory: JSON.stringify([{ vueloId: vuelo.id }]) })
+          .getRepository(FlightHoldItem)
+          .createQueryBuilder('i')
+          .innerJoin(FlightHold, 'h', 'h."holdId" = i."holdId"')
+          .where('i."vueloId" = :vueloId AND h."status" IN (:...states)', { vueloId: vuelo.id, states: ['HELD', 'CONSUMED'] })
           .getCount()) > 0;
       if (used) continue;
 

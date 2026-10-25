@@ -8,6 +8,8 @@ import { decodeCursor, encodeCursor } from '../common/cursor.util';
 import { toIso, utcDayRange } from '../common/date.util';
 import { mapBookingUniqueViolation } from '../common/db-errors';
 import { DomainEventBus } from '../common/domain-event-bus';
+import { findHold } from '../common/hold-loader';
+import { formatMinorUnits } from '../common/money.util';
 import { PassengerBreakdown, PassengerType, countFor, PASSENGER_TYPES } from '../common/pricing.util';
 import type { ProblemDetailsBody } from '../common/problem-details.exception';
 import { ProblemDetailsException } from '../common/problem-details.exception';
@@ -16,7 +18,9 @@ import { buildTicketCode } from '../common/ticket-qr';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { BaggagePurchase } from '../entities/baggage-purchase.entity';
 import { Booking } from '../entities/booking.entity';
+import { BookingCambio } from '../entities/booking-cambio.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
+import { FlightHoldItem } from '../entities/flight-hold-item.entity';
 import { Passenger } from '../entities/passenger.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
 import { Ticket } from '../entities/ticket.entity';
@@ -127,7 +131,7 @@ export class BookingsService {
    * The caller publishes the domain event with announceConfirmed() once its transaction commits.
    */
   async createBookingWithin(manager: EntityManager, ownerId: string, request: BookingRequestDto): Promise<BookingOutcome> {
-    const hold = await manager.findOne(FlightHold, { where: { holdId: request.holdId }, lock: { mode: 'pessimistic_write' } });
+    const hold = await findHold(manager, request.holdId, { lock: true });
     if (!hold) {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'OFFER_NO_LONGER_AVAILABLE', 'Hold not found', `Hold ${request.holdId} was not found.`);
     }
@@ -169,12 +173,9 @@ export class BookingsService {
         holdId: hold.holdId,
         status: 'CONFIRMED',
         ownerId,
-        grandTotal: hold.lockedPrice,
+        totalMinor: hold.lockedPriceMinor,
         currency: hold.currency,
         paymentReference: request.payment.paymentReference,
-        origin: firstFlight.origenIATA,
-        destination: firstFlight.destinoIATA,
-        departureAt: firstFlight.fechaSalida,
       }),
     );
 
@@ -249,7 +250,7 @@ export class BookingsService {
       );
     }
 
-    return { response: this.toBookingDetail(booking, issuedTickets), holdId: hold.holdId };
+    return { response: this.toBookingDetail(booking, issuedTickets, []), holdId: hold.holdId };
   }
 
   private assertHoldUsable(hold: FlightHold): void {
@@ -351,7 +352,8 @@ export class BookingsService {
   async getBookingDetail(ownerId: string, bookingId: string): Promise<BookingDetailResponseDto> {
     const booking = await this.findOwnedBookingOrThrow(ownerId, bookingId);
     const tickets = await this.tickets.find({ where: { bookingId } });
-    return this.toBookingDetail(booking, tickets);
+    const cambios = await this.bookings.manager.find(BookingCambio, { where: { bookingId }, order: { cambiadoEn: 'ASC' } });
+    return this.toBookingDetail(booking, tickets, cambios);
   }
 
   async getBookingTickets(ownerId: string, bookingId: string): Promise<TicketResponseDto[]> {
@@ -388,15 +390,29 @@ export class BookingsService {
     const rows = await qb.orderBy('b.createdAt', 'DESC').addOrderBy('b.bookingId', 'DESC').take(limit + 1).getMany();
     const page = rows.slice(0, limit);
 
+    // The route comes from the first leg of each booking's hold (there is no copy of it on the booking).
+    const firstLegs = page.length
+      ? await this.bookings.manager
+          .createQueryBuilder(FlightHoldItem, 'i')
+          .innerJoin(Vuelo, 'v', 'v.id = i."vueloId"')
+          .select('i."holdId"', 'holdId')
+          .addSelect('v."origenIATA"', 'origin')
+          .addSelect('v."destinoIATA"', 'destination')
+          .addSelect('v."fechaSalida"', 'departure')
+          .where('i."holdId" IN (:...holdIds) AND i."orden" = 0', { holdIds: page.map((b) => b.holdId) })
+          .getRawMany<{ holdId: string; origin: string; destination: string; departure: Date }>()
+      : [];
+    const legOf = new Map(firstLegs.map((leg) => [leg.holdId, leg]));
+
     return {
       items: page.map((b) => ({
         bookingId: b.bookingId,
         pnr: b.pnr,
         status: b.status,
-        origin: b.origin,
-        destination: b.destination,
-        departureDate: toIso(b.departureAt).slice(0, 10),
-        grandTotal: { currency: b.currency, total: b.grandTotal },
+        origin: legOf.get(b.holdId)?.origin ?? '',
+        destination: legOf.get(b.holdId)?.destination ?? '',
+        departureDate: legOf.get(b.holdId) ? toIso(legOf.get(b.holdId)!.departure).slice(0, 10) : '',
+        grandTotal: { currency: b.currency, total: formatMinorUnits(b.totalMinor) },
       })),
       ...(rows.length > limit ? { nextCursor: encodeCursor(page[page.length - 1].createdAt, page[page.length - 1].bookingId) } : {}),
     };
@@ -413,23 +429,24 @@ export class BookingsService {
     return booking;
   }
 
-  private toBookingDetail(booking: Booking, tickets: Ticket[]): BookingDetailResponseDto {
+  private toBookingDetail(booking: Booking, tickets: Ticket[], cambios: BookingCambio[]): BookingDetailResponseDto {
     return {
       bookingId: booking.bookingId,
       pnr: booking.pnr,
       status: booking.status,
-      grandTotal: { currency: booking.currency, total: booking.grandTotal },
+      grandTotal: { currency: booking.currency, total: formatMinorUnits(booking.totalMinor) },
       createdAt: toIso(booking.createdAt),
       updatedAt: toIso(booking.updatedAt),
       tickets: tickets.map((t) => this.toTicketDto(t, booking.pnr)),
-      ...(booking.changes?.length ? { changes: booking.changes } : {}),
+      ...(cambios.length ? { changes: cambios.map((c) => ({ changedAt: c.cambiadoEn.toISOString(), description: c.descripcion })) } : {}),
     };
   }
 
   /** The contract detail of a booking, for operations that return it after changing it. */
   async detailOf(manager: EntityManager, booking: Booking): Promise<BookingDetailResponseDto> {
     const tickets = await manager.find(Ticket, { where: { bookingId: booking.bookingId } });
-    return this.toBookingDetail(booking, tickets);
+    const cambios = await manager.find(BookingCambio, { where: { bookingId: booking.bookingId }, order: { cambiadoEn: 'ASC' } });
+    return this.toBookingDetail(booking, tickets, cambios);
   }
 
   private toTicketDto(ticket: Ticket, pnr: string): TicketResponseDto {

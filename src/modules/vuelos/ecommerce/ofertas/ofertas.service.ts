@@ -11,7 +11,7 @@ import {
 } from '../../common/business-rules';
 import { toIso } from '../../common/date.util';
 import { DomainEventBus } from '../../common/domain-event-bus';
-import { PASSENGER_TYPES, PassengerBreakdown, countFor } from '../../common/pricing.util';
+import { PASSENGER_TYPES, PassengerBreakdown, PassengerType, countFor } from '../../common/pricing.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { seatExists, buildSeatGrid } from '../../common/seat-grid';
 import { VUELOS_CONFIG, VuelosConfig } from '../../common/vuelos-config';
@@ -39,7 +39,13 @@ import {
   RegistrarPasajerosDto,
   RevalidacionViewDto,
 } from './dto/ofertas.dto';
-import { DatosPasajeros, Oferta, PasajeroDatos, TrayectoOferta } from './entities/oferta.entity';
+import { DatosFacturacion } from '../facturacion/entities/datos-facturacion.entity';
+import { AceptacionCondiciones } from './entities/aceptacion-condiciones.entity';
+import { Oferta, PasajeroDatos, TrayectoCotizado } from './entities/oferta.entity';
+import { OfertaPasajero, OfertaPasajeroAsiento, OfertaPasajeroNecesidad } from './entities/oferta-pasajero.entity';
+import { OfertaTrayecto } from './entities/oferta-trayecto.entity';
+import { OfertaTrayectoPrecio } from './entities/oferta-trayecto-precio.entity';
+import { cargarOferta, completarOferta } from './oferta-loader';
 
 const ROUTE_ARMAR = 'POST /ofertas';
 // A purchase marked EN_PAGO longer than this is considered abandoned (crash) and may be taken over.
@@ -184,8 +190,11 @@ export class OfertasService implements OnModuleInit {
         moneda: mercado.moneda,
         ownerId,
         estado: 'ABIERTA',
-        trayectos,
-        composicion: { adultos: composicion.adults, jovenes: composicion.youths, ninos: composicion.children, infantes: composicion.infants },
+        trayectos: trayectos.map((t, orden) => this.filaTrayecto(manager, t, orden)),
+        adultos: composicion.adults,
+        jovenes: composicion.youths,
+        ninos: composicion.children,
+        infantes: composicion.infants,
         totalMinor: trayectos.reduce((sum, t) => sum + t.totalMinor, 0),
         totalPropuestoMinor: null,
         gdsOfferId: gdsOffer.offerId,
@@ -193,7 +202,7 @@ export class OfertasService implements OnModuleInit {
         venceEn: new Date(hold.expiresAt),
       }),
     );
-    return this.vista(oferta);
+    return this.vista(await completarOferta(manager, oferta));
   }
 
   async obtener(auth: AuthClaims, id: string): Promise<OfertaViewDto> {
@@ -271,12 +280,11 @@ export class OfertasService implements OnModuleInit {
       throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PRICE_CHANGED', 'The price changed again', `The current total is ${formatAmount(total, oferta.moneda)} ${oferta.moneda}, not ${dto.totalAceptado}.`);
     }
 
-    oferta.trayectos = nuevos;
-    oferta.totalMinor = total;
-    oferta.totalPropuestoMinor = null;
-    oferta.estado = 'ABIERTA';
-    oferta.revalidadaEn = new Date();
-    return this.vista(await this.ofertas.save(oferta));
+    await this.dataSource.transaction(async (manager) => {
+      await this.aplicarCotizacion(manager, oferta, nuevos);
+      await manager.update(Oferta, { ofertaId: oferta.ofertaId }, { totalMinor: total, totalPropuestoMinor: null, estado: 'ABIERTA', revalidadaEn: new Date() });
+    });
+    return this.vista((await cargarOferta(this.ofertas.manager, oferta.ofertaId))!);
   }
 
   // ---------------------------------------------------------------- checkout data (D07)
@@ -355,9 +363,13 @@ export class OfertasService implements OnModuleInit {
     // Optional seat picks: checked now so the customer hears about a problem before paying.
     await this.verificarAsientos(oferta, pasajeros);
 
-    const datos: DatosPasajeros = { pasajeros, contacto: { correo: dto.contacto.correo, telefono: dto.contacto.telefono } };
-    oferta.datosPasajeros = datos;
-    const guardada = await this.ofertas.save(oferta);
+    await this.dataSource.transaction(async (manager) => {
+      // The travellers of the offer are replaced as a whole (their needs and seats go with them).
+      await manager.delete(OfertaPasajero, { ofertaId: oferta.ofertaId });
+      await manager.save(pasajeros.map((p, orden) => this.filaPasajero(manager, oferta.ofertaId, p, orden)));
+      await manager.update(Oferta, { ofertaId: oferta.ofertaId }, { contactoCorreo: dto.contacto.correo, contactoTelefono: dto.contacto.telefono });
+    });
+    const guardada = (await cargarOferta(this.ofertas.manager, oferta.ofertaId))!;
     return { ...this.vista(guardada), ...(advertencias.length ? { advertencias } : {}) };
   }
 
@@ -449,14 +461,23 @@ export class OfertasService implements OnModuleInit {
       throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', 'Invalid tax id', `The number does not match ${regla.etiqueta}.`, [{ name: 'numeroIdentificacion', reason: `must match ${regla.etiqueta}` }]);
     }
 
-    oferta.facturacion = {
+    const datos = {
       tipoIdentificacion: dto.tipoIdentificacion,
       numeroIdentificacion: dto.numeroIdentificacion,
       razonSocial: dto.razonSocial.trim(),
       direccion: dto.direccion.trim(),
       pais: dto.pais,
     };
-    return this.vista(await this.ofertas.save(oferta));
+    await this.dataSource.transaction(async (manager) => {
+      // One billing identity per offer, edited in place; the order will point at this same row.
+      if (oferta.datosFacturacionId) {
+        await manager.update(DatosFacturacion, { datosFacturacionId: oferta.datosFacturacionId }, datos);
+      } else {
+        const creada = await manager.save(manager.create(DatosFacturacion, datos));
+        await manager.update(Oferta, { ofertaId: oferta.ofertaId }, { datosFacturacionId: creada.datosFacturacionId });
+      }
+    });
+    return this.vista((await cargarOferta(this.ofertas.manager, oferta.ofertaId))!);
   }
 
   /** RF-CHK-012: an express acceptance of the versions in force, recorded with its time. */
@@ -475,8 +496,10 @@ export class OfertasService implements OnModuleInit {
       );
     }
 
-    oferta.condicionesAceptadas = { terminos: terminos.version, condicionesTransporte: condicionesTransporte.version, aceptadoEn: new Date().toISOString() };
-    return this.vista(await this.ofertas.save(oferta));
+    await this.ofertas.manager.save(
+      this.ofertas.manager.create(AceptacionCondiciones, { ofertaId: oferta.ofertaId, terminos: terminos.version, condicionesTransporte: condicionesTransporte.version, aceptadoEn: new Date() }),
+    );
+    return this.vista((await cargarOferta(this.ofertas.manager, oferta.ofertaId))!);
   }
 
   /** RF-PAY-001: the methods depend on the market, currency and product (a ticket, here). */
@@ -496,7 +519,7 @@ export class OfertasService implements OnModuleInit {
    */
   async bloquearParaPago(auth: AuthClaims, ofertaId: string): Promise<Oferta> {
     return this.dataSource.transaction(async (manager) => {
-      const oferta = await manager.findOne(Oferta, { where: { ofertaId }, lock: { mode: 'pessimistic_write' } });
+      const oferta = await cargarOferta(manager, ofertaId, { lock: true });
       if (!oferta) throw notFound(ofertaId);
       this.exigirPropietario(oferta, auth);
 
@@ -526,7 +549,8 @@ export class OfertasService implements OnModuleInit {
 
       oferta.estado = 'EN_PAGO';
       oferta.enPagoDesde = new Date();
-      return manager.save(oferta);
+      await manager.update(Oferta, { ofertaId }, { estado: 'EN_PAGO', enPagoDesde: oferta.enPagoDesde });
+      return oferta;
     });
   }
 
@@ -620,7 +644,7 @@ export class OfertasService implements OnModuleInit {
 
   /** Loads an offer the caller owns, expiring it first if its time ran out (RF-CRT-005). */
   async cargarVigente(auth: AuthClaims, id: string): Promise<Oferta> {
-    const oferta = await this.ofertas.findOne({ where: { ofertaId: id } });
+    const oferta = await cargarOferta(this.ofertas.manager, id);
     if (!oferta) throw notFound(id);
     this.exigirPropietario(oferta, auth);
 
@@ -656,32 +680,72 @@ export class OfertasService implements OnModuleInit {
     }
   }
 
-  private armarTrayecto(vuelo: Vuelo, familia: FareFamily, gdsItinerarioId: string, composicion: PassengerBreakdown, mercado: Mercado): TrayectoOferta {
+  private armarTrayecto(vuelo: Vuelo, familia: FareFamily, gdsItinerarioId: string, composicion: PassengerBreakdown, mercado: Mercado): TrayectoCotizado {
     const cotizacion = this.precios.cotizar(vuelo, familia, composicion, mercado);
     return {
       itinerarioId: vuelo.id,
       gdsItinerarioId,
       familia: familia.code,
-      numeroVuelo: vuelo.codigoVuelo,
-      operadorCodigo: vuelo.codigoAerolinea,
-      operadorNombre: vuelo.aerolinea,
-      origen: vuelo.origenIATA,
-      destino: vuelo.destinoIATA,
-      salida: toIso(vuelo.fechaSalida),
-      llegada: toIso(vuelo.fechaLlegada),
-      duracionMinutos: vuelo.durationMinutes,
       unitarios: cotizacion.unitarios,
       totalMinor: cotizacion.totalMinor,
     };
   }
 
+  /** A quoted leg as its row, with one price row per passenger type. */
+  private filaTrayecto(manager: EntityManager, t: TrayectoCotizado, orden: number): OfertaTrayecto {
+    return manager.create(OfertaTrayecto, {
+      orden,
+      vueloId: t.itinerarioId,
+      gdsItinerarioId: t.gdsItinerarioId,
+      familia: t.familia,
+      totalMinor: t.totalMinor,
+      precios: (Object.entries(t.unitarios) as [PassengerType, { baseMinor: number; tasasMinor: number }][]).map(([tipoPasajero, u]) =>
+        manager.create(OfertaTrayectoPrecio, { tipoPasajero, baseMinor: u.baseMinor, tasasMinor: u.tasasMinor }),
+      ),
+    });
+  }
+
+  /** Writes a fresh quote over the legs the offer already has (same flights and fares, new prices). */
+  private async aplicarCotizacion(manager: EntityManager, oferta: Oferta, nuevos: TrayectoCotizado[]): Promise<void> {
+    for (const nuevo of nuevos) {
+      const fila = oferta.trayectos.find((t) => t.vueloId === nuevo.itinerarioId)!;
+      await manager.update(OfertaTrayecto, { id: fila.id }, { totalMinor: nuevo.totalMinor });
+      await manager.delete(OfertaTrayectoPrecio, { trayectoId: fila.id });
+      for (const [tipoPasajero, u] of Object.entries(nuevo.unitarios) as [PassengerType, { baseMinor: number; tasasMinor: number }][]) {
+        await manager.save(manager.create(OfertaTrayectoPrecio, { trayectoId: fila.id, tipoPasajero, baseMinor: u.baseMinor, tasasMinor: u.tasasMinor }));
+      }
+    }
+  }
+
+  /** A traveller as its row, with its special needs and chosen seats. */
+  private filaPasajero(manager: EntityManager, ofertaId: string, p: PasajeroDatos, orden: number): OfertaPasajero {
+    return manager.create(OfertaPasajero, {
+      ofertaId,
+      orden,
+      idCliente: p.id,
+      tipo: p.tipo,
+      asociadoA: p.asociadoA ?? null,
+      nombres: p.nombres,
+      apellidos: p.apellidos,
+      fechaNacimiento: p.fechaNacimiento,
+      genero: p.genero,
+      nacionalidad: p.nacionalidad,
+      documentoTipo: p.documento.tipo,
+      documentoNumero: p.documento.numero,
+      documentoVencimiento: p.documento.vencimiento ?? null,
+      numeroSocio: p.numeroSocio ?? null,
+      necesidades: [...new Set(p.necesidades ?? [])].map((necesidad) => manager.create(OfertaPasajeroNecesidad, { necesidad })),
+      asientos: (p.asientos ?? []).map((a) => manager.create(OfertaPasajeroAsiento, { vueloId: a.trayectoId, asiento: a.asiento })),
+    });
+  }
+
   /** Prices the offer again from the live flights and fare families; null when a flight is gone or has left. */
-  async recotizar(oferta: Oferta, mercado: Mercado): Promise<TrayectoOferta[] | null> {
+  async recotizar(oferta: Oferta, mercado: Mercado): Promise<TrayectoCotizado[] | null> {
     const composicion = toGds(oferta.composicion);
     const vuelos = await this.vuelos.find({ where: { id: In(oferta.trayectos.map((t) => t.itinerarioId)) } });
     const familias = await this.familias.find({ where: { code: In(oferta.trayectos.map((t) => t.familia)) } });
 
-    const nuevos: TrayectoOferta[] = [];
+    const nuevos: TrayectoCotizado[] = [];
     for (const trayecto of oferta.trayectos) {
       const vuelo = vuelos.find((v) => v.id === trayecto.itinerarioId);
       const familia = familias.find((f) => f.code === trayecto.familia);

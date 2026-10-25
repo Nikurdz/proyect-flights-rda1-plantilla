@@ -1,4 +1,9 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn, ValueTransformer } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { bigintNumber } from '../../../common/bigint.transformer';
+import { Mercado } from '../../mercados/entities/mercado.entity';
+import { Oferta } from '../../ofertas/entities/oferta.entity';
+import { Orden } from '../../ordenes/entities/orden.entity';
+import { PagoAntifraudeMotivo } from './pago-antifraude-motivo.entity';
 
 export type EstadoPago =
   | 'PENDIENTE'
@@ -15,23 +20,11 @@ export type EstadoPago =
   // The refund is owed but the gateway failed: retried by the reconciler.
   | 'REEMBOLSO_PENDIENTE';
 
-export interface MedioPagoUsado {
-  tipo: 'TARJETA';
-  marca: string;
-  /** Last four digits as returned by the gateway; the card number itself never reaches us (RN-18). */
-  ultimos4: string | null;
-}
-
 export interface ResultadoAntifraude {
   veredicto: 'APROBAR' | 'REVISAR' | 'RECHAZAR';
   puntaje: number;
   motivos: string[];
 }
-
-const bigintNumber: ValueTransformer = {
-  to: (value: number | null | undefined) => value,
-  from: (value: string | null | undefined) => (value === null || value === undefined ? value : Number(value)),
-};
 
 /** One payment attempt. A declined or fraud-rejected attempt is kept: it is the audit trail. */
 @Entity('ecom_pagos')
@@ -44,15 +37,27 @@ export class Pago {
   @Column({ type: 'uuid' })
   ofertaId: string;
 
+  @ManyToOne(() => Oferta, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'ofertaId' })
+  oferta?: Oferta;
+
   // Filled once the order exists, so a payment can be traced to its order and back.
   @Column({ type: 'uuid', nullable: true })
   ordenId: string | null;
+
+  @ManyToOne(() => Orden, { onDelete: 'RESTRICT', nullable: true })
+  @JoinColumn({ name: 'ordenId' })
+  orden?: Orden | null;
 
   @Column({ type: 'varchar', length: 100 })
   ownerId: string;
 
   @Column({ type: 'varchar', length: 5 })
   mercado: string;
+
+  @ManyToOne(() => Mercado, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'mercado' })
+  mercadoRef?: Mercado;
 
   @Column({ type: 'char', length: 3 })
   moneda: string;
@@ -64,8 +69,12 @@ export class Pago {
   @Column({ type: 'bigint', nullable: true, transformer: bigintNumber })
   reembolsoMinor: number | null;
 
-  @Column({ type: 'jsonb' })
-  medio: MedioPagoUsado;
+  // The card brand and, once the gateway answers, the last four digits (the card number never reaches us, RN-18).
+  @Column({ type: 'varchar', length: 20 })
+  marca: string;
+
+  @Column({ type: 'char', length: 4, nullable: true })
+  ultimos4: string | null;
 
   @Column({ type: 'int', default: 1 })
   cuotas: number;
@@ -80,8 +89,15 @@ export class Pago {
   @Column({ type: 'varchar', length: 50, nullable: true })
   codigoRechazo: string | null;
 
-  @Column({ type: 'jsonb', nullable: true })
-  antifraude: ResultadoAntifraude | null;
+  // The fraud engine answer: verdict and score here, the reasons one per row in `motivosAntifraude`.
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  antifraudeVeredicto: ResultadoAntifraude['veredicto'] | null;
+
+  @Column({ type: 'int', nullable: true })
+  antifraudePuntaje: number | null;
+
+  @OneToMany(() => PagoAntifraudeMotivo, (m) => m.pago, { cascade: true })
+  motivosAntifraude?: PagoAntifraudeMotivo[];
 
   // RF-PAY-008: the Idempotency-Key of the purchase that created this attempt.
   @Column({ type: 'varchar', length: 100 })

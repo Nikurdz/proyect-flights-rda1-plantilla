@@ -1,4 +1,6 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
+import { Booking } from './booking.entity';
+import { Vuelo } from './vuelo.entity';
 
 export type ChangeOfferStatus = 'OPEN' | 'USED';
 
@@ -17,6 +19,10 @@ export class DateChangeOffer {
   @Column({ type: 'uuid' })
   bookingId: string;
 
+  @ManyToOne(() => Booking, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'bookingId' })
+  booking?: Relation<Booking>;
+
   @Column({ type: 'varchar', length: 100 })
   ownerId: string;
 
@@ -27,8 +33,16 @@ export class DateChangeOffer {
   @Column({ type: 'uuid' })
   fromVueloId: string;
 
+  @ManyToOne(() => Vuelo, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'fromVueloId' })
+  fromVuelo?: Relation<Vuelo>;
+
   @Column({ type: 'uuid' })
   toVueloId: string;
+
+  @ManyToOne(() => Vuelo, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'toVueloId' })
+  toVuelo?: Relation<Vuelo>;
 
   @Column({ type: 'int' })
   fareDifferenceMinor: number;

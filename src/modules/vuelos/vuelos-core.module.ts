@@ -12,7 +12,10 @@ import { CancellationQuote } from './entities/cancellation-quote.entity';
 import { CheckIn } from './entities/check-in.entity';
 import { DateChangeOffer } from './entities/date-change-offer.entity';
 import { FareFamily } from './entities/fare-family.entity';
+import { BookingCambio } from './entities/booking-cambio.entity';
 import { FlightHold } from './entities/flight-hold.entity';
+import { FlightHoldItem } from './entities/flight-hold-item.entity';
+import { FlightOfferItinerary } from './entities/flight-offer-itinerary.entity';
 import { FlightOffer } from './entities/flight-offer.entity';
 import { IdempotencyRecord } from './entities/idempotency-record.entity';
 import { Passenger } from './entities/passenger.entity';
@@ -20,7 +23,8 @@ import { SeatAssignment } from './entities/seat-assignment.entity';
 import { Ticket } from './entities/ticket.entity';
 import { Vuelo } from './entities/vuelo.entity';
 import { WebhookDelivery } from './entities/webhook-delivery.entity';
-import { WebhookSubscription } from './entities/webhook-subscription.entity';
+import { Aerolinea } from './entities/aerolinea.entity';
+import { WebhookSubscription, WebhookSubscriptionEvent } from './entities/webhook-subscription.entity';
 import { BaggageService } from './services/baggage.service';
 import { BookingContextService } from './services/booking-context.service';
 import { BookingsService } from './services/bookings.service';
@@ -48,8 +52,11 @@ import { WebhooksService } from './services/webhooks.service';
       Vuelo,
       FareFamily,
       FlightOffer,
+      FlightOfferItinerary,
       FlightHold,
+      FlightHoldItem,
       Booking,
+      BookingCambio,
       Passenger,
       Ticket,
       SeatAssignment,
@@ -59,6 +66,8 @@ import { WebhooksService } from './services/webhooks.service';
       CancellationQuote,
       CheckIn,
       WebhookSubscription,
+      WebhookSubscriptionEvent,
+      Aerolinea,
       WebhookDelivery,
     ]),
   ],

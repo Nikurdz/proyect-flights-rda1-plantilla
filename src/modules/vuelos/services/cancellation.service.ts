@@ -109,7 +109,7 @@ export class CancellationService {
     const refunded = amounts.refundMinor > 0;
 
     booking.status = 'CANCELLED';
-    this.context.addChange(booking, `Reserva cancelada (${reason}). Reembolso ${formatMinorUnits(amounts.refundMinor)} ${booking.currency}, penalidad ${formatMinorUnits(amounts.penaltyMinor)} ${booking.currency}.`);
+    await this.context.addChange(manager, booking, `Reserva cancelada (${reason}). Reembolso ${formatMinorUnits(amounts.refundMinor)} ${booking.currency}, penalidad ${formatMinorUnits(amounts.penaltyMinor)} ${booking.currency}.`);
     await manager.save(booking);
 
     await manager.update(Ticket, { bookingId: booking.bookingId }, { status: refunded ? 'REFUNDED' : 'VOIDED' });
@@ -152,7 +152,7 @@ export class CancellationService {
       );
     const purchases = await manager.find(BaggagePurchase, { where: { bookingId: context.booking.bookingId } });
     return cancellationAmounts({
-      fareTotalMinor: toMinorUnits(context.booking.grandTotal),
+      fareTotalMinor: context.booking.totalMinor,
       taxesMinor,
       baggageMinor: purchases.reduce((sum, p) => sum + p.totalMinor, 0),
       // When the airline is the one cancelling, even a non-refundable fare goes back in full.

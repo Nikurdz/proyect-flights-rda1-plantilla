@@ -4,6 +4,7 @@ import { CatalogoModule } from './catalogo/catalogo.module';
 import { IdentidadModule } from './identidad/identidad.module';
 import { MercadosModule } from './mercados/mercados.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
+import { ObservabilidadModule } from './observabilidad/observabilidad.module';
 import { OfertasModule } from './ofertas/ofertas.module';
 import { OrdenesModule } from './ordenes/ordenes.module';
 import { PagosModule } from './pagos/pagos.module';
@@ -15,6 +16,6 @@ import { PagosModule } from './pagos/pagos.module';
  * module in app.module.ts — and it sells from the flight core's inventory in-process.
  */
 @Module({
-  imports: [MercadosModule, IdentidadModule, CatalogoModule, OfertasModule, PagosModule, OrdenesModule, NotificacionesModule, AdminModule],
+  imports: [MercadosModule, IdentidadModule, CatalogoModule, OfertasModule, PagosModule, OrdenesModule, NotificacionesModule, ObservabilidadModule, AdminModule],
 })
 export class EcommerceModule {}

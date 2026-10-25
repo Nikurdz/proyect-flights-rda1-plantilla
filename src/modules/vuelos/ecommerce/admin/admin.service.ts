@@ -10,7 +10,7 @@ import { buildSeatGrid } from '../../common/seat-grid';
 import { BookingContextService } from '../../services/booking-context.service';
 import { CancellationService } from '../../services/cancellation.service';
 import { Booking } from '../../entities/booking.entity';
-import { FlightHold } from '../../entities/flight-hold.entity';
+import { FlightHoldItem } from '../../entities/flight-hold-item.entity';
 import { SeatAssignment } from '../../entities/seat-assignment.entity';
 import { Vuelo } from '../../entities/vuelo.entity';
 import { Orden } from '../ordenes/entities/orden.entity';
@@ -51,7 +51,7 @@ export class AdminService {
     const rows = await qb.orderBy('o."creadaEn"', 'DESC').addOrderBy('o."ordenId"', 'DESC').take(limit + 1).getMany();
     const page = rows.slice(0, limit);
     return {
-      items: page.map((orden) => this.vistaAdmin(orden)),
+      items: await this.vistasAdmin(page),
       ...(rows.length > limit ? { nextCursor: encodeCursor(page[page.length - 1].creadaEn, page[page.length - 1].ordenId) } : {}),
     };
   }
@@ -59,12 +59,12 @@ export class AdminService {
   async obtenerOrden(numeroOrden: string): Promise<AdminOrdenViewDto> {
     const orden = await this.ordenes.findOne({ where: { numeroOrden } });
     if (!orden) throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'ORDER_NOT_FOUND', 'Order not found', `No order ${numeroOrden}.`);
-    return this.vistaAdmin(orden);
+    return (await this.vistasAdmin([orden]))[0];
   }
 
   async listarVuelos(query: AdminVuelosQueryDto): Promise<AdminVuelosPaginaDto> {
     const limit = query.limit ?? 25;
-    const qb = this.vuelos.createQueryBuilder('v');
+    const qb = this.vuelos.createQueryBuilder('v').leftJoinAndSelect('v.aerolineaRef', 'a');
     if (query.origen) qb.andWhere('v."origenIATA" = :origen', { origen: query.origen });
     if (query.destino) qb.andWhere('v."destinoIATA" = :destino', { destino: query.destino });
     if (query.vuelo) qb.andWhere('v."codigoVuelo" = :vuelo', { vuelo: query.vuelo });
@@ -79,7 +79,7 @@ export class AdminService {
       qb.andWhere('(v."fechaSalida", v."id") > (:cursorAt, :cursorId)', { cursorAt: createdAt, cursorId: id });
     }
 
-    const rows = await qb.orderBy('v."fechaSalida"', 'ASC').addOrderBy('v."id"', 'ASC').take(limit + 1).getMany();
+    const rows = await qb.orderBy('v.fechaSalida', 'ASC').addOrderBy('v.id', 'ASC').take(limit + 1).getMany();
     const page = rows.slice(0, limit);
     const reservados = await this.contarAsientosReservados(page.map((v) => v.id));
     return {
@@ -210,11 +210,7 @@ export class AdminService {
           const context = await this.contexto.complete(manager, booking);
           const leg = context.legs.find((l) => l.vueloId === vueloId)!;
           leg.vuelo = vuelo;
-          const first = context.legs.reduce((x, y) => (new Date(x.vuelo.fechaSalida).getTime() <= new Date(y.vuelo.fechaSalida).getTime() ? x : y));
-          booking.origin = first.vuelo.origenIATA;
-          booking.destination = first.vuelo.destinoIATA;
-          booking.departureAt = first.vuelo.fechaSalida;
-          this.contexto.addChange(booking, `Vuelo ${vuelo.codigoVuelo} reprogramado por la aerolínea: salida ${anterior.toISOString()} -> ${nuevaSalida.toISOString()}${request.motivo ? ` (${request.motivo})` : ''}.`);
+          await this.contexto.addChange(manager, booking, `Vuelo ${vuelo.codigoVuelo} reprogramado por la aerolínea: salida ${anterior.toISOString()} -> ${nuevaSalida.toISOString()}${request.motivo ? ` (${request.motivo})` : ''}.`);
           await manager.save(booking);
           events.push({
             bookingId: booking.bookingId,
@@ -251,7 +247,8 @@ export class AdminService {
 
   /** The flight, locked, only if it can still be cancelled or moved (it exists, has not left, is not already cancelled). */
   private async vueloAccionable(repo: Repository<Vuelo>, vueloId: string, lock: boolean): Promise<Vuelo> {
-    const vuelo = await repo.findOne({ where: { id: vueloId }, ...(lock ? { lock: { mode: 'pessimistic_write' as const } } : {}) });
+    // A locked read cannot carry the eager airline join; the callers here never use the airline name.
+    const vuelo = await repo.findOne({ where: { id: vueloId }, ...(lock ? { lock: { mode: 'pessimistic_write' as const }, loadEagerRelations: false } : {}) });
     if (!vuelo) throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'NOT_FOUND', 'Flight not found', `No flight ${vueloId}.`);
     if (vuelo.estado === 'CANCELLED') throw new ProblemDetailsException(HttpStatus.CONFLICT, 'ALREADY_CANCELLED', 'Flight already cancelled', `Flight ${vuelo.codigoVuelo} is already cancelled.`);
     if (new Date(vuelo.fechaSalida).getTime() <= Date.now()) {
@@ -265,10 +262,10 @@ export class AdminService {
     // A query builder, not raw SQL: it resolves the table names (and schema) from the entities.
     const rows: { bookingId: string }[] = await manager
       .createQueryBuilder(Booking, 'b')
-      .innerJoin(FlightHold, 'h', 'h."holdId" = b."holdId"')
+      .innerJoin(FlightHoldItem, 'i', 'i."holdId" = b."holdId"')
       .select('b."bookingId"', 'bookingId')
       .where("b.\"status\" = 'CONFIRMED'")
-      .andWhere('h."inventory" @> :inventory::jsonb', { inventory: JSON.stringify([{ vueloId }]) })
+      .andWhere('i."vueloId" = :vueloId', { vueloId })
       .orderBy('b."bookingId"')
       .getRawMany();
     const bookings: Booking[] = [];
@@ -279,12 +276,13 @@ export class AdminService {
     return bookings;
   }
 
-  private vistaAdmin(orden: Orden): AdminOrdenViewDto {
-    return {
-      ...this.ordenesService.vista(orden),
+  private async vistasAdmin(ordenes: Orden[]): Promise<AdminOrdenViewDto[]> {
+    const vistas = await this.ordenesService.vistas(ordenes);
+    return ordenes.map((orden, i) => ({
+      ...vistas[i],
       clienteId: orden.clienteId,
       comprador: orden.clienteId ? 'cliente' : 'invitado',
       canal: orden.canal,
-    };
+    }));
   }
 }

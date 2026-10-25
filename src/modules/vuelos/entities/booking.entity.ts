@@ -1,4 +1,7 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { bigintNumber } from '../common/bigint.transformer';
+import { BookingCambio } from './booking-cambio.entity';
+import { FlightHold } from './flight-hold.entity';
 
 export type BookingStatus =
   | 'PENDING'
@@ -31,8 +34,13 @@ export class Booking {
   @Column({ type: 'varchar', length: 6, unique: true })
   pnr: string;
 
-  @Column({ type: 'uuid' })
+  // The hold this booking consumed: it also holds the booking's legs (flights, fares, seats), so the route is not copied here.
+  @Column({ type: 'uuid', unique: true })
   holdId: string;
+
+  @OneToOne(() => FlightHold, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'holdId' })
+  hold?: FlightHold;
 
   @Column({ type: 'varchar', length: 30, default: 'PENDING' })
   status: BookingStatus;
@@ -41,8 +49,8 @@ export class Booking {
   @Column({ type: 'varchar', length: 100 })
   ownerId: string;
 
-  @Column({ type: 'varchar', length: 20 })
-  grandTotal: string;
+  @Column({ type: 'bigint', transformer: bigintNumber })
+  totalMinor: number;
 
   @Column({ type: 'varchar', length: 3 })
   currency: string;
@@ -51,16 +59,6 @@ export class Booking {
   @Column({ type: 'varchar', length: 100, unique: true })
   paymentReference: string;
 
-  // Denormalised from the first flight so listings need no joins.
-  @Column({ type: 'char', length: 3 })
-  origin: string;
-
-  @Column({ type: 'char', length: 3 })
-  destination: string;
-
-  @Column({ type: 'timestamptz' })
-  departureAt: Date;
-
   // Millisecond precision so the (createdAt, bookingId) pagination cursor round-trips exactly.
   @CreateDateColumn({ type: 'timestamp', precision: 3 })
   createdAt: Date;
@@ -68,7 +66,7 @@ export class Booking {
   @UpdateDateColumn({ type: 'timestamp', precision: 3 })
   updatedAt: Date;
 
-  // History shown in BookingDetail.changes (date changes, flight reschedules, cancellation); null until the first one.
-  @Column({ type: 'jsonb', nullable: true })
-  changes: { changedAt: string; description: string }[] | null;
+  // History shown in BookingDetail.changes (date changes, flight reschedules, cancellation), one row per change.
+  @OneToMany(() => BookingCambio, (cambio) => cambio.booking, { cascade: true })
+  cambios?: BookingCambio[];
 }

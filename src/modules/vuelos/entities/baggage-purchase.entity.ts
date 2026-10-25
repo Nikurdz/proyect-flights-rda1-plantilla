@@ -1,4 +1,7 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
+import { Booking } from './booking.entity';
+import { Passenger } from './passenger.entity';
+import { Vuelo } from './vuelo.entity';
 
 /**
  * Extra checked bags bought for one passenger on one leg of a booking, at booking time or afterwards.
@@ -15,14 +18,26 @@ export class BaggagePurchase {
   @Column({ type: 'uuid' })
   bookingId: string;
 
+  @ManyToOne(() => Booking, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'bookingId' })
+  booking?: Relation<Booking>;
+
   @Column({ type: 'uuid' })
   passengerId: string;
+
+  @ManyToOne(() => Passenger, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'passengerId' })
+  passenger?: Relation<Passenger>;
 
   @Column({ type: 'uuid' })
   itineraryId: string;
 
   @Column({ type: 'uuid' })
   vueloId: string;
+
+  @ManyToOne(() => Vuelo, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'vueloId' })
+  vuelo?: Relation<Vuelo>;
 
   @Column({ type: 'int' })
   quantity: number;

@@ -9,6 +9,21 @@ const storage = new AsyncLocalStorage<{ correlationId: string }>();
 
 export const CORRELATION_HEADER = 'x-correlation-id';
 
+export interface HttpRequestRecord {
+  metodo: string;
+  ruta: string;
+  estado: number;
+  duracionMs: number;
+  correlationId: string;
+}
+
+// Where the finished requests go (the bounded request log); none until the observability module registers one.
+let httpRequestSink: ((record: HttpRequestRecord) => void) | null = null;
+
+export function setHttpRequestSink(sink: ((record: HttpRequestRecord) => void) | null): void {
+  httpRequestSink = sink;
+}
+
 export function currentCorrelationId(): string {
   return storage.getStore()?.correlationId ?? 'no-correlation';
 }
@@ -51,11 +66,13 @@ export class CorrelationInterceptor implements NestInterceptor {
           error: (error: unknown) => {
             const status = error instanceof HttpException ? error.getStatus() : 500;
             runtimeMetrics.recordRequest(request.method, routeLabel(request), status, Date.now() - startedAt);
+            httpRequestSink?.({ metodo: request.method, ruta: routeLabel(request), estado: status, duracionMs: Date.now() - startedAt, correlationId });
             this.logger.warn(`${request.method} ${request.path} failed in ${Date.now() - startedAt}ms [${correlationId}]`);
             subscriber.error(error);
           },
           complete: () => {
             runtimeMetrics.recordRequest(request.method, routeLabel(request), response.statusCode, Date.now() - startedAt);
+            httpRequestSink?.({ metodo: request.method, ruta: routeLabel(request), estado: response.statusCode, duracionMs: Date.now() - startedAt, correlationId });
             this.logger.log(`${request.method} ${request.path} ${response.statusCode} ${Date.now() - startedAt}ms [${correlationId}]`);
             subscriber.complete();
           },

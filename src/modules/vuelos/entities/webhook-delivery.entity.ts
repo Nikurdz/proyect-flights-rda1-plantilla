@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation, Unique } from 'typeorm';
+import { WebhookSubscription } from './webhook-subscription.entity';
 
 export type WebhookDeliveryStatus = 'PENDING' | 'DELIVERED' | 'DEAD';
 
@@ -16,6 +17,10 @@ export class WebhookDelivery {
 
   @Column({ type: 'uuid' })
   subscriptionId: string;
+
+  @ManyToOne(() => WebhookSubscription, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'subscriptionId' })
+  subscription?: Relation<WebhookSubscription>;
 
   @Column({ type: 'uuid' })
   eventId: string;

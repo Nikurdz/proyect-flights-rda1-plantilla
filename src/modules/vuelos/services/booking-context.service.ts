@@ -1,8 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { EntityManager, In } from 'typeorm';
+import { findHold } from '../common/hold-loader';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { BaggagePurchase } from '../entities/baggage-purchase.entity';
 import { Booking } from '../entities/booking.entity';
+import { BookingCambio } from '../entities/booking-cambio.entity';
 import { DateChangeOffer } from '../entities/date-change-offer.entity';
 import { FareFamily } from '../entities/fare-family.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
@@ -47,7 +49,8 @@ export class BookingContextService {
 
   /** Same data for a booking already loaded (the admin acts on bookings of any owner). */
   async complete(manager: EntityManager, booking: Booking): Promise<BookingContext> {
-    const hold = await manager.findOneOrFail(FlightHold, { where: { holdId: booking.holdId } });
+    const hold = await findHold(manager, booking.holdId);
+    if (!hold) throw new Error(`Booking ${booking.bookingId} has no hold ${booking.holdId}`);
     const vuelos = await manager.find(Vuelo, { where: { id: In(hold.inventory.map((i) => i.vueloId)) } });
     const families = await manager.find(FareFamily, { where: { code: In(hold.itinerarySelections.map((s) => s.fareBrand)) } });
     const legs = hold.itinerarySelections.map((selection, index) => {
@@ -112,7 +115,7 @@ export class BookingContextService {
   }
 
   /** Appends a line to the booking history shown as BookingDetail.changes. */
-  addChange(booking: Booking, description: string): void {
-    booking.changes = [...(booking.changes ?? []), { changedAt: new Date().toISOString(), description }];
+  async addChange(manager: EntityManager, booking: Booking, description: string): Promise<void> {
+    await manager.save(manager.create(BookingCambio, { bookingId: booking.bookingId, cambiadoEn: new Date(), descripcion: description.slice(0, 500) }));
   }
 }

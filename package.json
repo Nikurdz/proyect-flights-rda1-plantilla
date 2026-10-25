@@ -25,7 +25,8 @@
     "start:render": "npm run migration:run:vuelos:prod && npm run seed:vuelos:prod && npm run start:prod",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "test:cov": "jest --coverage",
+    "docs:modelo": "ts-node scripts/export-modelo-datos.ts"
   },
   "jest": {
     "moduleFileExtensions": [

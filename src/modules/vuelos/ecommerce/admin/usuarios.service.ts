@@ -3,6 +3,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { toIso } from '../../common/date.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
+import { ClienteRol } from '../identidad/entities/cliente-rol.entity';
 import { Cliente } from '../identidad/entities/cliente.entity';
 import { IdentidadService } from '../identidad/identidad.service';
 import { AuditoriaCambio } from '../mercados/entities/auditoria-cambio.entity';
@@ -37,14 +38,19 @@ export class UsuariosService {
   async listar(query: AdminUsuariosQueryDto): Promise<AdminUsuariosPaginaDto> {
     const pagina = query.pagina ?? 1;
     const limite = query.limite ?? 25;
-    const qb = this.clientes.createQueryBuilder('c');
+    const qb = this.clientes.createQueryBuilder('c').leftJoinAndSelect('c.rolesRef', 'r');
     if (query.q) {
       qb.andWhere('(c."correo" ILIKE :q OR c."nombres" ILIKE :q OR c."apellidos" ILIKE :q)', { q: `%${query.q.replace(/[%_\\]/g, (m) => `\\${m}`)}%` });
     }
-    if (query.rol) qb.andWhere(':rol = ANY(c."roles")', { rol: query.rol });
+    if (query.rol) {
+      qb.andWhere((sub) => {
+        const tiene = sub.subQuery().select('1').from(ClienteRol, 'cr').where('cr.clienteId = c.clienteId').andWhere('cr.rol = :rol').getQuery();
+        return `EXISTS ${tiene}`;
+      }).setParameter('rol', query.rol);
+    }
     const [rows, total] = await qb
-      .orderBy('c."creadoEn"', 'DESC')
-      .addOrderBy('c."clienteId"', 'ASC')
+      .orderBy('c.creadoEn', 'DESC')
+      .addOrderBy('c.clienteId', 'ASC')
       .skip((pagina - 1) * limite)
       .take(limite)
       .getManyAndCount();
@@ -66,8 +72,10 @@ export class UsuariosService {
   async cambiarRoles(actorId: string, clienteId: string, dto: AdminCambiarRolesDto): Promise<AdminUsuarioViewDto> {
     const nuevos = normalizarRoles(dto.roles);
     const guardado = await this.dataSource.transaction(async (manager) => {
-      const cliente = await manager.findOne(Cliente, { where: { clienteId }, lock: { mode: 'pessimistic_write' } });
+      // Locked without its roles (a lock cannot apply to the outer side of a join); they are read right after.
+      const cliente = await manager.findOne(Cliente, { where: { clienteId }, lock: { mode: 'pessimistic_write' }, loadEagerRelations: false });
       if (!cliente) throw this.noEncontrado(clienteId);
+      cliente.rolesRef = await manager.find(ClienteRol, { where: { clienteId } });
 
       const eraAdmin = cliente.roles.includes('ADMIN');
       const seraAdmin = nuevos.includes('ADMIN');
@@ -76,7 +84,7 @@ export class UsuariosService {
           throw new ProblemDetailsException(HttpStatus.CONFLICT, 'LAST_ADMIN', 'You cannot remove your own admin role', 'Ask another administrator to change your role.');
         }
         // Counted under lock so two administrators demoting each other at once cannot leave nobody in charge.
-        const admins = await manager.createQueryBuilder(Cliente, 'c').select('c.clienteId').setLock('pessimistic_write').where("'ADMIN' = ANY(c.\"roles\")").getMany();
+        const admins = await manager.createQueryBuilder(ClienteRol, 'r').setLock('pessimistic_write').where('r.rol = :rol', { rol: 'ADMIN' }).orderBy('r.clienteId').getMany();
         if (admins.length <= 1) {
           throw new ProblemDetailsException(HttpStatus.CONFLICT, 'LAST_ADMIN', 'The last administrator cannot be demoted', 'There must always be at least one administrator.');
         }
@@ -84,8 +92,8 @@ export class UsuariosService {
 
       const antes = { roles: cliente.roles };
       if (cliente.roles.join() !== nuevos.join()) {
-        cliente.roles = nuevos;
-        await manager.save(cliente);
+        await manager.delete(ClienteRol, { clienteId });
+        cliente.rolesRef = await manager.save(nuevos.map((rol) => manager.create(ClienteRol, { clienteId, rol })));
         await this.auditar(manager, actorId, cliente.clienteId, seraAdmin && !eraAdmin ? 'ASCENDER' : eraAdmin && !seraAdmin ? 'DEGRADAR' : 'ACTUALIZAR_ROLES', antes, { roles: cliente.roles });
       }
       return cliente;

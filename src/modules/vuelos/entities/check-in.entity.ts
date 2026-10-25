@@ -1,4 +1,7 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation, Unique } from 'typeorm';
+import { Booking } from './booking.entity';
+import { Passenger } from './passenger.entity';
+import { Vuelo } from './vuelo.entity';
 
 /**
  * One passenger checked in on one flight. A lap infant has a row with no seat. The boarding position is the
@@ -15,11 +18,23 @@ export class CheckIn {
   @Column({ type: 'uuid' })
   bookingId: string;
 
+  @ManyToOne(() => Booking, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'bookingId' })
+  booking?: Relation<Booking>;
+
   @Column({ type: 'uuid' })
   passengerId: string;
 
+  @ManyToOne(() => Passenger, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'passengerId' })
+  passenger?: Relation<Passenger>;
+
   @Column({ type: 'uuid' })
   vueloId: string;
+
+  @ManyToOne(() => Vuelo, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'vueloId' })
+  vuelo?: Relation<Vuelo>;
 
   @Column({ type: 'varchar', length: 4, nullable: true })
   seat: string | null;
