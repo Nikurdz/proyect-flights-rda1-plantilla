@@ -13,3 +13,18 @@ export function dbSsl(env: NodeJS.ProcessEnv = process.env): TlsOptions | undefi
   const ca = env.DB_SSL_CA?.replace(/\\n/g, '\n');
   return ca ? { ca, rejectUnauthorized: true } : undefined;
 }
+
+/**
+ * The connection URL to hand to the driver. TypeORM passes the whole URL to `pg`, and `pg` lets `sslmode` in it win over
+ * the `ssl` option, so with a configured CA the `sslmode` parameter is dropped: the CA settings decide.
+ */
+export function dbUrl(url: string | undefined, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  if (!url || !env.DB_SSL_CA) return url;
+  try {
+    const parsed = new URL(url);
+    for (const key of ['sslmode', 'ssl', 'sslrootcert', 'uselibpqcompat']) parsed.searchParams.delete(key);
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}

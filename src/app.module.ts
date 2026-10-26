@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
-import { dbSsl } from './modules/vuelos/common/db-ssl';
+import { dbSsl, dbUrl } from './modules/vuelos/common/db-ssl';
 import { VuelosModule } from './modules/vuelos/vuelos.module';
 
 @Module({
@@ -19,7 +19,7 @@ import { VuelosModule } from './modules/vuelos/vuelos.module';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        url: configService.get<string>('DATABASE_URL'),
+        url: dbUrl(configService.get<string>('DATABASE_URL'), { DB_SSL_CA: configService.get<string>('DB_SSL_CA') }),
         autoLoadEntities: true,
         synchronize: configService.get<string>('NODE_ENV') !== 'production', // Precaución en producción
         // A free Postgres allows few connections (Aiven: 20): keep the pool small. DB_POOL_MAX overrides.

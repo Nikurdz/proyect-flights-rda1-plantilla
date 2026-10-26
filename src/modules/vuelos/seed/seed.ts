@@ -6,7 +6,7 @@ config({ quiet: true });
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { FieldCipher } from '../common/cifrado';
-import { dbSsl } from '../common/db-ssl';
+import { dbSsl, dbUrl } from '../common/db-ssl';
 import { loadVuelosConfig } from '../common/vuelos-config';
 import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
 import { seedDemoScenarios, seedFlights } from './flights.seed';
@@ -15,7 +15,7 @@ import { seedDemoScenarios, seedFlights } from './flights.seed';
 // list to maintain. The same glob works for ts-node (.ts) and the compiled build (.js).
 const dataSource = new DataSource({
   type: 'postgres',
-  url: process.env.DATABASE_URL,
+  url: dbUrl(process.env.DATABASE_URL),
   entities: [join(__dirname, '..', '**', '*.entity.{ts,js}')],
   ssl: dbSsl(),
   synchronize: false, // the schema comes from `start:dev` (synchronize) or the migrations

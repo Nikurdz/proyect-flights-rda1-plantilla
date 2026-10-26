@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { join } from 'node:path';
 import { config } from 'dotenv';
 import { DataSource } from 'typeorm';
-import { dbSsl } from '../common/db-ssl';
+import { dbSsl, dbUrl } from '../common/db-ssl';
 
 config({ quiet: true });
 
@@ -14,7 +14,7 @@ config({ quiet: true });
  */
 export default new DataSource({
   type: 'postgres',
-  url: process.env.MIGRATIONS_DATABASE_URL ?? process.env.DATABASE_URL,
+  url: dbUrl(process.env.MIGRATIONS_DATABASE_URL ?? process.env.DATABASE_URL),
   entities: [join(__dirname, '..', '**', '*.entity.{ts,js}')],
   migrations: [join(__dirname, '[0-9]*.{ts,js}')],
   migrationsTableName: 'vuelos_migrations',
