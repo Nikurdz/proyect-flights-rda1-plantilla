@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/booking.changed/1",
+  "title": "booking.changed",
+  "description": "Cambio de fecha aplicado a una reserva.",
+  "x-event-type": "booking.changed",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "bookingId",
+    "ownerId",
+    "status"
+  ],
+  "properties": {
+    "bookingId": {
+      "type": "string"
+    },
+    "pnr": {
+      "type": "string"
+    },
+    "ownerId": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "itineraryId": {
+      "type": "string"
+    },
+    "fromVueloId": {
+      "type": "string"
+    },
+    "toVueloId": {
+      "type": "string"
+    },
+    "newDepartureAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "totalToPay": {
+      "type": "string"
+    }
+  }
+}

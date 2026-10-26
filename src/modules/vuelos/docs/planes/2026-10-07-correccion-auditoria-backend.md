@@ -6,14 +6,14 @@
 - **Rama:** `vuelos`
 
 ## Objetivo
-Cerrar los hallazgos de `AUDITORIA-10-6-2026-Backend.md` (6 altos, 9 medios, 8 bajos; 0 críticos abiertos), priorizando dinero, resiliencia de pago e inventario lógico.
+Cerrar los hallazgos de `RDA1-docs/AUDITORIA-10-6-2026-Backend.md` (6 altos, 9 medios, 8 bajos; 0 críticos abiertos), priorizando dinero, resiliencia de pago e inventario lógico.
 
 ## Alcance
 - Incluye: A1–A6, M1–M9, B1–B8 de la auditoría; migración para A1; tests de integración nuevos; actualización de `contracts/vuelos-openapi.yaml` donde aplique.
 - No incluye: outbox/broker (RDA2), limiter distribuido en Redis, PSP real, cambios de frontend, módulos de otros equipos.
 
 ## Contexto y referencias
-`AUDITORIA-10-6-2026-Backend.md` §2–§5. CLAUDE.md: atomicidad (`createHoldWithin`/`createBookingWithin`, `InventoryService` único escritor), saga de compra, reglas de migraciones.
+`RDA1-docs/AUDITORIA-10-6-2026-Backend.md` §2–§5. CLAUDE.md: atomicidad (`createHoldWithin`/`createBookingWithin`, `InventoryService` único escritor), saga de compra, reglas de migraciones.
 
 ## Cambios previstos
 | Archivo / módulo | Cambio |

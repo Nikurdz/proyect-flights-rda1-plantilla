@@ -46,7 +46,7 @@ graph LR
         end
 
         subgraph GRP_LATER1 ["De la referencia, fase siguiente"]
-            T_LATER1[("un esquema por servicio · finanzas · paquetes")]
+            T_LATER1[("cortes a microservicio (RDA2-docs): 1o Auditoria, Webhooks, Notificaciones · 2o Identidad, Proveedores · al final GDS y Comercial · un esquema por servicio + outbox")]
         end
     end
 
@@ -151,6 +151,7 @@ graph LR
     %% =========================================================================
     subgraph CAPA4 ["CAPA 4: EVENT BUS (DomainEventBus + RabbitMQ opcional)"]
         BUS_LOCAL["DomainEventBus en proceso: publish · subscribeAll · despachar"]
+        EVT_SCH["Contratos de eventos: 33 JSON Schema (contracts/eventos) · AsyncAPI · ajv valida al publicar y despachar · SemVer BACKWARD_TRANSITIVE · CI"]
         subgraph BROKER_RABBIT ["RabbitMQ (AMQP) · solo con RABBITMQ_URL"]
             RB_EX["Exchange: booking.events (direct)"]
             Q_BUY["Cola: q.ordenes.confirmadas"]
@@ -167,6 +168,7 @@ graph LR
         end
     end
 
+    EVT_SCH -.->|Valida el payload| BUS_LOCAL
     ESB_ROUTER -->|Publica eventos de negocio| BUS_LOCAL
     ESB_SAGA -->|Orden confirmada o fallo| BUS_LOCAL
     MS_OFE -->|OrdenEmitida / OrdenFallidaCompensada| BUS_LOCAL

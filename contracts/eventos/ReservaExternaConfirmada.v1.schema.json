@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/ReservaExternaConfirmada/1",
+  "title": "ReservaExternaConfirmada",
+  "description": "Reserva en un proveedor externo confirmada y facturada.",
+  "x-event-type": "ReservaExternaConfirmada",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "reservaExternaId",
+    "proveedorId",
+    "ownerId"
+  ],
+  "properties": {
+    "reservaExternaId": {
+      "type": "string"
+    },
+    "proveedorId": {
+      "type": "string"
+    },
+    "ownerId": {
+      "type": "string"
+    },
+    "factura": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

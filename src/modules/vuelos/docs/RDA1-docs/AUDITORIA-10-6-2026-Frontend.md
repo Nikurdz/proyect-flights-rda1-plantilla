@@ -1,6 +1,6 @@
 # Auditoría no destructiva de frontend — accesibilidad y responsive
 
-> **Archivo:** `src/modules/vuelos/docs/AUDITORIA-10-6-2026-Frontend.md` · **Fecha:** 2026-10-06
+> **Archivo:** `src/modules/vuelos/docs/RDA1-docs/AUDITORIA-10-6-2026-Frontend.md` · **Fecha:** 2026-10-06
 > **Alcance:** `frontend/src` (shell, rutas, layout, UI kit, features: search, results, fares, checkout, confirmation, verify, orders, account, admin, legal; `lib/*`, `api/*`, `styles/index.css`, `tailwind.config.js`, `index.html`). Excluye `node_modules/` y `dist/`.
 > **Método:** solo lectura, sin ejecutar el navegador. No se modificó ningún archivo existente; este informe es el único archivo creado en esta pasada. Cada problema citado corresponde a código realmente leído; los criterios que cumplen se indican explícitamente.
 > **Criterios mínimos revisados:** estructura semántica, jerarquía de encabezados, nombres accesibles, textos alternativos, contraste, navegación con teclado, foco visible, botones vs enlaces, ARIA, objetivos táctiles, navegación móvil, overflow horizontal, imágenes/QR, errores JavaScript y comportamiento en 320 px, 390 px, 768 px y escritorio.

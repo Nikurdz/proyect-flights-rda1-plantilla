@@ -77,7 +77,7 @@ describe('RabbitMqTransport', () => {
 
     const visto = jest.fn();
     bus.subscribe('OrdenEmitida', visto);
-    await bus.publish('OrdenEmitida', 'o1', { numeroOrden: 'ORD-1' });
+    await bus.publish('OrdenEmitida', 'o1', { ordenId: 'o1', numeroOrden: 'ORD-1', correo: 'a@b.com' });
     expect(visto).not.toHaveBeenCalled(); // it went to the broker, not to the consumers
     expect(broker.publicados).toHaveLength(1);
     expect(broker.publicados[0]).toMatchObject({ exchange: EXCHANGE, key: Q_CONFIRMADAS, retries: 0 });
@@ -96,7 +96,7 @@ describe('RabbitMqTransport', () => {
     bus.subscribe('PagoAnulado', () => {
       throw new Error('boom');
     });
-    await bus.publish('PagoAnulado', 'p1', {});
+    await bus.publish('PagoAnulado', 'p1', { pagoId: 'p1' });
 
     for (let intento = 0; intento <= MAX_REINTENTOS; intento++) {
       const ultimo = broker.publicados[broker.publicados.length - 1];
@@ -123,7 +123,7 @@ describe('RabbitMqTransport', () => {
     const { bus, transporte } = await crear('amqp://fake', brokerFalso({ falloPublicar: true }));
     const visto = jest.fn();
     bus.subscribe('OrdenEmitida', visto);
-    await bus.publish('OrdenEmitida', 'o1', {});
+    await bus.publish('OrdenEmitida', 'o1', { ordenId: 'o1', numeroOrden: 'ORD-1', correo: 'a@b.com' });
     expect(visto).toHaveBeenCalledTimes(1);
     await transporte.onModuleDestroy();
   });

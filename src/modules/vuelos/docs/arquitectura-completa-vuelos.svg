@@ -94,14 +94,16 @@
 <text x="45" y="782" font-size="10.8" fill="#0f172a">auditoria_administrativa</text>
 <rect x="38" y="792" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="45" y="806" font-size="10.8" fill="#0f172a">peticiones_http (purga a 7 días)</text>
-<rect x="30" y="838" width="290" height="110" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
-<text x="40" y="858" font-size="12.5" font-weight="700" fill="#94a3b8">Otros esquemas de la referencia</text>
+<rect x="30" y="838" width="290" height="134" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="40" y="858" font-size="12.5" font-weight="700" fill="#94a3b8">Cortes a microservicio (RDA2-docs)</text>
 <rect x="38" y="868" width="274" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="45" y="882" font-size="10.8" fill="#64748b" font-style="italic">esquemas por servicio (12)</text>
+<text x="45" y="882" font-size="10.8" fill="#64748b" font-style="italic">1º Auditoría · Webhooks · Notificaciones</text>
 <rect x="38" y="892" width="274" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="45" y="906" font-size="10.8" fill="#64748b" font-style="italic">finanzas · liquidaciones</text>
+<text x="45" y="906" font-size="10.8" fill="#64748b" font-style="italic">2º Identidad · Proveedores</text>
 <rect x="38" y="916" width="274" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="45" y="930" font-size="10.8" fill="#64748b" font-style="italic">paquetes y promociones</text>
+<text x="45" y="930" font-size="10.8" fill="#64748b" font-style="italic">Al final: GDS y Comercial (saga)</text>
+<rect x="38" y="940" width="274" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="45" y="954" font-size="10.8" fill="#64748b" font-style="italic">Un esquema por servicio + outbox</text>
 <rect x="360" y="150" width="320" height="206" rx="9" fill="#fff" stroke="#0369a1" stroke-width="2"/>
 <text x="370" y="170" font-size="12.5" font-weight="700" fill="#0369a1">Núcleo GDS · contrato vuelos-openapi</text>
 <rect x="368" y="180" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
@@ -226,14 +228,24 @@
 <text x="1105" y="610" font-size="10.8" fill="#0f172a">Suscripciones GraphQL (estadoReservaCambiado)</text>
 <rect x="1098" y="620" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="1105" y="634" font-size="10.8" fill="#0f172a">Reconciliación de pagos (cada 60 s)</text>
-<rect x="1090" y="666" width="320" height="110" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
-<text x="1100" y="686" font-size="12.5" font-weight="700" fill="#94a3b8">Kafka (referencia)</text>
-<rect x="1098" y="696" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="1105" y="710" font-size="10.8" fill="#64748b" font-style="italic">puente RabbitMQ–Kafka</text>
-<rect x="1098" y="720" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="1105" y="734" font-size="10.8" fill="#64748b" font-style="italic">booking.catalogo.stream</text>
-<rect x="1098" y="744" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="1105" y="758" font-size="10.8" fill="#64748b" font-style="italic">booking.compras.audit · telemetría</text>
+<rect x="1090" y="666" width="320" height="134" rx="9" fill="#fff" stroke="#5b4bb7" stroke-width="2"/>
+<text x="1100" y="686" font-size="12.5" font-weight="700" fill="#5b4bb7">Contratos de eventos (contracts/eventos)</text>
+<rect x="1098" y="696" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="710" font-size="10.8" fill="#0f172a">33 JSON Schema versionados (v1…)</text>
+<rect x="1098" y="720" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="734" font-size="10.8" fill="#0f172a">AsyncAPI: exchange, colas y mensajes</text>
+<rect x="1098" y="744" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="758" font-size="10.8" fill="#0f172a">ajv valida al publicar y al despachar</text>
+<rect x="1098" y="768" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="782" font-size="10.8" fill="#0f172a">SemVer · BACKWARD_TRANSITIVE · CI</text>
+<rect x="1090" y="814" width="320" height="110" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="1100" y="834" font-size="12.5" font-weight="700" fill="#94a3b8">Kafka (referencia)</text>
+<rect x="1098" y="844" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1105" y="858" font-size="10.8" fill="#64748b" font-style="italic">puente RabbitMQ–Kafka</text>
+<rect x="1098" y="868" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1105" y="882" font-size="10.8" fill="#64748b" font-style="italic">booking.catalogo.stream</text>
+<rect x="1098" y="892" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1105" y="906" font-size="10.8" fill="#64748b" font-style="italic">booking.compras.audit · telemetría</text>
 <rect x="1455" y="150" width="320" height="158" rx="9" fill="#fff" stroke="#15803d" stroke-width="2"/>
 <text x="1465" y="170" font-size="12.5" font-weight="700" fill="#15803d">ORQ_RES · compra y reservas</text>
 <rect x="1463" y="180" width="304" height="36" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
@@ -406,5 +418,5 @@
 <text x="2242" y="1167" font-size="13" font-weight="700" fill="#fff">Datos · capa 1</text>
 <text x="2242" y="1200" font-size="12.5" fill="#1e1b4b">auditoria_transacciones, auditoria_sagas y</text>
 <text x="2242" y="1220" font-size="12.5" fill="#1e1b4b">peticiones_http lo guardan</text>
-<text x="30" y="1292" font-size="12" fill="#475569" font-style="italic">Documentación: src/modules/vuelos/docs/ARQUITECTURA-CAPAS.md · MODELO-DE-DATOS.md (generado) · ARQUITECTURA-EVENTOS.md. Diagrama de referencia: mermaid_20261021_28f8d5, adaptado a Vuelos.</text>
+<text x="30" y="1292" font-size="12" fill="#475569" font-style="italic">Documentación: src/modules/vuelos/docs/ARQUITECTURA-CAPAS.md · MODELO-DE-DATOS.md (generado) · ARQUITECTURA-EVENTOS.md · RDA2-docs/ (microservicios, contratos de eventos). Diagrama de referencia: mermaid_20261021_28f8d5, adaptado a Vuelos.</text>
 </svg>

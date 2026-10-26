@@ -22,7 +22,7 @@ Corregir y completar el frontend base entregado por Antigravity y alinear el bac
 
 ## Contexto y referencias
 - Plan del frontend base: `2026-10-05-frontend-vuelos-ux-ui.md`.
-- Roles: `AGENTES.md`. Auditoría: `AUDITORIA-VUELOS-10-4-2026(1).md`.
+- Roles: `AGENTES.md`. Auditoría: `RDA1-docs/AUDITORIA-VUELOS-10-4-2026(1).md`.
 - Código: `ecommerce/identidad/`, `ecommerce/ordenes/`, `ecommerce/seed/`, `seed/flights.seed.ts`, `frontend/src/`.
 
 ## Cambios previstos

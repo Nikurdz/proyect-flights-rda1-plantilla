@@ -3,7 +3,7 @@
 > **Proyecto:** Proyect-Flights-RDA1 · **Fecha de auditoría:** 2026-10-04
 > **Alcance:** carpeta `src/modules/vuelos/` (controller, module, `services/`, `dto/`, `entities/`, `common/`, `seed/`, `README.md`, `docs/`), más contexto mínimo (`src/common/guards/idempotency-key.guard.ts`, `contracts/vuelos-openapi.yaml` v1.5.0.0).
 > **Método:** solo lectura. No se modificó ningún archivo existente. Este informe es el único archivo creado.
-> **Nota sobre `docs/AUDITORIA.md` (2026-09-28):** ese informe describía una plantilla 100% mock (0% funcional). Quedó desactualizado: el flujo búsqueda → seatmap → hold → reserva → ticket → flight-status hoy **sí tiene lógica real contra Postgres**. Esta auditoría lo reemplaza para el estado actual del código.
+> **Nota sobre `docs/RDA1-docs/AUDITORIA.md` (2026-09-28):** ese informe describía una plantilla 100% mock (0% funcional). Quedó desactualizado: el flujo búsqueda → seatmap → hold → reserva → ticket → flight-status hoy **sí tiene lógica real contra Postgres**. Esta auditoría lo reemplaza para el estado actual del código.
 
 ---
 

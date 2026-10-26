@@ -1,6 +1,6 @@
 # Auditoría no destructiva de backend — Módulo `src/modules/vuelos`
 
-> **Archivo:** `src/modules/vuelos/docs/AUDITORIA-10-6-2026-Backend.md` · **Fecha:** 2026-10-06
+> **Archivo:** `src/modules/vuelos/docs/RDA1-docs/AUDITORIA-10-6-2026-Backend.md` · **Fecha:** 2026-10-06
 > **Alcance:** solo backend de `src/modules/vuelos/` — núcleo GDS (`vuelos.controller.ts`, `vuelos-core.module.ts`, `vuelos.module.ts`, `services/`, `auth/`, `common/`, `dto/`, `entities/`, `seed/`, `migrations/`, `testing/`) + e-commerce (`ecommerce/`: identidad, mercados, catálogo, ofertas, pagos, órdenes, notificaciones, admin/observabilidad, `common/`, `seed/`). Excluye `frontend/`. Referencia de contrato: `contracts/vuelos-openapi.yaml` v1.5.0.0.
 > **Método:** solo lectura. No se modificó ningún archivo existente; este informe es el único archivo creado en esta pasada.
 > **Contexto:** commits recientes implementaron postventa, check-in, boarding passes y webhooks ("no 501 left"), QR firmado por ticket, admin de asientos y observabilidad. Varios hallazgos críticos de auditorías del 10-04 se verifican abajo como **CORREGIDOS**.

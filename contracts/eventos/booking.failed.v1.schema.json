@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/booking.failed/1",
+  "title": "booking.failed",
+  "description": "No se pudo crear la reserva aunque el hold era válido (todavía no hay booking: nombra el hold).",
+  "x-event-type": "booking.failed",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "holdId",
+    "ownerId",
+    "status",
+    "failureCode"
+  ],
+  "properties": {
+    "holdId": {
+      "type": "string"
+    },
+    "ownerId": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "failureCode": {
+      "type": "string"
+    }
+  }
+}

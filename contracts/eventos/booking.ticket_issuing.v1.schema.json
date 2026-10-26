@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/booking.ticket_issuing/1",
+  "title": "booking.ticket_issuing",
+  "description": "Emisión de billetes anunciada (se publica junto con ticket_issued).",
+  "x-event-type": "booking.ticket_issuing",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "bookingId",
+    "pnr",
+    "holdId",
+    "ownerId",
+    "status"
+  ],
+  "properties": {
+    "bookingId": {
+      "type": "string"
+    },
+    "pnr": {
+      "type": "string"
+    },
+    "ownerId": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "holdId": {
+      "type": "string"
+    },
+    "ticketNumbers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

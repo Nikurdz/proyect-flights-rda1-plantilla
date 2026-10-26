@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { currentCorrelationId } from './correlation';
 import { activityGate } from './activity-gate';
+import { eventSchemaMode, eventSchemas } from './event-schemas';
 import { runtimeMetrics } from './runtime-metrics';
 
 // SRS §10.3: every event carries id, type, schema version, instant, market, correlation id
@@ -60,10 +61,13 @@ export class DomainEventBus {
     payload: T,
     options: { market?: string | null } = {},
   ): Promise<DomainEvent<T>> {
+    // The payload must honour the event's JSON Schema (contracts/eventos). A type without a schema is announced, not blocked.
+    const validation = eventSchemas().validar(type, payload);
+    if (!validation.ok) this.rechazarPayload(type, validation.errors);
     const event: DomainEvent<T> = {
       id: randomUUID(),
       type,
-      schemaVersion: 1,
+      schemaVersion: validation.major ?? 1,
       occurredAt: new Date().toISOString(),
       market: options.market ?? null,
       correlationId: currentCorrelationId(),
@@ -91,7 +95,19 @@ export class DomainEventBus {
    * the number of failures is returned so a broker consumer can retry the message (consumers are idempotent).
    */
   async despachar(event: DomainEvent): Promise<{ fallos: number }> {
+    const inicio = Date.now();
+    const recibidoEn = new Date().toISOString();
     let fallos = 0;
+    // A message from the broker may come from another producer: an invalid payload is not handed to the consumers, it
+    // counts as a failure so the broker retries it and finally dead-letters it (strict mode only).
+    const validation = eventSchemas().validar(event.type, event.payload);
+    if (!validation.ok) {
+      this.logger.error(`Event ${event.type} (${event.id}) does not match its schema v${validation.major}: ${validation.errors}`);
+      if (eventSchemaMode() === 'strict') {
+        runtimeMetrics.recordConsumerFailure(event.type);
+        return { fallos: 1 };
+      }
+    }
     for (const handler of [...(this.handlers.get(event.type) ?? []), ...this.catchAll]) {
       try {
         await handler(event);
@@ -101,6 +117,17 @@ export class DomainEventBus {
         this.logger.error(`Consumer of ${event.type} failed (event ${event.id}): ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+    this.logger.log(
+      JSON.stringify({ event_received: event.type, event_id: event.id, correlation_id: event.correlationId, emitted_at: event.occurredAt, received_at: recibidoEn, status: fallos ? 'PARTIAL_FAILURE' : 'OK', duration_ms: Date.now() - inicio }),
+    );
     return { fallos };
+  }
+
+  private rechazarPayload(type: string, errors: string): void {
+    const mode = eventSchemaMode();
+    if (mode === 'off') return;
+    const message = `Payload of ${type} does not match its schema: ${errors}`;
+    if (mode === 'strict') throw new Error(message);
+    this.logger.error(message);
   }
 }

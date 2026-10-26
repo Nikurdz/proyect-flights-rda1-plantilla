@@ -41,7 +41,7 @@ Diseñar e implementar el frontend web completo para la plataforma de venta de v
 
 ## Contexto y referencias
 - **SRS E-commerce LATAM:** `src/modules/vuelos/docs/SRS_Plataforma_Ecommerce_LATAM.md` (Liberación R1: "Compra de vuelo").
-- **Auditoría del módulo Vuelos:** `src/modules/vuelos/docs/AUDITORIA-VUELOS-10-4-2026(1).md`.
+- **Auditoría del módulo Vuelos:** `src/modules/vuelos/docs/RDA1-docs/AUDITORIA-VUELOS-10-4-2026(1).md`.
 - **Instrucciones para Antigravity:** `src/modules/vuelos/docs/PROMPT-FRONTEND-ANTIGRAVITY.md` y `AGENTES.md`.
 - **Contratos:** Endpoints de catálogo (`/localidades`, `/disponibilidad`, `/itinerarios/:id/tarifas`), ofertas (`/ofertas`, `/revalidacion`, `/pasajeros`, `/facturacion`, `/condiciones`, `/medios-pago`, `/compra`), órdenes (`/ordenes`), identidad (`/auth/login`, `/auth/invitado`, `/auth/verificar-correo`, `/clientes`), y mercados (`/mercados/:codigo`).
 

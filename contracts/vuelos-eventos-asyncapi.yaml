@@ -1,0 +1,759 @@
+asyncapi: 2.6.0
+info:
+  title: RAM Alliance Vuelos - eventos de dominio
+  version: 1.0.0
+  description: |
+    Contrato de los eventos que publica el módulo Vuelos en el exchange `booking.events` (RabbitMQ, opcional con
+    `RABBITMQ_URL`; sin broker se entregan en proceso con el mismo formato). Cada payload tiene su JSON Schema en
+    `contracts/eventos` (fuente de verdad, validado con ajv en runtime y en CI). Política: SemVer por esquema,
+    compatibilidad BACKWARD_TRANSITIVE; un cambio incompatible va en un archivo `.v2`.
+    Garantía: entrega at-least-once, consumidores idempotentes por `id`, 3 reintentos y luego `q.dead_letter`.
+defaultContentType: application/json
+servers:
+  broker:
+    url: amqp://{host}:5672
+    protocol: amqp
+    variables:
+      host:
+        default: localhost
+channels:
+  q.general:
+    description: Cola q.general (routing key = nombre de la cola en el exchange direct booking.events).
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: q.general
+          durable: true
+          deadLetterExchange: booking.dlx
+    subscribe:
+      operationId: consumir_q_general
+      message:
+        oneOf:
+          - $ref: '#/components/messages/ClienteRegistrado'
+          - $ref: '#/components/messages/ConfiguracionMercadoPublicada'
+          - $ref: '#/components/messages/ConsentimientoActualizado'
+          - $ref: '#/components/messages/CuentaBloqueada'
+          - $ref: '#/components/messages/OfertaCreada'
+          - $ref: '#/components/messages/OfertaVencida'
+          - $ref: '#/components/messages/PagoAutorizado'
+          - $ref: '#/components/messages/booking_baggage_added'
+          - $ref: '#/components/messages/booking_changed'
+          - $ref: '#/components/messages/booking_checked_in'
+          - $ref: '#/components/messages/booking_failed'
+          - $ref: '#/components/messages/booking_ticket_failed'
+          - $ref: '#/components/messages/booking_ticket_issuing'
+          - $ref: '#/components/messages/flight_cancelled'
+          - $ref: '#/components/messages/flight_schedule_changed'
+          - $ref: '#/components/messages/hold_expired'
+          - $ref: '#/components/messages/hold_released'
+          - $ref: '#/components/messages/proveedor_activado'
+          - $ref: '#/components/messages/proveedor_apagado'
+          - $ref: '#/components/messages/proveedor_registrado'
+          - $ref: '#/components/messages/proveedor_salud'
+          - $ref: '#/components/messages/proveedor_sincronizado'
+  q.ordenes.confirmadas:
+    description: Cola q.ordenes.confirmadas (routing key = nombre de la cola en el exchange direct booking.events).
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: q.ordenes.confirmadas
+          durable: true
+          deadLetterExchange: booking.dlx
+    subscribe:
+      operationId: consumir_q_ordenes_confirmadas
+      message:
+        oneOf:
+          - $ref: '#/components/messages/OrdenEmitida'
+          - $ref: '#/components/messages/ReservaExternaConfirmada'
+          - $ref: '#/components/messages/booking_confirmed'
+          - $ref: '#/components/messages/booking_ticket_issued'
+  q.sagas.compensacion:
+    description: Cola q.sagas.compensacion (routing key = nombre de la cola en el exchange direct booking.events).
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: q.sagas.compensacion
+          durable: true
+          deadLetterExchange: booking.dlx
+    subscribe:
+      operationId: consumir_q_sagas_compensacion
+      message:
+        oneOf:
+          - $ref: '#/components/messages/OrdenFallidaCompensada'
+          - $ref: '#/components/messages/PagoAnulado'
+          - $ref: '#/components/messages/PagoRechazado'
+          - $ref: '#/components/messages/PagoReembolsado'
+          - $ref: '#/components/messages/ReservaExternaCancelada'
+          - $ref: '#/components/messages/ReservaExternaFallida'
+          - $ref: '#/components/messages/booking_cancelled'
+  q.dead_letter:
+    description: Mensajes que agotaron 3 reintentos; requieren revisión manual (alerta sugerida si hay más de 10).
+    subscribe:
+      operationId: revisar_dead_letter
+      message:
+        $ref: '#/components/messages/Envelope'
+components:
+  messages:
+    Envelope:
+      name: Envelope
+      title: Sobre del evento (cualquier tipo)
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/Envelope'
+    ClienteRegistrado:
+      name: ClienteRegistrado
+      title: ClienteRegistrado
+      summary: Cuenta de cliente creada (lleva el token de verificación para el correo).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: ClienteRegistrado
+              payload:
+                $ref: './eventos/ClienteRegistrado.v1.schema.json'
+    ConfiguracionMercadoPublicada:
+      name: ConfiguracionMercadoPublicada
+      title: ConfiguracionMercadoPublicada
+      summary: Nueva versión de la configuración de un mercado.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: ConfiguracionMercadoPublicada
+              payload:
+                $ref: './eventos/ConfiguracionMercadoPublicada.v1.schema.json'
+    ConsentimientoActualizado:
+      name: ConsentimientoActualizado
+      title: ConsentimientoActualizado
+      summary: El cliente cambió su consentimiento de marketing.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: ConsentimientoActualizado
+              payload:
+                $ref: './eventos/ConsentimientoActualizado.v1.schema.json'
+    CuentaBloqueada:
+      name: CuentaBloqueada
+      title: CuentaBloqueada
+      summary: Cuenta bloqueada temporalmente por intentos fallidos.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: CuentaBloqueada
+              payload:
+                $ref: './eventos/CuentaBloqueada.v1.schema.json'
+    OfertaCreada:
+      name: OfertaCreada
+      title: OfertaCreada
+      summary: Oferta de compra creada.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: OfertaCreada
+              payload:
+                $ref: './eventos/OfertaCreada.v1.schema.json'
+    OfertaVencida:
+      name: OfertaVencida
+      title: OfertaVencida
+      summary: Oferta vencida.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: OfertaVencida
+              payload:
+                $ref: './eventos/OfertaVencida.v1.schema.json'
+    OrdenEmitida:
+      name: OrdenEmitida
+      title: OrdenEmitida
+      summary: Orden pagada y emitida - dispara la notificación de confirmación.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: OrdenEmitida
+              payload:
+                $ref: './eventos/OrdenEmitida.v1.schema.json'
+    OrdenFallidaCompensada:
+      name: OrdenFallidaCompensada
+      title: OrdenFallidaCompensada
+      summary: La emisión falló, el pago se anuló y la orden quedó registrada como fallida.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: OrdenFallidaCompensada
+              payload:
+                $ref: './eventos/OrdenFallidaCompensada.v1.schema.json'
+    PagoAnulado:
+      name: PagoAnulado
+      title: PagoAnulado
+      summary: Autorización anulada (compensación).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: PagoAnulado
+              payload:
+                $ref: './eventos/PagoAnulado.v1.schema.json'
+    PagoAutorizado:
+      name: PagoAutorizado
+      title: PagoAutorizado
+      summary: Pago autorizado (aún no capturado).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: PagoAutorizado
+              payload:
+                $ref: './eventos/PagoAutorizado.v1.schema.json'
+    PagoRechazado:
+      name: PagoRechazado
+      title: PagoRechazado
+      summary: Pago rechazado por la pasarela o por antifraude.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: PagoRechazado
+              payload:
+                $ref: './eventos/PagoRechazado.v1.schema.json'
+    PagoReembolsado:
+      name: PagoReembolsado
+      title: PagoReembolsado
+      summary: Pago reembolsado tras una cancelación.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: PagoReembolsado
+              payload:
+                $ref: './eventos/PagoReembolsado.v1.schema.json'
+    ReservaExternaCancelada:
+      name: ReservaExternaCancelada
+      title: ReservaExternaCancelada
+      summary: Reserva externa cancelada.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: ReservaExternaCancelada
+              payload:
+                $ref: './eventos/ReservaExternaCancelada.v1.schema.json'
+    ReservaExternaConfirmada:
+      name: ReservaExternaConfirmada
+      title: ReservaExternaConfirmada
+      summary: Reserva en un proveedor externo confirmada y facturada.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: ReservaExternaConfirmada
+              payload:
+                $ref: './eventos/ReservaExternaConfirmada.v1.schema.json'
+    ReservaExternaFallida:
+      name: ReservaExternaFallida
+      title: ReservaExternaFallida
+      summary: La reserva externa falló y se compensó.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: ReservaExternaFallida
+              payload:
+                $ref: './eventos/ReservaExternaFallida.v1.schema.json'
+    booking_baggage_added:
+      name: booking.baggage_added
+      title: booking.baggage_added
+      summary: Equipaje adicional comprado.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.baggage_added
+              payload:
+                $ref: './eventos/booking.baggage_added.v1.schema.json'
+    booking_cancelled:
+      name: booking.cancelled
+      title: booking.cancelled
+      summary: Reserva cancelada por el cliente o por la aerolínea; dispara reembolso y cierre de la orden.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.cancelled
+              payload:
+                $ref: './eventos/booking.cancelled.v1.schema.json'
+    booking_changed:
+      name: booking.changed
+      title: booking.changed
+      summary: Cambio de fecha aplicado a una reserva.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.changed
+              payload:
+                $ref: './eventos/booking.changed.v1.schema.json'
+    booking_checked_in:
+      name: booking.checked_in
+      title: booking.checked_in
+      summary: Check-in realizado para uno o más pasajeros.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.checked_in
+              payload:
+                $ref: './eventos/booking.checked_in.v1.schema.json'
+    booking_confirmed:
+      name: booking.confirmed
+      title: booking.confirmed
+      summary: Reserva confirmada tras el commit de la transacción que la creó.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.confirmed
+              payload:
+                $ref: './eventos/booking.confirmed.v1.schema.json'
+    booking_failed:
+      name: booking.failed
+      title: booking.failed
+      summary: No se pudo crear la reserva aunque el hold era válido (todavía no hay booking - nombra el hold).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.failed
+              payload:
+                $ref: './eventos/booking.failed.v1.schema.json'
+    booking_ticket_failed:
+      name: booking.ticket_failed
+      title: booking.ticket_failed
+      summary: Falló la emisión de billetes de una reserva.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.ticket_failed
+              payload:
+                $ref: './eventos/booking.ticket_failed.v1.schema.json'
+    booking_ticket_issued:
+      name: booking.ticket_issued
+      title: booking.ticket_issued
+      summary: Billetes emitidos.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.ticket_issued
+              payload:
+                $ref: './eventos/booking.ticket_issued.v1.schema.json'
+    booking_ticket_issuing:
+      name: booking.ticket_issuing
+      title: booking.ticket_issuing
+      summary: Emisión de billetes anunciada (se publica junto con ticket_issued).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.ticket_issuing
+              payload:
+                $ref: './eventos/booking.ticket_issuing.v1.schema.json'
+    flight_cancelled:
+      name: flight.cancelled
+      title: flight.cancelled
+      summary: Vuelo cancelado por la aerolínea (administración).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: flight.cancelled
+              payload:
+                $ref: './eventos/flight.cancelled.v1.schema.json'
+    flight_schedule_changed:
+      name: flight.schedule_changed
+      title: flight.schedule_changed
+      summary: Vuelo reprogramado por la aerolínea (administración).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: flight.schedule_changed
+              payload:
+                $ref: './eventos/flight.schedule_changed.v1.schema.json'
+    hold_expired:
+      name: hold.expired
+      title: hold.expired
+      summary: El bloqueo de cupos venció y el inventario se restauró.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: hold.expired
+              payload:
+                $ref: './eventos/hold.expired.v1.schema.json'
+    hold_released:
+      name: hold.released
+      title: hold.released
+      summary: El bloqueo de cupos se liberó explícitamente.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: hold.released
+              payload:
+                $ref: './eventos/hold.released.v1.schema.json'
+    proveedor_activado:
+      name: proveedor.activado
+      title: proveedor.activado
+      summary: Proveedor reactivado (kill-switch apagado).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: proveedor.activado
+              payload:
+                $ref: './eventos/proveedor.activado.v1.schema.json'
+    proveedor_apagado:
+      name: proveedor.apagado
+      title: proveedor.apagado
+      summary: Proveedor desactivado (kill-switch).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: proveedor.apagado
+              payload:
+                $ref: './eventos/proveedor.apagado.v1.schema.json'
+    proveedor_registrado:
+      name: proveedor.registrado
+      title: proveedor.registrado
+      summary: Proveedor externo registrado.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: proveedor.registrado
+              payload:
+                $ref: './eventos/proveedor.registrado.v1.schema.json'
+    proveedor_salud:
+      name: proveedor.salud
+      title: proveedor.salud
+      summary: Cambio del estado de salud de un proveedor.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: proveedor.salud
+              payload:
+                $ref: './eventos/proveedor.salud.v1.schema.json'
+    proveedor_sincronizado:
+      name: proveedor.sincronizado
+      title: proveedor.sincronizado
+      summary: Catálogo de un proveedor sincronizado.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: proveedor.sincronizado
+              payload:
+                $ref: './eventos/proveedor.sincronizado.v1.schema.json'
+  schemas:
+    Envelope:
+      type: object
+      required: [id, type, schemaVersion, occurredAt, correlationId, aggregateId, payload]
+      properties:
+        id:
+          type: string
+          description: Identificador único del evento (clave de idempotencia de los consumidores).
+        type:
+          type: string
+          description: Nombre del hecho ya ocurrido, en pasado.
+        schemaVersion:
+          type: integer
+          description: Versión mayor del JSON Schema del payload.
+        occurredAt:
+          type: string
+          format: date-time
+          description: Instante de emisión.
+        market:
+          type: [string, 'null']
+        correlationId:
+          type: string
+          description: Rastrea el evento a través de servicios, logs y respuestas.
+        aggregateId:
+          type: string
+        payload:
+          type: object

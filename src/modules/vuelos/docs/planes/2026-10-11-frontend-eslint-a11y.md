@@ -6,14 +6,14 @@
 - **Rama:** `vuelos`
 
 ## Objetivo
-Que `frontend/` tenga ESLint 9 (configuración plana) y `npm run lint` pase con 0 errores, y cerrar los hallazgos abiertos de `AUDITORIA-10-6-2026-Frontend.md` (C1–C4, A1–A6, M1–M8, B1–B6), verificando cada uno contra el código actual. Es la parte de frontend del plan general `2026-10-11-eslint-y-pendientes-auditoria.md`.
+Que `frontend/` tenga ESLint 9 (configuración plana) y `npm run lint` pase con 0 errores, y cerrar los hallazgos abiertos de `RDA1-docs/AUDITORIA-10-6-2026-Frontend.md` (C1–C4, A1–A6, M1–M8, B1–B6), verificando cada uno contra el código actual. Es la parte de frontend del plan general `2026-10-11-eslint-y-pendientes-auditoria.md`.
 
 ## Alcance
 - Incluye: devDependencies `eslint@^9`, `@eslint/js`, `typescript-eslint`, `globals`, `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`, `eslint-plugin-jsx-a11y`; `frontend/eslint.config.js`; scripts `lint` y `lint:fix`; corrección de todos los errores; correcciones de accesibilidad y responsive de la auditoría; tests nuevos del combobox (teclado) y del `Dialog` (foco, Escape, retorno).
 - No incluye: backend, entidades, migraciones, contrato OpenAPI, raíz del repositorio. Ningún endpoint nuevo. No se añade captura real de tarjeta.
 
 ## Contexto y referencias
-- `src/modules/vuelos/docs/AUDITORIA-10-6-2026-Frontend.md` (4 críticos, 6 altos, 8 medios, 6 bajos).
+- `src/modules/vuelos/docs/RDA1-docs/AUDITORIA-10-6-2026-Frontend.md` (4 críticos, 6 altos, 8 medios, 6 bajos).
 - Patrón de referencia de formularios accesibles: `frontend/src/features/checkout/PaymentForm.tsx`.
 - WCAG 2.2 AA: 1.3.1, 1.4.3 (contraste 4.5:1), 2.1.1 (teclado), 2.4.3 (orden de foco), 2.5.8 (tamaño de objetivo), 4.1.2 (nombre, rol, valor).
 

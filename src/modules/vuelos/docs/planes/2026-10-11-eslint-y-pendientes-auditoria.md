@@ -6,7 +6,7 @@
 - **Rama:** `vuelos`
 
 ## Objetivo
-Que `npm run lint` funcione y pase sin errores en backend y frontend (hasta hoy ESLint ni siquiera estaba instalado), y cerrar los hallazgos de las auditorías del 6-oct (`AUDITORIA-10-6-2026-Backend.md` y `-Frontend.md`) que sigan abiertos, verificando cada uno en el código.
+Que `npm run lint` funcione y pase sin errores en backend y frontend (hasta hoy ESLint ni siquiera estaba instalado), y cerrar los hallazgos de las auditorías del 6-oct (`RDA1-docs/AUDITORIA-10-6-2026-Backend.md` y `-Frontend.md`) que sigan abiertos, verificando cada uno en el código.
 
 ## Alcance
 - Incluye: ESLint 9 (configuración plana) con `typescript-eslint` en el backend (código de Vuelos, `src/common`, `main.ts`, `app.module.ts`, scripts) y en el frontend (más `react-hooks` y `jsx-a11y`); corrección de todos los errores; verificación y corrección de los hallazgos abiertos de las auditorías de backend y frontend; registro del estado de cada hallazgo.

@@ -6,14 +6,14 @@
 - **Rama:** `vuelos`
 
 ## Objetivo
-Cerrar los hallazgos de `AUDITORIA-10-6-2026-Frontend.md` (4 críticos, 6 altos, 8 medios, 6 bajos) de accesibilidad y responsive, sin tocar backend ni la marca RAM Alliance más de lo necesario.
+Cerrar los hallazgos de `RDA1-docs/AUDITORIA-10-6-2026-Frontend.md` (4 críticos, 6 altos, 8 medios, 6 bajos) de accesibilidad y responsive, sin tocar backend ni la marca RAM Alliance más de lo necesario.
 
 ## Alcance
 - Incluye: C1–C4, A1–A6, M1–M8, B2–B6 en `frontend/src`.
 - No incluye: backend, pagos reales con tarjeta, `role="grid"` con flechas en `SeatMap` (mejora opcional), `npm run lint`.
 
 ## Contexto y referencias
-`AUDITORIA-10-6-2026-Frontend.md` §2–§5. Patrón de referencia: `features/checkout/PaymentForm.tsx` (labels, `aria-invalid`, `aria-describedby`, `role="alert"`).
+`RDA1-docs/AUDITORIA-10-6-2026-Frontend.md` §2–§5. Patrón de referencia: `features/checkout/PaymentForm.tsx` (labels, `aria-invalid`, `aria-describedby`, `role="alert"`).
 
 ## Cambios previstos
 | Archivo / módulo | Cambio |
