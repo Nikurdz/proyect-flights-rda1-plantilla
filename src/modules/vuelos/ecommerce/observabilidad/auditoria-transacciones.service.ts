@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DomainEvent, DomainEventBus } from '../../common/domain-event-bus';
+import { escribirAuditoria } from '../../common/winston-logger';
 import { AuditoriaTransaccion } from './entities/auditoria.entity';
 
 // The identifiers an event may carry that are safe to keep: no names, e-mails or documents.
@@ -24,6 +25,7 @@ export class AuditoriaTransaccionesService implements OnModuleInit {
 
   async registrar(event: DomainEvent): Promise<void> {
     const payload = (event.payload ?? {}) as Record<string, unknown>;
+    escribirAuditoria({ eventoId: event.id, tipo: event.type, agregadoId: event.aggregateId, correlationId: event.correlationId, resumen: this.resumen(payload) });
     const propietario = typeof payload.ownerId === 'string' ? payload.ownerId : typeof payload.clienteId === 'string' ? payload.clienteId : null;
     await this.auditoria
       .createQueryBuilder()

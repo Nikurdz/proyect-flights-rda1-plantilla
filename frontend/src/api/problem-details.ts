@@ -37,6 +37,9 @@ export class ProblemDetailsError extends Error {
 }
 
 const FIELD_LABELS: [RegExp, string][] = [
+  [/baseUrl/i, 'URL base'],
+  [/nombre$/i, 'Nombre'],
+  [/cantidad/i, 'Personas'],
   [/correo|email/i, 'Correo electrónico'],
   [/contrasena|password/i, 'Contraseña'],
   [/nombres|firstname/i, 'Nombres'],
@@ -151,6 +154,18 @@ export function getFriendlyErrorMessage(code: string | undefined, status: number
       return 'No se puede quitar el rol: debe quedar al menos un administrador y no puedes quitártelo a ti mismo.';
     case 'FLIGHT_IN_USE':
       return 'Este vuelo tiene reservas o retenciones y no se puede eliminar. Cancélalo en su lugar.';
+    case 'PROVIDER_IN_USE':
+      return 'Este proveedor ya vendió reservas y no se puede eliminar. Apágalo con el interruptor.';
+    case 'PROVIDER_DISABLED':
+      return 'El proveedor está apagado. Enciéndelo para continuar.';
+    case 'PROVIDER_UNAVAILABLE':
+      return 'El proveedor no responde por ahora. Inténtalo de nuevo en unos minutos.';
+    case 'PROVIDER_ACTION_NOT_SUPPORTED':
+      return 'Este tipo de proveedor no admite esa acción todavía.';
+    case 'EXTERNAL_RESERVATION_FAILED_COMPENSATED':
+      return 'No pudimos confirmar la experiencia con el proveedor y no se te cobró. Intenta de nuevo o elige otra fecha.';
+    case 'EXTERNAL_RESERVATION_NOT_REFUNDABLE':
+      return 'Esta experiencia no admite cancelación gratuita.';
     case 'SERVICE_UNAVAILABLE':
       return 'El servicio no responde por ahora. Intenta de nuevo en unos segundos.';
     case 'NOT_IMPLEMENTED':

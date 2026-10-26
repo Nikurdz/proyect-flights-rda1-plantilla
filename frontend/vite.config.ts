@@ -22,6 +22,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
+        // The GraphQL gateway (audit console) lives outside the `api/v1` prefix.
+        '/graphql': {
+          target,
+          changeOrigin: true,
+          secure: true,
+        },
       },
     },
   };

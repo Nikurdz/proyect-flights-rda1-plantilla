@@ -13,9 +13,11 @@ import { DatosFacturacion } from '../facturacion/entities/datos-facturacion.enti
 import { Factura } from '../facturacion/entities/factura.entity';
 import { FacturacionService } from '../facturacion/facturacion.service';
 import { MercadosService } from '../mercados/mercados.service';
-import { SagasRegistroService } from '../observabilidad/sagas-registro.service';
+import { SagaFailure, SagaOrchestrator } from '../../esb/saga-orchestrator';
+import type { PasoSaga } from '../../esb/saga-orchestrator';
+import { Pago } from '../pagos/entities/pago.entity';
 import { PagosService } from '../pagos/pagos.service';
-import { RechazoProveedorError } from './acl/adaptador-proveedor';
+import { RechazoProveedorError, ReservaRemota } from './acl/adaptador-proveedor';
 import { CircuitBreakers } from './acl/circuit-breakers.service';
 import { CancelarReservaExternaDto, ReservaExternaViewDto, ReservarExperienciaDto } from './dto/integracion.dto';
 import { CatalogoExterno } from './entities/catalogo-externo.entity';
@@ -66,7 +68,7 @@ export class ReservasExternasService {
     private readonly pagos: PagosService,
     private readonly facturacion: FacturacionService,
     private readonly mercados: MercadosService,
-    private readonly sagas: SagasRegistroService,
+    private readonly orquestador: SagaOrchestrator,
     private readonly idempotency: IdempotencyService,
     private readonly events: DomainEventBus,
   ) {}
@@ -127,89 +129,116 @@ export class ReservasExternasService {
       );
     });
 
-    const traza = await this.sagas.iniciar('RESERVA_EXTERNA', reserva.id, auth.ownerId);
-    const fallar = async (estadoSaga: 'FALLIDA' | 'COMPENSADA', motivo: string, status: HttpStatus, code: ProblemDetailsBody['code'], titulo: string, detalle: string): Promise<SagaOutcome> => {
-      await this.reservas.update(reserva.id, { estado: 'FALLIDA_COMPENSADA', motivo: motivo.slice(0, 300) });
-      await traza.finalizar(estadoSaga, motivo);
-      await this.events.publish('ReservaExternaFallida', reserva.id, { reservaExternaId: reserva.id, proveedorId: producto.proveedorId, motivo }, { market: mercado.codigo }).catch(() => undefined);
-      return { status, body: problem(status, code, titulo, detalle) };
-    };
-
-    // 1. Payment (ancillaries are never financed: one instalment).
-    const autorizacion = await this.pagos.autorizar({
-      reservaExternaId: reserva.id,
-      ownerId: auth.ownerId,
-      mercado,
-      montoMinor: totalMinor,
-      medio: { token: dto.medio.token, marca: dto.medio.marca },
-      cuotas: 1,
-      claveIdempotencia: reserva.id,
-    });
-    if (!autorizacion.ok) {
-      const rechazo = autorizacion as Extract<typeof autorizacion, { ok: false }>;
-      await traza.paso('AUTORIZAR_PAGO', 'ERROR', rechazo.codigo);
-      return fallar('FALLIDA', rechazo.codigo, HttpStatus.PAYMENT_REQUIRED, rechazo.codigo, rechazo.codigo === 'PAYMENT_DECLINED' ? 'Payment declined' : 'Payment rejected', rechazo.detalle);
+    interface Ctx {
+      pago?: Pago;
+      remota?: ReservaRemota;
+      numeroFactura?: string;
     }
-    const pago = autorizacion.pago;
-    await traza.paso('AUTORIZAR_PAGO', 'OK');
-
-    // 2. Booking in the partner system, through its adapter and circuit breaker.
     const adaptador = this.proveedoresService.adaptador(producto.proveedor.tipoServicio);
     const claveProveedor = uuidDe(`reserva:${reserva.id}`);
-    let remota;
-    try {
-      remota = await this.circuitos.ejecutar(producto.proveedorId, () =>
-        adaptador.reservar(producto.proveedor.baseUrl, producto.externalId, { fecha: dto.fecha, hora: dto.hora ?? null, cantidad: dto.cantidad, nombre: dto.nombre.trim(), correo: dto.correo }, claveProveedor),
-      );
-    } catch (error) {
-      const motivo = motivoDe(error);
-      await traza.paso('RESERVAR_PROVEEDOR', 'ERROR', error instanceof RechazoProveedorError ? error.message : motivo);
-      const anulado = await this.pagos.anular(pago);
-      await traza.paso('ANULAR_PAGO', 'COMPENSADO', anulado ? 'anulada' : 'anulación pendiente');
-      const rechazo = error instanceof RechazoProveedorError;
-      return fallar(
-        'COMPENSADA',
-        rechazo ? `partner_refused:${error.status}` : motivo,
-        rechazo ? (error.status === 409 || error.status === 404 || error.status === 400 ? HttpStatus.CONFLICT : HttpStatus.BAD_GATEWAY) : HttpStatus.SERVICE_UNAVAILABLE,
-        'EXTERNAL_RESERVATION_FAILED_COMPENSATED',
-        'Reservation could not be completed; payment released',
-        rechazo ? `The provider refused the reservation (${error.message}). The payment authorisation was released: you were not charged.` : 'The provider is not available. The payment authorisation was released: you were not charged.',
-      );
-    }
-    await traza.paso('RESERVAR_PROVEEDOR', 'OK', remota.reservationId);
 
-    // The partner's price must be the one the customer agreed to.
-    if (remota.estado === 'CANCELLED' || (remota.totalMinor !== null && remota.totalMinor !== totalMinor)) {
-      await this.cancelarEnProveedor(producto, remota.reservationId, 'price or status mismatch', reserva.id);
-      const anulado = await this.pagos.anular(pago);
-      await traza.paso('ANULAR_PAGO', 'COMPENSADO', anulado ? 'anulada' : 'anulación pendiente');
-      return fallar('COMPENSADA', 'partner_price_mismatch', HttpStatus.CONFLICT, 'PRICE_CHANGED', 'The price changed', 'The provider confirmed a different price. The payment authorisation was released: you were not charged.');
+    const pasos: PasoSaga<Ctx>[] = [
+      {
+        // 1. Payment (ancillaries are never financed: one instalment).
+        nombre: 'AUTORIZAR_PAGO',
+        hacer: async (ctx) => {
+          const autorizacion = await this.pagos.autorizar({
+            reservaExternaId: reserva.id,
+            ownerId: auth.ownerId,
+            mercado,
+            montoMinor: totalMinor,
+            medio: { token: dto.medio.token, marca: dto.medio.marca },
+            cuotas: 1,
+            claveIdempotencia: reserva.id,
+          });
+          if (!autorizacion.ok) {
+            const rechazo = autorizacion as Extract<typeof autorizacion, { ok: false }>;
+            throw new SagaFailure(HttpStatus.PAYMENT_REQUIRED, rechazo.codigo, rechazo.codigo === 'PAYMENT_DECLINED' ? 'Payment declined' : 'Payment rejected', rechazo.detalle, rechazo.codigo);
+          }
+          ctx.pago = autorizacion.pago;
+        },
+        compensar: {
+          nombre: 'ANULAR_PAGO',
+          hacer: async (ctx) => ((await this.pagos.anular(ctx.pago!)) ? 'anulada' : 'anulación pendiente'),
+        },
+      },
+      {
+        // 2. Booking in the partner system, through its adapter and circuit breaker.
+        nombre: 'RESERVAR_PROVEEDOR',
+        hacer: async (ctx) => {
+          try {
+            ctx.remota = await this.circuitos.ejecutar(producto.proveedorId, () =>
+              adaptador.reservar(producto.proveedor.baseUrl, producto.externalId, { fecha: dto.fecha, hora: dto.hora ?? null, cantidad: dto.cantidad, nombre: dto.nombre.trim(), correo: dto.correo }, claveProveedor),
+            );
+          } catch (error) {
+            if (error instanceof RechazoProveedorError) {
+              throw new SagaFailure(
+                [400, 404, 409].includes(error.status) ? HttpStatus.CONFLICT : HttpStatus.BAD_GATEWAY,
+                'EXTERNAL_RESERVATION_FAILED_COMPENSATED',
+                'Reservation could not be completed; payment released',
+                `The provider refused the reservation (${error.message}). The payment authorisation was released: you were not charged.`,
+                `partner_refused:${error.status}`,
+              );
+            }
+            throw new SagaFailure(HttpStatus.SERVICE_UNAVAILABLE, 'EXTERNAL_RESERVATION_FAILED_COMPENSATED', 'Reservation could not be completed; payment released', 'The provider is not available. The payment authorisation was released: you were not charged.', motivoDe(error));
+          }
+          return ctx.remota.reservationId;
+        },
+        compensar: {
+          nombre: 'CANCELAR_EN_PROVEEDOR',
+          hacer: async (ctx) => {
+            await this.cancelarEnProveedor(producto, ctx.remota!.reservationId, 'reservation not completed', reserva.id);
+          },
+        },
+      },
+      {
+        // The partner price must be the one the customer agreed to.
+        nombre: 'VERIFICAR_PRECIO',
+        hacer: async (ctx) => {
+          if (ctx.remota!.estado === 'CANCELLED' || (ctx.remota!.totalMinor !== null && ctx.remota!.totalMinor !== totalMinor)) {
+            throw new SagaFailure(HttpStatus.CONFLICT, 'PRICE_CHANGED', 'The price changed', 'The provider confirmed a different price. The payment authorisation was released: you were not charged.', 'partner_price_mismatch');
+          }
+        },
+      },
+      {
+        // 3. Confirm and invoice here, in one transaction.
+        nombre: 'CONFIRMAR_Y_FACTURAR',
+        hacer: async (ctx) => {
+          try {
+            ctx.numeroFactura = await this.dataSource.transaction(async (manager) => {
+              await manager.update(ReservaExterna, { id: reserva.id }, { estado: 'CONFIRMADA', externalReservationId: ctx.remota!.reservationId });
+              const factura = await this.facturacion.emitirExterna(manager, { ...reserva, totalMinor } as ReservaExterna, `Experiencia ${producto.nombre} · ${producto.proveedor.nombre}`, this.config.taxRate);
+              return factura.numeroFactura;
+            });
+          } catch (error) {
+            this.logger.error(`Local confirmation failed for reservation ${reserva.id}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+            throw new SagaFailure(HttpStatus.BAD_GATEWAY, 'EXTERNAL_RESERVATION_FAILED_COMPENSATED', 'Reservation could not be completed; payment released', 'We could not record your reservation. The payment authorisation was released: you were not charged.', 'confirmation_failed');
+          }
+          return ctx.numeroFactura;
+        },
+      },
+      {
+        // 4. Capture (retried; parked for the reconciler if the gateway keeps failing). It cannot fail the saga.
+        nombre: 'CAPTURAR_PAGO',
+        hacer: async (ctx) => {
+          await this.pagos.capturar(ctx.pago!);
+        },
+      },
+    ];
+
+    const resultado = await this.orquestador.ejecutar<Ctx>({ tipo: 'RESERVA_EXTERNA', referencia: reserva.id, propietarioId: auth.ownerId }, {}, pasos, {
+      alFallar: async (falla) => {
+        await this.reservas.update(reserva.id, { estado: 'FALLIDA_COMPENSADA', motivo: falla.motivo.slice(0, 300) });
+        await this.events.publish('ReservaExternaFallida', reserva.id, { reservaExternaId: reserva.id, proveedorId: producto.proveedorId, motivo: falla.motivo }, { market: mercado.codigo });
+      },
+    });
+    if (!resultado.ok) {
+      const f = (resultado as Extract<typeof resultado, { ok: false }>).falla;
+      return { status: f.status, body: problem(f.status, f.code, f.titulo, f.detalle) };
     }
 
-    // 3. Confirm and invoice here, in one transaction.
-    let numeroFactura: string;
-    try {
-      numeroFactura = await this.dataSource.transaction(async (manager) => {
-        await manager.update(ReservaExterna, { id: reserva.id }, { estado: 'CONFIRMADA', externalReservationId: remota.reservationId });
-        const factura = await this.facturacion.emitirExterna(manager, { ...reserva, totalMinor } as ReservaExterna, `Experiencia ${producto.nombre} · ${producto.proveedor.nombre}`, this.config.taxRate);
-        return factura.numeroFactura;
-      });
-    } catch (error) {
-      this.logger.error(`Local confirmation failed for reservation ${reserva.id}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
-      await traza.paso('CONFIRMAR_Y_FACTURAR', 'ERROR', motivoDe(error));
-      await this.cancelarEnProveedor(producto, remota.reservationId, 'local confirmation failed', reserva.id);
-      const anulado = await this.pagos.anular(pago);
-      await traza.paso('ANULAR_PAGO', 'COMPENSADO', anulado ? 'anulada' : 'anulación pendiente');
-      return fallar('COMPENSADA', 'confirmation_failed', HttpStatus.BAD_GATEWAY, 'EXTERNAL_RESERVATION_FAILED_COMPENSATED', 'Reservation could not be completed; payment released', 'We could not record your reservation. The payment authorisation was released: you were not charged.');
-    }
-    await traza.paso('CONFIRMAR_Y_FACTURAR', 'OK', numeroFactura);
-
-    // 4. Capture (retried; parked for the reconciler if the gateway keeps failing).
-    await this.pagos.capturar(pago);
-    await traza.paso('CAPTURAR_PAGO', 'OK');
-    await traza.finalizar('COMPLETADA');
     await this.events
-      .publish('ReservaExternaConfirmada', reserva.id, { reservaExternaId: reserva.id, proveedorId: producto.proveedorId, ownerId: auth.ownerId, factura: numeroFactura }, { market: mercado.codigo })
+      .publish('ReservaExternaConfirmada', reserva.id, { reservaExternaId: reserva.id, proveedorId: producto.proveedorId, ownerId: auth.ownerId, factura: resultado.ctx.numeroFactura }, { market: mercado.codigo })
       .catch((e: unknown) => this.logger.error(`Could not announce reservation ${reserva.id}: ${e instanceof Error ? e.message : String(e)}`));
 
     return { status: HttpStatus.CREATED, body: await this.vista(await this.reservas.findOneByOrFail({ id: reserva.id })) };
@@ -283,6 +312,7 @@ export class ReservasExternasService {
       hora: reserva.hora,
       cantidad: reserva.cantidad,
       total: money(reserva.totalMinor, reserva.moneda),
+      cancelacionGratis: producto.cancelacionGratis,
       referenciaProveedor: reserva.externalReservationId,
       factura: factura?.numeroFactura ?? null,
       motivo: reserva.motivo,

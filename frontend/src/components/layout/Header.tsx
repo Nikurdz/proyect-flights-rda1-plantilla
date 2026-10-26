@@ -7,6 +7,7 @@ import { Logo } from '../ui/Logo';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Reservar', end: true },
+  { to: '/experiencias', label: 'Experiencias', end: false },
   { to: '/recuperar-orden', label: 'Gestionar viaje', end: false },
   { to: '/transparencia', label: 'Información', end: false },
   { to: '/ayuda', label: 'Ayuda', end: false },
@@ -69,6 +70,9 @@ export const Header: React.FC = () => {
                   <User className="h-4 w-4 text-brand-gold" aria-hidden="true" />
                   Mis viajes
                 </Link>
+                <Link to="/mis-experiencias" className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
+                  Mis experiencias
+                </Link>
                 <Link to="/mi-cuenta" className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10 hover:text-white">
                   Mi cuenta
                 </Link>
@@ -120,6 +124,9 @@ export const Header: React.FC = () => {
               <>
                 <Link to="/mis-ordenes" className="px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-200">
                   Mis viajes
+                </Link>
+                <Link to="/mis-experiencias" className="px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-200">
+                  Mis experiencias
                 </Link>
                 <Link to="/mi-cuenta" className="px-3 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-200">
                   Mi cuenta

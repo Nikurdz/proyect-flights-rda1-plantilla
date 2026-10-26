@@ -213,6 +213,7 @@ export class ComprasService {
         numeroOrden: orden.numeroOrden,
         pnr: orden.pnr,
         clienteId: orden.clienteId,
+        ownerId: orden.ownerId,
         correo: orden.contacto.correo,
         idioma: mercado.idiomaPorDefecto,
         total: `${formatAmount(orden.totalMinor, orden.moneda)} ${orden.moneda}`,

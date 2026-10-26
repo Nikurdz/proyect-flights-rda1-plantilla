@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, BarChart3, RefreshCw } from 'lucide-react';
 import { useAdminDashboard, type DashboardDias } from '../../api/endpoints/admin';
+import { useProveedores } from '../../api/endpoints/proveedores';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { centsToUsd, formatInt, isEmptyWindow, isFull, orderSlices, passengerSlices, paymentSlices } from '../../lib/dashboard';
 import { formatRate, rateTone, type Tone } from '../../lib/observability';
+import { estaCaido, resumenFlota } from '../../lib/proveedores';
 import { useSession } from '../../lib/session';
 import { DailyBarsChart, DonutChart, HBarsChart, RevenueAreaChart } from './dashboard/charts';
 
@@ -97,6 +99,53 @@ export const AdminDashboardPage: React.FC = () => {
   );
 };
 
+/** Down providers at a glance (the traffic light of `/admin/salud`). Never breaks the dashboard if the call fails. */
+const ProvidersCard: React.FC = () => {
+  const session = useSession();
+  const q = useProveedores(session?.ownerId);
+  const lista = Array.isArray(q.data) ? q.data : [];
+  const flota = resumenFlota(lista);
+  const caidos = lista.filter(estaCaido);
+
+  return (
+    <section className={`rounded-2xl border bg-white p-5 shadow-sm ${caidos.length > 0 ? 'border-red-300' : 'border-slate-200/80'}`} aria-label="Proveedores">
+      <h3 className="text-sm font-bold text-slate-900">Proveedores</h3>
+      {q.isLoading ? (
+        <Skeleton className="mt-3 h-20 rounded-xl" />
+      ) : q.error != null ? (
+        <p className="mt-3 text-xs text-slate-600">No se pudo leer el estado de los proveedores ahora.</p>
+      ) : (
+        <>
+          <dl className="mt-3">
+            <Stat label="Caídos" value={formatInt(flota.caidos)} />
+            <Stat label="Degradados" value={formatInt(flota.degradados)} />
+            <Stat label="Circuitos abiertos" value={formatInt(flota.circuitosAbiertos)} />
+            <Stat label="Apagados" value={formatInt(flota.apagados)} />
+          </dl>
+          {caidos.length > 0 ? (
+            <p role="status" className="mt-3 flex items-start gap-2 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>
+                Proveedores caídos: {caidos.map((p) => p.nombre).join(', ')}.{' '}
+                <Link to="/admin/salud" className="underline">
+                  Ver salud de nodos
+                </Link>
+              </span>
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-slate-600">
+              {lista.length === 0 ? 'Sin proveedores registrados. ' : 'Ningún proveedor caído. '}
+              <Link to="/admin/proveedores" className="font-semibold underline">
+                Gestionar proveedores
+              </Link>
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+};
+
 export const Content: React.FC<{ d: NonNullable<ReturnType<typeof useAdminDashboard>['data']> }> = ({ d }) => {
   const k = d.kpis;
   const empty = isEmptyWindow(d);
@@ -157,7 +206,7 @@ export const Content: React.FC<{ d: NonNullable<ReturnType<typeof useAdminDashbo
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm" aria-label="Posventa">
           <h3 className="text-sm font-bold text-slate-900">Posventa</h3>
           <dl className="mt-3">
@@ -188,6 +237,7 @@ export const Content: React.FC<{ d: NonNullable<ReturnType<typeof useAdminDashbo
             </p>
           )}
         </section>
+        <ProvidersCard />
       </div>
     </>
   );

@@ -26,6 +26,13 @@ import { AdminFlightsPage } from '../features/admin/AdminFlightsPage';
 import { AdminUsersPage } from '../features/admin/AdminUsersPage';
 import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
 import { AdminObservabilityPage } from '../features/admin/AdminObservabilityPage';
+import { AdminProvidersPage } from '../features/admin/AdminProvidersPage';
+import { AdminInvoicesPage } from '../features/admin/AdminInvoicesPage';
+import { AdminAuditPage } from '../features/admin/AdminAuditPage';
+import { AdminNodesHealthPage } from '../features/admin/AdminNodesHealthPage';
+import { ExperiencesPage } from '../features/experiences/ExperiencesPage';
+import { ExperienceDetailPage } from '../features/experiences/ExperienceDetailPage';
+import { MyExperiencesPage } from '../features/experiences/MyExperiencesPage';
 import { RequireAdmin, RequireCustomer } from './guards';
 import { RouteEffects } from './RouteEffects';
 import { NotFoundPage } from './NotFoundPage';
@@ -56,6 +63,10 @@ export const AppRoutes: React.FC = () => {
         <Route path="/confirmacion/:orderNumber" element={<ConfirmationPage />} />
         <Route path="/recuperar-orden" element={<RetrieveOrderPage />} />
 
+        <Route path="/experiencias" element={<ExperiencesPage />} />
+        <Route path="/experiencias/:id" element={<ExperienceDetailPage />} />
+        <Route path="/mis-experiencias" element={<MyExperiencesPage />} />
+
         <Route path="/login" element={<LoginPage />} />
         <Route path="/registro" element={<RegisterPage />} />
         <Route path="/verificar-correo" element={<VerifyEmailPage />} />
@@ -72,6 +83,10 @@ export const AppRoutes: React.FC = () => {
             <Route path="ordenes" element={<AdminOrdersPage />} />
             <Route path="vuelos" element={<AdminFlightsPage />} />
             <Route path="usuarios" element={<AdminUsersPage />} />
+            <Route path="proveedores" element={<AdminProvidersPage />} />
+            <Route path="facturacion" element={<AdminInvoicesPage />} />
+            <Route path="auditoria" element={<AdminAuditPage />} />
+            <Route path="salud" element={<AdminNodesHealthPage />} />
             <Route path="observabilidad" element={<AdminObservabilityPage />} />
           </Route>
         </Route>

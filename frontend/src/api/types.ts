@@ -89,3 +89,162 @@ export interface SearchParams {
   sort?: Ordenamiento;
   mercado?: string;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Providers, invoices, audit and experiences. `schema.d.ts` is generated from a deployed server and
+// does not include these routes yet, so the types are declared by hand from the backend DTOs.
+// ---------------------------------------------------------------------------------------------
+
+export type TipoServicio = 'ATRACCIONES' | 'AUTOS' | 'ALOJAMIENTOS';
+export type EstadoSalud = 'UP' | 'DEGRADADO' | 'DOWN' | 'SIN_DATOS' | 'APAGADO';
+export type EstadoCircuito = 'CERRADO' | 'ABIERTO' | 'SEMIABIERTO';
+
+/** One health check (`salud` of a provider, `POST .../ping` and each item of `GET .../salud`). */
+export interface SaludView {
+  estado: EstadoSalud;
+  latenciaMs: number | null;
+  detalle: string | null;
+  comprobadoEn: string | null;
+}
+
+export interface ProveedorView {
+  id: string;
+  nombre: string;
+  equipo: string;
+  baseUrl: string;
+  tipoServicio: TipoServicio;
+  activo: boolean;
+  salud: SaludView;
+  circuito: EstadoCircuito;
+  productos: number;
+}
+
+export interface RegistrarProveedorInput {
+  nombre: string;
+  equipo: string;
+  baseUrl: string;
+  tipoServicio: TipoServicio;
+}
+
+export interface ActualizarProveedorInput {
+  nombre?: string;
+  equipo?: string;
+  baseUrl?: string;
+  activo?: boolean;
+}
+
+export interface SincronizacionView {
+  importados: number;
+  nuevos: number;
+  actualizados: number;
+  desactivados: number;
+}
+
+export type EstadoFactura = 'EMITIDA' | 'ANULADA';
+export type OrigenFactura = 'ORDEN' | 'EXPERIENCIA';
+
+export interface FacturaDetalleAdmin {
+  linea: number;
+  tipo: string;
+  concepto: string;
+  cantidad: number;
+  precioUnitario: MontoDto;
+  iva: MontoDto;
+  total: MontoDto;
+}
+
+export interface FacturaAdmin {
+  numeroFactura: string;
+  estado: EstadoFactura;
+  emitidaEn: string;
+  origen: OrigenFactura;
+  referencia: string;
+  subtotal: MontoDto;
+  iva: MontoDto;
+  total: MontoDto;
+  detalles?: FacturaDetalleAdmin[];
+}
+
+export interface FacturasPaginaAdmin {
+  items: FacturaAdmin[];
+  totalEmitido: MontoDto;
+}
+
+export type EstadoSaga = 'EN_CURSO' | 'COMPLETADA' | 'COMPENSADA' | 'FALLIDA';
+
+export interface AuditoriaTransaccion {
+  id: string;
+  eventoId: string;
+  tipo: string;
+  agregadoId: string;
+  propietarioId: string | null;
+  correlationId: string;
+  resumen: string;
+  ocurridoEn: string;
+}
+
+export interface SagaPaso {
+  secuencia: number;
+  nombre: string;
+  estado: string;
+  detalle: string | null;
+  duracionMs: number;
+}
+
+export interface AuditoriaSaga {
+  sagaId: string;
+  tipo: string;
+  referencia: string;
+  correlationId: string;
+  estado: string;
+  error: string | null;
+  iniciadaEn: string;
+  finalizadaEn: string | null;
+  pasos: SagaPaso[];
+}
+
+export interface ExperienciaView {
+  id: string;
+  proveedor: string;
+  tipo: string;
+  nombre: string;
+  descripcion: string;
+  duracion: string | null;
+  precio: MontoDto;
+  imagenUrl: string | null;
+  cancelacionGratis: boolean;
+  categorias: string[];
+}
+
+export interface ExperienciasPagina {
+  items: ExperienciaView[];
+  total: number;
+}
+
+export type EstadoReservaExterna = 'PENDIENTE' | 'CONFIRMADA' | 'CANCELADA' | 'FALLIDA_COMPENSADA';
+
+export interface ReservaExternaView {
+  id: string;
+  estado: EstadoReservaExterna;
+  experiencia: { id: string; nombre: string; proveedor: string };
+  fecha: string;
+  hora: string | null;
+  cantidad: number;
+  total: MontoDto;
+  referenciaProveedor: string | null;
+  factura: string | null;
+  motivo: string | null;
+  /** True when the partner lets the customer cancel for free (refund of the payment). */
+  cancelacionGratis: boolean;
+  creadaEn: string;
+}
+
+export interface ReservarExperienciaInput {
+  fecha: string;
+  hora?: string;
+  cantidad: number;
+  nombre: string;
+  correo: string;
+  facturacion: FacturacionDto;
+  medio: { tipo: 'TARJETA'; token: string; marca: string };
+}

@@ -106,6 +106,112 @@ paths:
       summary: 'Dashboard de gestión: ventas, conversión, rutas y ocupación (ADMIN)'
       tags:
         - E-commerce · Observabilidad
+  /admin/facturas:
+    get:
+      description: Más recientes primero, con filtro por estado y por origen (vuelo o experiencia).
+      operationId: FacturacionAdminController_listar
+      parameters:
+        - in: query
+          name: estado
+          required: false
+          schema:
+            enum:
+              - EMITIDA
+              - ANULADA
+            type: string
+        - description: Factura de un vuelo (orden) o de una experiencia (reserva externa).
+          in: query
+          name: origen
+          required: false
+          schema:
+            enum:
+              - ORDEN
+              - EXPERIENCIA
+            type: string
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 50
+            maximum: 200
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminFacturasPaginaDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Listar facturas (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/facturas/{numero}:
+    get:
+      operationId: FacturacionAdminController_obtener
+      parameters:
+        - in: path
+          name: numero
+          required: true
+          schema:
+            example: FAC-7K3M9PQ2XA
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminFacturaViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Detalle de una factura con sus líneas (ADMIN)
+      tags:
+        - E-commerce · Back-office
   /admin/mercados/{codigo}:
     put:
       description: 'RF-ADM-001: control optimista por versión y registro en auditoría (RF-ADM-006).'
@@ -4824,6 +4930,85 @@ components:
         - duracionMinutos
         - precioBaseUsd
       type: object
+    AdminFacturaDetalleDto:
+      properties:
+        cantidad:
+          type: number
+        concepto:
+          type: string
+        iva:
+          $ref: '#/components/schemas/MontoDto'
+        linea:
+          type: number
+        precioUnitario:
+          $ref: '#/components/schemas/MontoDto'
+        tipo:
+          type: string
+        total:
+          $ref: '#/components/schemas/MontoDto'
+      required:
+        - linea
+        - tipo
+        - concepto
+        - cantidad
+        - precioUnitario
+        - iva
+        - total
+      type: object
+    AdminFacturaViewDto:
+      properties:
+        detalles:
+          description: Solo en el detalle.
+          items:
+            $ref: '#/components/schemas/AdminFacturaDetalleDto'
+          type: array
+        emitidaEn:
+          type: string
+        estado:
+          enum:
+            - EMITIDA
+            - ANULADA
+          type: string
+        iva:
+          $ref: '#/components/schemas/MontoDto'
+        numeroFactura:
+          type: string
+        origen:
+          enum:
+            - ORDEN
+            - EXPERIENCIA
+          type: string
+        referencia:
+          description: Id de la orden o de la reserva de experiencia facturada.
+          type: string
+        subtotal:
+          $ref: '#/components/schemas/MontoDto'
+        total:
+          $ref: '#/components/schemas/MontoDto'
+      required:
+        - numeroFactura
+        - estado
+        - emitidaEn
+        - origen
+        - referencia
+        - subtotal
+        - iva
+        - total
+      type: object
+    AdminFacturasPaginaDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AdminFacturaViewDto'
+          type: array
+        totalEmitido:
+          allOf:
+            - $ref: '#/components/schemas/MontoDto'
+          description: Suma de los totales de las facturas emitidas del listado.
+      required:
+        - items
+        - totalEmitido
+      type: object
     AdminFilaMapaDto:
       properties:
         rowNumber:
@@ -7008,6 +7193,9 @@ components:
       type: object
     ReservaExternaViewDto:
       properties:
+        cancelacionGratis:
+          description: Si la experiencia admite cancelación gratuita (si no, cancelar responde 409 EXTERNAL_RESERVATION_NOT_REFUNDABLE).
+          type: boolean
         cantidad:
           type: number
         creadaEn:
@@ -7049,6 +7237,7 @@ components:
         - fecha
         - cantidad
         - total
+        - cancelacionGratis
         - creadaEn
       type: object
     ReservarExperienciaDto:

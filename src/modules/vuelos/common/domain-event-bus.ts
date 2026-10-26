@@ -18,6 +18,12 @@ export interface DomainEvent<T = unknown> {
 
 export type DomainEventHandler = (event: DomainEvent) => Promise<void> | void;
 
+/** A message broker the bus can hand events to. While one is set, consumers run when the broker delivers (at least once). */
+export interface EventTransport {
+  /** Hands the event to the broker. Throws if it cannot (the bus then delivers locally, so no event is lost). */
+  publicar(event: DomainEvent): Promise<void>;
+}
+
 /**
  * In-process event bus. There is no message broker in this phase (RDA1), so domains in
  * the same deployable integrate through this instead of calling each other directly; a
@@ -29,11 +35,17 @@ export class DomainEventBus {
   private readonly logger = new Logger('DomainEvents');
   private readonly handlers = new Map<string, DomainEventHandler[]>();
   private readonly catchAll: DomainEventHandler[] = [];
+  private transport: EventTransport | null = null;
 
   subscribe(type: string, handler: DomainEventHandler): void {
     const list = this.handlers.get(type) ?? [];
     list.push(handler);
     this.handlers.set(type, list);
+  }
+
+  /** Routes events through a broker (RabbitMQ) instead of calling the consumers directly. `null` goes back to in-process. */
+  setTransport(transport: EventTransport | null): void {
+    this.transport = transport;
   }
 
   /** A consumer of every event, whatever its type (the audit trail). */
@@ -60,16 +72,33 @@ export class DomainEventBus {
 
     this.logger.log(`${type} aggregate=${aggregateId} [${event.correlationId}]`);
     runtimeMetrics.recordEvent(type);
-    for (const handler of [...(this.handlers.get(type) ?? []), ...this.catchAll]) {
+    if (this.transport) {
+      try {
+        await this.transport.publicar(event);
+        return event;
+      } catch (error) {
+        this.logger.error(`Broker unavailable for ${type} (event ${event.id}), delivering in process: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    await this.despachar(event);
+    return event;
+  }
+
+  /**
+   * Runs the consumers of an event, one after another. A consumer that throws is logged and does not stop the rest;
+   * the number of failures is returned so a broker consumer can retry the message (consumers are idempotent).
+   */
+  async despachar(event: DomainEvent): Promise<{ fallos: number }> {
+    let fallos = 0;
+    for (const handler of [...(this.handlers.get(event.type) ?? []), ...this.catchAll]) {
       try {
         await handler(event);
       } catch (error) {
-        runtimeMetrics.recordConsumerFailure(type);
-        this.logger.error(
-          `Consumer of ${type} failed (event ${event.id}): ${error instanceof Error ? error.message : String(error)}`,
-        );
+        fallos++;
+        runtimeMetrics.recordConsumerFailure(event.type);
+        this.logger.error(`Consumer of ${event.type} failed (event ${event.id}): ${error instanceof Error ? error.message : String(error)}`);
       }
     }
-    return event;
+    return { fallos };
   }
 }

@@ -199,6 +199,7 @@ export class ReservaExternaViewDto {
   @ApiPropertyOptional({ nullable: true }) hora: string | null;
   @ApiProperty() cantidad: number;
   @ApiProperty() total: MontoDto;
+  @ApiProperty({ description: 'Si la experiencia admite cancelación gratuita (si no, cancelar responde 409 EXTERNAL_RESERVATION_NOT_REFUNDABLE).' }) cancelacionGratis: boolean;
   @ApiPropertyOptional({ nullable: true, description: 'Identificador de la reserva en el sistema del proveedor.' }) referenciaProveedor: string | null;
   @ApiPropertyOptional({ nullable: true }) factura: string | null;
   @ApiPropertyOptional({ nullable: true }) motivo: string | null;

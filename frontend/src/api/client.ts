@@ -3,7 +3,7 @@ import { endSession } from '../lib/auth-actions';
 import { ProblemDetailsError, type ProblemDetailsPayload } from './problem-details';
 
 // Resolves base API URL. In Vite dev mode with proxy, default to /api/v1 to bypass CORS.
-const BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api/v1' : 'https://proyect-flights-rda1-plantilla.onrender.com/api/v1');
+export const API_BASE_URL: string = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api/v1' : 'https://proyect-flights-rda1-plantilla.onrender.com/api/v1');
 
 export interface RequestOptions extends RequestInit {
   idempotencyKey?: string;
@@ -24,7 +24,7 @@ function notifyWakeUp(status: { isWakingUp: boolean; elapsedSeconds: number }) {
 }
 
 export async function apiClient<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const url = endpoint.startsWith('http') ? endpoint : `${BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
 
   const headers = new Headers(options.headers || {});
   headers.set('Accept', 'application/json');

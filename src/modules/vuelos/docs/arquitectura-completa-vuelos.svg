@@ -1,2 +1,410 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="2420" height="1290" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif"><defs><marker id="a1d5fa8" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#1d5fa8"/></marker><marker id="ad9582b" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#d9582b"/></marker><marker id="a475569" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#475569"/></marker><marker id="a0d9488" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#0d9488"/></marker><marker id="abe123c" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#be123c"/></marker></defs><rect width="2420" height="1290" fill="#fff"/><text x="30" y="38" font-size="26" font-weight="700" fill="#0f172a" text-anchor="start">EcoAirlines Vuelos — Arquitectura completa de microservicios (6 capas + transversales)</text><rect x="30" y="130" width="220" height="760" rx="14" fill="#f5f5f0" stroke="#94a3b8" stroke-width="1.8"/><text x="140.0" y="160" font-size="16" font-weight="700" fill="#0f172a" text-anchor="middle">1. Datos</text><text x="140.0" y="180" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">una base por servicio</text><circle cx="228" cy="152" r="14" fill="#7c3aed"/><text x="228" y="156" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">ID</text><rect x="290" y="130" width="300" height="760" rx="14" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.8"/><text x="440.0" y="160" font-size="16" font-weight="700" fill="#0f172a" text-anchor="middle">2. Microservicios de gestión</text><text x="440.0" y="180" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">MS.G · dueños de sus datos (ORM + API)</text><circle cx="568" cy="152" r="14" fill="#7c3aed"/><text x="568" y="156" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">ID</text><rect x="800" y="130" width="500" height="760" rx="14" fill="#eeeee8" stroke="#94a3b8" stroke-width="1.8"/><text x="1050.0" y="160" font-size="16" font-weight="700" fill="#0f172a" text-anchor="middle">3. ESB</text><text x="1050.0" y="180" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">lógica de negocio</text><circle cx="1278" cy="152" r="14" fill="#7c3aed"/><text x="1278" y="156" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">ID</text><rect x="1400" y="130" width="340" height="760" rx="14" fill="#f3f0ff" stroke="#94a3b8" stroke-width="1.8"/><text x="1570.0" y="160" font-size="16" font-weight="700" fill="#0f172a" text-anchor="middle">4. Microservicios de respuesta</text><text x="1570.0" y="180" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">protegidos con JWT</text><circle cx="1718" cy="152" r="14" fill="#7c3aed"/><text x="1718" y="156" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">ID</text><rect x="1830" y="130" width="240" height="760" rx="14" fill="#fdf2f8" stroke="#94a3b8" stroke-width="1.8"/><text x="1950.0" y="160" font-size="16" font-weight="700" fill="#0f172a" text-anchor="middle">5. GraphQL</text><text x="1950.0" y="180" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">agrupa los endpoints</text><circle cx="2048" cy="152" r="14" fill="#7c3aed"/><text x="2048" y="156" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">ID</text><rect x="2130" y="130" width="250" height="760" rx="14" fill="#f0fdfa" stroke="#94a3b8" stroke-width="1.8"/><text x="2255.0" y="160" font-size="16" font-weight="700" fill="#0f172a" text-anchor="middle">6. UI</text><text x="2255.0" y="180" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">web / móvil</text><circle cx="2358" cy="152" r="14" fill="#7c3aed"/><text x="2358" y="156" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">ID</text><rect x="310" y="210" width="260" height="60" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.4"/><text x="440" y="234" font-size="14" font-weight="700" fill="#0f172a" text-anchor="middle">MS.G.Webhooks</text><text x="440" y="251" font-size="11" font-weight="700" fill="#0369a1" text-anchor="middle">REST</text><path d="M45,218 a95.0,8 0 0 1 190,0 v44 a95.0,8 0 0 1 -190,0 z" fill="#eeeee6" stroke="#555" stroke-width="1.8"/><ellipse cx="140.0" cy="218" rx="95.0" ry="8" fill="#f8f8f2" stroke="#555" stroke-width="1.8"/><text x="140.0" y="240" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">webhooks</text><text x="140.0" y="256" font-size="10.5" font-weight="400" fill="#475569" text-anchor="middle">webhook_subscriptions</text><path d="M310,240 L235,240" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><text x="272" y="236" font-size="9" font-weight="400" fill="#64748b" text-anchor="middle">ORM</text><rect x="310" y="294" width="260" height="60" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.4"/><text x="440" y="318" font-size="14" font-weight="700" fill="#0f172a" text-anchor="middle">MS.G.Schedule</text><text x="440" y="335" font-size="11" font-weight="700" fill="#0369a1" text-anchor="middle">REST</text><path d="M45,302 a95.0,8 0 0 1 190,0 v44 a95.0,8 0 0 1 -190,0 z" fill="#eeeee6" stroke="#555" stroke-width="1.8"/><ellipse cx="140.0" cy="302" rx="95.0" ry="8" fill="#f8f8f2" stroke="#555" stroke-width="1.8"/><text x="140.0" y="324" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">schedule</text><text x="140.0" y="340" font-size="10.5" font-weight="400" fill="#475569" text-anchor="middle">vuelos · fare_families</text><path d="M310,324 L235,324" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><text x="272" y="320" font-size="9" font-weight="400" fill="#64748b" text-anchor="middle">ORM</text><rect x="310" y="378" width="260" height="60" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2.4"/><text x="440" y="402" font-size="14" font-weight="700" fill="#0f172a" text-anchor="middle">MS.G.Offers</text><text x="440" y="419" font-size="11" font-weight="700" fill="#15803d" text-anchor="middle">gRPC</text><path d="M45,386 a95.0,8 0 0 1 190,0 v44 a95.0,8 0 0 1 -190,0 z" fill="#eeeee6" stroke="#555" stroke-width="1.8"/><ellipse cx="140.0" cy="386" rx="95.0" ry="8" fill="#f8f8f2" stroke="#555" stroke-width="1.8"/><text x="140.0" y="408" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">offers</text><text x="140.0" y="424" font-size="10.5" font-weight="400" fill="#475569" text-anchor="middle">offers · holds · idempotency</text><path d="M310,408 L235,408" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><text x="272" y="404" font-size="9" font-weight="400" fill="#64748b" text-anchor="middle">ORM</text><rect x="310" y="462" width="260" height="60" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.4"/><text x="440" y="486" font-size="14" font-weight="700" fill="#0f172a" text-anchor="middle">MS.G.FlightStatus</text><text x="440" y="503" font-size="11" font-weight="700" fill="#0369a1" text-anchor="middle">REST</text><path d="M45,470 a95.0,8 0 0 1 190,0 v44 a95.0,8 0 0 1 -190,0 z" fill="#eeeee6" stroke="#555" stroke-width="1.8"/><ellipse cx="140.0" cy="470" rx="95.0" ry="8" fill="#f8f8f2" stroke="#555" stroke-width="1.8"/><text x="140.0" y="492" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">flight_status</text><text x="140.0" y="508" font-size="10.5" font-weight="400" fill="#475569" text-anchor="middle">(nueva) estado operativo</text><path d="M310,492 L235,492" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><text x="272" y="488" font-size="9" font-weight="400" fill="#64748b" text-anchor="middle">ORM</text><rect x="310" y="546" width="260" height="60" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.4"/><text x="440" y="570" font-size="14" font-weight="700" fill="#0f172a" text-anchor="middle">MS.G.Customers</text><text x="440" y="587" font-size="11" font-weight="700" fill="#0369a1" text-anchor="middle">REST</text><path d="M45,554 a95.0,8 0 0 1 190,0 v44 a95.0,8 0 0 1 -190,0 z" fill="#eeeee6" stroke="#555" stroke-width="1.8"/><ellipse cx="140.0" cy="554" rx="95.0" ry="8" fill="#f8f8f2" stroke="#555" stroke-width="1.8"/><text x="140.0" y="576" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">customers</text><text x="140.0" y="592" font-size="10.5" font-weight="400" fill="#475569" text-anchor="middle">(nueva) perfil de cliente</text><path d="M310,576 L235,576" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><text x="272" y="572" font-size="9" font-weight="400" fill="#64748b" text-anchor="middle">ORM</text><rect x="310" y="630" width="260" height="60" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.4"/><text x="440" y="654" font-size="14" font-weight="700" fill="#0f172a" text-anchor="middle">MS.G.Bookings</text><text x="440" y="671" font-size="11" font-weight="700" fill="#0369a1" text-anchor="middle">REST</text><path d="M45,638 a95.0,8 0 0 1 190,0 v44 a95.0,8 0 0 1 -190,0 z" fill="#eeeee6" stroke="#555" stroke-width="1.8"/><ellipse cx="140.0" cy="638" rx="95.0" ry="8" fill="#f8f8f2" stroke="#555" stroke-width="1.8"/><text x="140.0" y="660" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">bookings</text><text x="140.0" y="676" font-size="10.5" font-weight="400" fill="#475569" text-anchor="middle">bookings · passengers · tickets</text><path d="M310,660 L235,660" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><text x="272" y="656" font-size="9" font-weight="400" fill="#64748b" text-anchor="middle">ORM</text><rect x="310" y="714" width="260" height="60" rx="12" fill="#fef3c7" stroke="#92400e" stroke-width="2.4"/><text x="440" y="738" font-size="14" font-weight="700" fill="#0f172a" text-anchor="middle">MS.G.PostSale</text><text x="440" y="755" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">SOAP</text><path d="M45,722 a95.0,8 0 0 1 190,0 v44 a95.0,8 0 0 1 -190,0 z" fill="#eeeee6" stroke="#555" stroke-width="1.8"/><ellipse cx="140.0" cy="722" rx="95.0" ry="8" fill="#f8f8f2" stroke="#555" stroke-width="1.8"/><text x="140.0" y="744" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">post_sale</text><text x="140.0" y="760" font-size="10.5" font-weight="400" fill="#475569" text-anchor="middle">(nueva) equipaje · cambios</text><path d="M310,744 L235,744" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><text x="272" y="740" font-size="9" font-weight="400" fill="#64748b" text-anchor="middle">ORM</text><rect x="310" y="798" width="260" height="60" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2.4"/><text x="440" y="822" font-size="14" font-weight="700" fill="#0f172a" text-anchor="middle">MS.G.CheckIn</text><text x="440" y="839" font-size="11" font-weight="700" fill="#0369a1" text-anchor="middle">REST</text><path d="M45,806 a95.0,8 0 0 1 190,0 v44 a95.0,8 0 0 1 -190,0 z" fill="#eeeee6" stroke="#555" stroke-width="1.8"/><ellipse cx="140.0" cy="806" rx="95.0" ry="8" fill="#f8f8f2" stroke="#555" stroke-width="1.8"/><text x="140.0" y="828" font-size="13" font-weight="700" fill="#0f172a" text-anchor="middle">check_in</text><text x="140.0" y="844" font-size="10.5" font-weight="400" fill="#475569" text-anchor="middle">(nueva) check-in · pases</text><path d="M310,828 L235,828" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><text x="272" y="824" font-size="9" font-weight="400" fill="#64748b" text-anchor="middle">ORM</text><rect x="820" y="210" width="460" height="250" rx="6" fill="#fff" stroke="#1d5fa8" stroke-width="2.6"/><rect x="820" y="210" width="460" height="30" fill="#1d5fa8"/><text x="1050" y="231" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">Enrutador</text><text x="1050" y="258" font-size="11.5" font-weight="400" fill="#1d5fa8" text-anchor="middle" font-style="italic">un solo MS.G, sin coordinación</text><text x="836" y="300" font-size="13.5" font-weight="400" fill="#0f172a" text-anchor="start">Suscripciones de webhooks</text><text x="836" y="328" font-size="13.5" font-weight="400" fill="#0f172a" text-anchor="start">Buscar vuelos</text><text x="836" y="356" font-size="13.5" font-weight="400" fill="#0f172a" text-anchor="start">Admin: rutas y estado de vuelo</text><text x="836" y="384" font-size="13.5" font-weight="400" fill="#0f172a" text-anchor="start">Crear hold</text><text x="836" y="412" font-size="13.5" font-weight="400" fill="#0f172a" text-anchor="start">Estado de vuelo</text><text x="836" y="440" font-size="13.5" font-weight="400" fill="#0f172a" text-anchor="start">Perfil del cliente</text><rect x="820" y="500" width="460" height="340" rx="6" fill="#fff" stroke="#d9582b" stroke-width="2.6"/><rect x="820" y="500" width="460" height="30" fill="#d9582b"/><text x="1050" y="521" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">Orquestador (Saga)</text><text x="1050" y="548" font-size="11.5" font-weight="400" fill="#d9582b" text-anchor="middle" font-style="italic">varios MS.G en orden + compensación · cobros vía Pagos (externo)</text><text x="836" y="592" font-size="13.5" fill="#0f172a"><tspan font-weight="700">Crear reserva</tspan>: Customers → Offers → pago → Bookings</text><text x="836" y="632" font-size="13.5" fill="#0f172a"><tspan font-weight="700">Cambiar asiento</tspan>: Bookings → Offers</text><text x="836" y="672" font-size="13.5" fill="#0f172a"><tspan font-weight="700">Check-in</tspan>: Bookings → FlightStatus → CheckIn</text><text x="836" y="712" font-size="13.5" fill="#0f172a"><tspan font-weight="700">Cancelar</tspan>: Bookings → PostSale → reembolso → Offers</text><text x="836" y="752" font-size="13.5" fill="#0f172a"><tspan font-weight="700">Cambiar fecha</tspan>: Bookings → PostSale → Offers → cobro</text><text x="836" y="792" font-size="13.5" fill="#0f172a"><tspan font-weight="700">Agregar maletas</tspan>: Bookings → PostSale → cobro</text><path d="M820,295 C696.0,295 696.0,240 572,240" fill="none" stroke="#1d5fa8" stroke-width="2" marker-end="url(#a1d5fa8)"/><path d="M820,323 C696.0,323 696.0,316 572,316" fill="none" stroke="#1d5fa8" stroke-width="2" marker-end="url(#a1d5fa8)"/><path d="M820,351 C696.0,351 696.0,332 572,332" fill="none" stroke="#1d5fa8" stroke-width="2" marker-end="url(#a1d5fa8)"/><path d="M820,379 C696.0,379 696.0,408 572,408" fill="none" stroke="#1d5fa8" stroke-width="2" marker-end="url(#a1d5fa8)"/><path d="M820,407 C696.0,407 696.0,500 572,500" fill="none" stroke="#1d5fa8" stroke-width="2" marker-end="url(#a1d5fa8)"/><path d="M820,435 C696.0,435 696.0,576 572,576" fill="none" stroke="#1d5fa8" stroke-width="2" marker-end="url(#a1d5fa8)"/><path d="M820,351 C696.0,351 696.0,484 572,484" fill="none" stroke="#1d5fa8" stroke-width="2" marker-end="url(#a1d5fa8)"/><path d="M820,600 C696.0,600 696.0,422 572,422" fill="none" stroke="#d9582b" stroke-width="2.2" marker-end="url(#ad9582b)"/><path d="M820,634 C696.0,634 696.0,506 572,506" fill="none" stroke="#d9582b" stroke-width="2.2" marker-end="url(#ad9582b)"/><path d="M820,668 C696.0,668 696.0,590 572,590" fill="none" stroke="#d9582b" stroke-width="2.2" marker-end="url(#ad9582b)"/><path d="M820,702 C696.0,702 696.0,674 572,674" fill="none" stroke="#d9582b" stroke-width="2.2" marker-end="url(#ad9582b)"/><path d="M820,736 C696.0,736 696.0,758 572,758" fill="none" stroke="#d9582b" stroke-width="2.2" marker-end="url(#ad9582b)"/><path d="M820,770 C696.0,770 696.0,842 572,842" fill="none" stroke="#d9582b" stroke-width="2.2" marker-end="url(#ad9582b)"/><rect x="1420" y="230" width="300" height="64" rx="12" fill="#e0f2fe" stroke="#1d5fa8" stroke-width="2.4"/><text x="1570" y="257" font-size="14.5" font-weight="700" fill="#0f172a" text-anchor="middle">MS.Vuelos</text><text x="1570" y="276" font-size="11" font-weight="400" fill="#1d5fa8" text-anchor="middle">búsqueda · estado · admin</text><rect x="1420" y="330" width="300" height="64" rx="12" fill="#e0f2fe" stroke="#1d5fa8" stroke-width="2.4"/><text x="1570" y="357" font-size="14.5" font-weight="700" fill="#0f172a" text-anchor="middle">MS.Clientes</text><text x="1570" y="376" font-size="11" font-weight="400" fill="#1d5fa8" text-anchor="middle">perfil · webhooks</text><rect x="1420" y="620" width="300" height="64" rx="12" fill="#ffedd5" stroke="#d9582b" stroke-width="2.4"/><text x="1570" y="647" font-size="14.5" font-weight="700" fill="#0f172a" text-anchor="middle">MS.Reservas</text><text x="1570" y="666" font-size="11" font-weight="400" fill="#d9582b" text-anchor="middle">hold · reserva · asiento · check-in</text><rect x="1420" y="730" width="300" height="64" rx="12" fill="#ffedd5" stroke="#d9582b" stroke-width="2.4"/><text x="1570" y="757" font-size="14.5" font-weight="700" fill="#0f172a" text-anchor="middle">MS.Postventa</text><text x="1570" y="776" font-size="11" font-weight="400" fill="#d9582b" text-anchor="middle">cancelar · fecha · maletas</text><path d="M1420,262 C1350.0,262 1350.0,320 1280,320" fill="none" stroke="#1d5fa8" stroke-width="2" marker-end="url(#a1d5fa8)"/><path d="M1420,362 C1350.0,362 1350.0,400 1280,400" fill="none" stroke="#1d5fa8" stroke-width="2" marker-end="url(#a1d5fa8)"/><path d="M1420,652 C1350.0,652 1350.0,640 1280,640" fill="none" stroke="#d9582b" stroke-width="2.2" marker-end="url(#ad9582b)"/><path d="M1420,762 C1350.0,762 1350.0,740 1280,740" fill="none" stroke="#d9582b" stroke-width="2.2" marker-end="url(#ad9582b)"/><rect x="1850" y="410" width="200" height="270" rx="12" fill="#fce7f3" stroke="#db2777" stroke-width="2.8"/><text x="1950" y="450" font-size="17" font-weight="700" fill="#9d174d" text-anchor="middle">GraphQL</text><text x="1950" y="484" font-size="12.5" font-weight="400" fill="#475569" text-anchor="middle">Queries y Mutations</text><text x="1950" y="504" font-size="12.5" font-weight="400" fill="#475569" text-anchor="middle">de vuelos, clientes,</text><text x="1950" y="524" font-size="12.5" font-weight="400" fill="#475569" text-anchor="middle">reservas y postventa</text><rect x="2150" y="470" width="180" height="160" rx="12" fill="#e5e7df" stroke="#444" stroke-width="2.6"/><text x="2240" y="545" font-size="18" font-weight="700" fill="#0f172a" text-anchor="middle">UI</text><text x="2240" y="567" font-size="12" font-weight="400" fill="#475569" text-anchor="middle">ecoairlines-web</text><path d="M2150,550 L2050,550" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><text x="2100" y="540" font-size="11.5" font-weight="700" fill="#475569" text-anchor="middle" style="paint-order:stroke;stroke:#fff;stroke-width:5">HTTPS</text><path d="M1850,440 C1785.0,440 1785.0,262 1720,262" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><path d="M1850,470 C1785.0,470 1785.0,362 1720,362" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><path d="M1850,600 C1785.0,600 1785.0,652 1720,652" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><path d="M1850,630 C1785.0,630 1785.0,762 1720,762" fill="none" stroke="#475569" stroke-width="2" marker-end="url(#a475569)"/><rect x="1500" y="40" width="420" height="64" rx="12" fill="#fff1f2" stroke="#be123c" stroke-width="2.4" stroke-dasharray="8 5"/><text x="1710" y="66" font-size="13.5" font-weight="700" fill="#be123c" text-anchor="middle">Servidor OAuth2/OIDC (por definir; Keycloak recomendado)</text><text x="1710" y="86" font-size="12" font-weight="400" fill="#475569" text-anchor="middle">emite JWT con scopes flights:*</text><path d="M1560,104 L1560,130" fill="none" stroke="#be123c" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#abe123c)"/><text x="1580" y="122" font-size="11.5" font-weight="700" fill="#be123c" text-anchor="start" style="paint-order:stroke;stroke:#fff;stroke-width:5">valida JWT</text><path d="M2330,550 L2400,550 L2400,72 L1920,72" fill="none" stroke="#be123c" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#abe123c)"/><text x="2140" y="66" font-size="11.5" font-weight="700" fill="#be123c" text-anchor="middle" style="paint-order:stroke;stroke:#fff;stroke-width:5">login / token</text><rect x="262" y="930" width="618" height="76" rx="12" fill="#ede9fe" stroke="#5b4bb7" stroke-width="2.6"/><text x="571" y="954" font-size="15" font-weight="700" fill="#3f3589" text-anchor="middle">Event Bus (RabbitMQ)</text><text x="571" y="974" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">ESB publica booking.* (orquestador) y flight.* (admin) · header correlation_id en cada mensaje</text><text x="571" y="992" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">MS.G.Webhooks consume → notifica a sistemas externos</text><path d="M850,890 L850,930" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#a0d9488)"/><path d="M272,930 L272,222 L310,222" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#a0d9488)"/><text x="282" y="920" font-size="11" font-weight="700" fill="#0d9488" text-anchor="start" style="paint-order:stroke;stroke:#fff;stroke-width:5">consume</text><rect x="1000" y="930" width="300" height="76" rx="12" fill="#f3f4f6" stroke="#6b7280" stroke-width="2.4" stroke-dasharray="8 5"/><text x="1150" y="964" font-size="15" font-weight="700" fill="#374151" text-anchor="middle">Pagos (externo)</text><text x="1150" y="985" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">pago · cobro · reembolso · 3DS</text><path d="M1150,840 L1150,930" fill="none" stroke="#d9582b" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ad9582b)"/><rect x="30" y="1018" width="2360" height="38" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/><line x1="40" y1="1037" x2="80" y2="1037" stroke="#1d5fa8" stroke-width="2.4"/><text x="90" y="1042" font-size="12.5" font-weight="400" fill="#0f172a" text-anchor="start">Flujo directo (enrutador)</text><line x1="330" y1="1037" x2="370" y2="1037" stroke="#d9582b" stroke-width="2.4"/><text x="380" y="1042" font-size="12.5" font-weight="400" fill="#0f172a" text-anchor="start">Flujo orquestado (saga)</text><line x1="590" y1="1037" x2="630" y2="1037" stroke="#0d9488" stroke-width="2.4" stroke-dasharray="7 5"/><text x="640" y="1042" font-size="12.5" font-weight="400" fill="#0f172a" text-anchor="start">Evento asíncrono</text><line x1="790" y1="1037" x2="830" y2="1037" stroke="#475569" stroke-width="2.4"/><text x="840" y="1042" font-size="12.5" font-weight="400" fill="#0f172a" text-anchor="start">Llamada UI → GraphQL → MS respuesta</text><line x1="1130" y1="1037" x2="1170" y2="1037" stroke="#be123c" stroke-width="2.4" stroke-dasharray="7 5"/><text x="1180" y="1042" font-size="12.5" font-weight="400" fill="#0f172a" text-anchor="start">Autenticación OAuth2/JWT</text><circle cx="1440" cy="1037" r="14" fill="#7c3aed"/><text x="1440" y="1041" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">ID</text><text x="1462" y="1042" font-size="12.5" font-weight="400" fill="#0f172a" text-anchor="start">= capa por la que pasa el Correlation-ID</text><text x="1860" y="1042" font-size="12.5" font-weight="400" fill="#475569" text-anchor="start">(nueva) = tabla/servicio que aún no existe en el repo</text><text x="30" y="1075" font-size="17" font-weight="700" fill="#7c3aed" text-anchor="start">Correlation-ID (X-Correlation-ID): nace en la capa 6, viaja hacia la capa 1 y regresa en la respuesta</text><rect x="30.0" y="1091" width="326.85714285714283" height="165" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/><path d="M30.0,1125 v-24 a10,10 0 0 1 10,-10 h306.85714285714283 a10,10 0 0 1 10,10 v24 z" fill="#7c3aed"/><text x="42.0" y="1114" font-size="13.5" font-weight="700" fill="#fff" text-anchor="start">CAPA 6 · UI</text><text x="344.85714285714283" y="1114" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="end">nace aquí</text><text x="42.0" y="1153" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Genera un UUID v4 por cada acción</text><text x="42.0" y="1187" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Lo envía en el header X-Correlation-ID</text><text x="42.0" y="1221" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Lo muestra en el error (para soporte)</text><text x="362.85714285714283" y="1201" font-size="20" fill="#7c3aed" text-anchor="middle" font-weight="700">›</text><rect x="368.85714285714283" y="1091" width="326.85714285714283" height="165" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/><path d="M368.85714285714283,1125 v-24 a10,10 0 0 1 10,-10 h306.85714285714283 a10,10 0 0 1 10,10 v24 z" fill="#7c3aed"/><text x="380.85714285714283" y="1114" font-size="13.5" font-weight="700" fill="#fff" text-anchor="start">CAPA 5 · GraphQL</text><text x="683.7142857142857" y="1114" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="end">respaldo</text><text x="380.85714285714283" y="1153" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Si no llega, lo genera él mismo</text><text x="380.85714285714283" y="1187" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Lo guarda en el context de cada resolver</text><text x="380.85714285714283" y="1221" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Lo devuelve en header y en extensions</text><text x="701.7142857142857" y="1201" font-size="20" fill="#7c3aed" text-anchor="middle" font-weight="700">›</text><rect x="707.7142857142857" y="1091" width="326.85714285714283" height="165" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/><path d="M707.7142857142857,1125 v-24 a10,10 0 0 1 10,-10 h306.85714285714283 a10,10 0 0 1 10,10 v24 z" fill="#7c3aed"/><text x="719.7142857142857" y="1114" font-size="13.5" font-weight="700" fill="#fff" text-anchor="start">CAPA 4 · MS de respuesta</text><text x="1022.5714285714284" y="1114" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="end">lo reenvía</text><text x="719.7142857142857" y="1153" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Valida el JWT y lee el header</text><text x="719.7142857142857" y="1187" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Lo reenvía sin cambios al ESB</text><text x="719.7142857142857" y="1221" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Va en cada línea de log (JSON)</text><text x="1040.5714285714284" y="1201" font-size="20" fill="#7c3aed" text-anchor="middle" font-weight="700">›</text><rect x="1046.5714285714284" y="1091" width="326.85714285714283" height="165" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/><path d="M1046.5714285714284,1125 v-24 a10,10 0 0 1 10,-10 h306.85714285714283 a10,10 0 0 1 10,10 v24 z" fill="#7c3aed"/><text x="1058.5714285714284" y="1114" font-size="13.5" font-weight="700" fill="#fff" text-anchor="start">CAPA 3 · ESB</text><text x="1361.4285714285713" y="1114" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="end">lo propaga</text><text x="1058.5714285714284" y="1153" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• REST: header · gRPC: metadata · SOAP: header</text><text x="1058.5714285714284" y="1187" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• La saga usa el MISMO ID en todos sus pasos</text><text x="1058.5714285714284" y="1221" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Agrega sagaId y un span por llamada</text><text x="1379.4285714285713" y="1201" font-size="20" fill="#7c3aed" text-anchor="middle" font-weight="700">›</text><rect x="1385.4285714285713" y="1091" width="326.85714285714283" height="165" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/><path d="M1385.4285714285713,1125 v-24 a10,10 0 0 1 10,-10 h306.85714285714283 a10,10 0 0 1 10,10 v24 z" fill="#7c3aed"/><text x="1397.4285714285713" y="1114" font-size="13.5" font-weight="700" fill="#fff" text-anchor="start">CAPA 2 · MS.G</text><text x="1700.2857142857142" y="1114" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="end">lo registra</text><text x="1397.4285714285713" y="1153" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Lo lee en un interceptor y lo pone en logs</text><text x="1397.4285714285713" y="1187" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Incluido en errores (ProblemDetails)</text><text x="1397.4285714285713" y="1221" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Distinto de Idempotency-Key (otro fin)</text><text x="1718.2857142857142" y="1201" font-size="20" fill="#7c3aed" text-anchor="middle" font-weight="700">›</text><rect x="1724.2857142857142" y="1091" width="326.85714285714283" height="165" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/><path d="M1724.2857142857142,1125 v-24 a10,10 0 0 1 10,-10 h306.85714285714283 a10,10 0 0 1 10,10 v24 z" fill="#7c3aed"/><text x="1736.2857142857142" y="1114" font-size="13.5" font-weight="700" fill="#fff" text-anchor="start">CAPA 1 · Datos</text><text x="2039.1428571428569" y="1114" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="end">lo persiste</text><text x="1736.2857142857142" y="1153" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• No viaja por SQL: se guarda como columna</text><text x="1736.2857142857142" y="1187" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• correlation_id en auditoría y outbox</text><text x="1736.2857142857142" y="1221" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Permite reconstruir qué cambió y por qué</text><text x="2057.142857142857" y="1201" font-size="20" fill="#7c3aed" text-anchor="middle" font-weight="700">›</text><rect x="2063.142857142857" y="1091" width="326.85714285714283" height="165" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="2"/><path d="M2063.142857142857,1125 v-24 a10,10 0 0 1 10,-10 h306.85714285714283 a10,10 0 0 1 10,10 v24 z" fill="#7c3aed"/><text x="2075.142857142857" y="1114" font-size="13.5" font-weight="700" fill="#fff" text-anchor="start">Event Bus (RabbitMQ)</text><text x="2377.9999999999995" y="1114" font-size="11" font-weight="700" fill="#e9d5ff" text-anchor="end">transversal</text><text x="2075.142857142857" y="1153" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Va en la propiedad correlation_id</text><text x="2075.142857142857" y="1187" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• Webhooks lo continúa al consumir</text><text x="2075.142857142857" y="1221" font-size="12" font-weight="400" fill="#1e1b4b" text-anchor="start">• El webhook saliente lo lleva en el header</text><text x="30" y="1272" font-size="12.5" font-weight="400" fill="#475569" text-anchor="start" font-style="italic">Hoy el repositorio NO implementa el Correlation-ID: solo está recomendado en AUDITORIA.md (M5) y exigido por el requisito RNF-15. Las tablas nuevas y los MS.G marcados (nueva) son propuesta.</text></svg>
+<svg width="2700" height="1330" viewBox="0 0 2700 1330" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif">
+<defs><marker id="m1d5fa8" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#1d5fa8"/></marker><marker id="md9582b" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#d9582b"/></marker><marker id="m475569" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#475569"/></marker><marker id="m0d9488" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#0d9488"/></marker><marker id="mbe123c" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#be123c"/></marker><marker id="m5b4bb7" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#5b4bb7"/></marker><marker id="mdb2777" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#db2777"/></marker><marker id="m15803d" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0,0 L9,4.5 L0,9 z" fill="#15803d"/></marker></defs>
+<rect width="2700" height="1330" fill="#fff"/>
+<text x="30" y="36" font-size="25" font-weight="700" fill="#0f172a">RAM Alliance Vuelos — Arquitectura por capas (7 capas + transversales)</text>
+<text x="30" y="60" font-size="13" fill="#475569">Un solo despliegue (monolito modular NestJS + PostgreSQL/Neon) con fronteras de capa. Trazo continuo = implementado en este repositorio; trazo punteado y cursiva = fase siguiente (no implementado).</text>
+<rect x="20" y="80" width="310" height="900" rx="14" fill="#f5f5f0" stroke="#94a3b8" stroke-width="1.8"/>
+<rect x="20" y="80" width="310" height="52" rx="14" fill="#475569"/><rect x="20" y="110" width="310" height="22" fill="#475569"/>
+<text x="34" y="104" font-size="15" font-weight="700" fill="#fff">1. Datos</text>
+<text x="34" y="124" font-size="11" fill="#e2e8f0">PostgreSQL (Neon) · 3FN · 61 tablas · 82 FK</text>
+<circle cx="308" cy="106" r="13" fill="#7c3aed"/><text x="308" y="110" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">ID</text>
+<text x="280" y="106" font-size="11" fill="#fff" text-anchor="end" opacity="0.8"></text>
+<rect x="350" y="80" width="340" height="900" rx="14" fill="#f0f9ff" stroke="#94a3b8" stroke-width="1.8"/>
+<rect x="350" y="80" width="340" height="52" rx="14" fill="#0369a1"/><rect x="350" y="110" width="340" height="22" fill="#0369a1"/>
+<text x="364" y="104" font-size="15" font-weight="700" fill="#fff">2. Dominios</text>
+<text x="364" y="124" font-size="11" fill="#e2e8f0">módulos Nest (REST + TypeORM)</text>
+<circle cx="668" cy="106" r="13" fill="#7c3aed"/><text x="668" y="110" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">ID</text>
+<text x="640" y="106" font-size="11" fill="#fff" text-anchor="end" opacity="0.8"></text>
+<rect x="715" y="80" width="340" height="900" rx="14" fill="#fff7ed" stroke="#94a3b8" stroke-width="1.8"/>
+<rect x="715" y="80" width="340" height="52" rx="14" fill="#d9582b"/><rect x="715" y="110" width="340" height="22" fill="#d9582b"/>
+<text x="729" y="104" font-size="15" font-weight="700" fill="#fff">3. ESB</text>
+<text x="729" y="124" font-size="11" fill="#e2e8f0">interno + integración con socios</text>
+<circle cx="1033" cy="106" r="13" fill="#7c3aed"/><text x="1033" y="110" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">ID</text>
+<text x="1005" y="106" font-size="11" fill="#fff" text-anchor="end" opacity="0.8"></text>
+<rect x="1080" y="80" width="340" height="900" rx="14" fill="#f5f3ff" stroke="#94a3b8" stroke-width="1.8"/>
+<rect x="1080" y="80" width="340" height="52" rx="14" fill="#5b4bb7"/><rect x="1080" y="110" width="340" height="22" fill="#5b4bb7"/>
+<text x="1094" y="104" font-size="15" font-weight="700" fill="#fff">4. Event Bus</text>
+<text x="1094" y="124" font-size="11" fill="#e2e8f0">DomainEventBus + RabbitMQ opcional</text>
+<circle cx="1398" cy="106" r="13" fill="#7c3aed"/><text x="1398" y="110" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">ID</text>
+<text x="1370" y="106" font-size="11" fill="#fff" text-anchor="end" opacity="0.8"></text>
+<rect x="1445" y="80" width="340" height="900" rx="14" fill="#f0fdf4" stroke="#94a3b8" stroke-width="1.8"/>
+<rect x="1445" y="80" width="340" height="52" rx="14" fill="#15803d"/><rect x="1445" y="110" width="340" height="22" fill="#15803d"/>
+<text x="1459" y="104" font-size="15" font-weight="700" fill="#fff">5. Orquestados</text>
+<text x="1459" y="124" font-size="11" fill="#e2e8f0">sagas y lógica compuesta</text>
+<circle cx="1763" cy="106" r="13" fill="#7c3aed"/><text x="1763" y="110" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">ID</text>
+<text x="1735" y="106" font-size="11" fill="#fff" text-anchor="end" opacity="0.8"></text>
+<rect x="1810" y="80" width="330" height="900" rx="14" fill="#fdf2f8" stroke="#94a3b8" stroke-width="1.8"/>
+<rect x="1810" y="80" width="330" height="52" rx="14" fill="#db2777"/><rect x="1810" y="110" width="330" height="22" fill="#db2777"/>
+<text x="1824" y="104" font-size="15" font-weight="700" fill="#fff">6. Gateway / BFF</text>
+<text x="1824" y="124" font-size="11" fill="#e2e8f0">REST /api/v1 + GraphQL /graphql</text>
+<circle cx="2118" cy="106" r="13" fill="#7c3aed"/><text x="2118" y="110" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">ID</text>
+<text x="2090" y="106" font-size="11" fill="#fff" text-anchor="end" opacity="0.8"></text>
+<rect x="2165" y="80" width="515" height="900" rx="14" fill="#f0fdfa" stroke="#94a3b8" stroke-width="1.8"/>
+<rect x="2165" y="80" width="515" height="52" rx="14" fill="#0d9488"/><rect x="2165" y="110" width="515" height="22" fill="#0d9488"/>
+<text x="2179" y="104" font-size="15" font-weight="700" fill="#fff">7. Presentación</text>
+<text x="2179" y="124" font-size="11" fill="#e2e8f0">React 18 (Netlify)</text>
+<circle cx="2658" cy="106" r="13" fill="#7c3aed"/><text x="2658" y="110" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">ID</text>
+<text x="2630" y="106" font-size="11" fill="#fff" text-anchor="end" opacity="0.8"></text>
+<rect x="30" y="150" width="290" height="206" rx="9" fill="#fff" stroke="#475569" stroke-width="2"/>
+<text x="40" y="170" font-size="12.5" font-weight="700" fill="#475569">Núcleo GDS (vuelos_*)</text>
+<rect x="38" y="180" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="194" font-size="10.8" fill="#0f172a">vuelos · aerolineas · fare_families</text>
+<rect x="38" y="204" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="218" font-size="10.8" fill="#0f172a">flight_offers (+itinerarios) · holds (+items)</text>
+<rect x="38" y="228" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="242" font-size="10.8" fill="#0f172a">bookings (+cambios) · passengers · tickets</text>
+<rect x="38" y="252" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="266" font-size="10.8" fill="#0f172a">seat_assignments · baggage · check_ins</text>
+<rect x="38" y="276" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="290" font-size="10.8" fill="#0f172a">date_change_offers · cancellation_quotes</text>
+<rect x="38" y="300" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="314" font-size="10.8" fill="#0f172a">webhook_subscriptions (+eventos) · deliveries</text>
+<rect x="38" y="324" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="338" font-size="10.8" fill="#0f172a">idempotency_records</text>
+<rect x="30" y="370" width="290" height="182" rx="9" fill="#fff" stroke="#475569" stroke-width="2"/>
+<text x="40" y="390" font-size="12.5" font-weight="700" fill="#475569">E-commerce (ecom_*)</text>
+<rect x="38" y="400" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="414" font-size="10.8" fill="#0f172a">mercados (+11 tablas de configuración)</text>
+<rect x="38" y="424" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="438" font-size="10.8" fill="#0f172a">clientes · cliente_roles · roles · localidades</text>
+<rect x="38" y="448" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="462" font-size="10.8" fill="#0f172a">ofertas (+trayectos, precios, pasajeros)</text>
+<rect x="38" y="472" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="486" font-size="10.8" fill="#0f172a">ordenes (+historial) · pagos (+motivos)</text>
+<rect x="38" y="496" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="510" font-size="10.8" fill="#0f172a">datos_facturacion · facturas (+detalles)</text>
+<rect x="38" y="520" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="534" font-size="10.8" fill="#0f172a">notificaciones · plantillas</text>
+<rect x="30" y="566" width="290" height="110" rx="9" fill="#fff" stroke="#475569" stroke-width="2"/>
+<text x="40" y="586" font-size="12.5" font-weight="700" fill="#475569">Integración con proveedores</text>
+<rect x="38" y="596" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="610" font-size="10.8" fill="#0f172a">proveedores · proveedor_salud</text>
+<rect x="38" y="620" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="634" font-size="10.8" fill="#0f172a">catalogo_externo (+categorías)</text>
+<rect x="38" y="644" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="658" font-size="10.8" fill="#0f172a">reservas_externas</text>
+<rect x="30" y="690" width="290" height="134" rx="9" fill="#fff" stroke="#475569" stroke-width="2"/>
+<text x="40" y="710" font-size="12.5" font-weight="700" fill="#475569">Auditoría y observabilidad</text>
+<rect x="38" y="720" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="734" font-size="10.8" fill="#0f172a">auditoria_transacciones</text>
+<rect x="38" y="744" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="758" font-size="10.8" fill="#0f172a">auditoria_sagas (+pasos)</text>
+<rect x="38" y="768" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="782" font-size="10.8" fill="#0f172a">auditoria_administrativa</text>
+<rect x="38" y="792" width="274" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="45" y="806" font-size="10.8" fill="#0f172a">peticiones_http (purga a 7 días)</text>
+<rect x="30" y="838" width="290" height="110" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="40" y="858" font-size="12.5" font-weight="700" fill="#94a3b8">Otros esquemas de la referencia</text>
+<rect x="38" y="868" width="274" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="45" y="882" font-size="10.8" fill="#64748b" font-style="italic">esquemas por servicio (12)</text>
+<rect x="38" y="892" width="274" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="45" y="906" font-size="10.8" fill="#64748b" font-style="italic">finanzas · liquidaciones</text>
+<rect x="38" y="916" width="274" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="45" y="930" font-size="10.8" fill="#64748b" font-style="italic">paquetes y promociones</text>
+<rect x="360" y="150" width="320" height="206" rx="9" fill="#fff" stroke="#0369a1" stroke-width="2"/>
+<text x="370" y="170" font-size="12.5" font-weight="700" fill="#0369a1">Núcleo GDS · contrato vuelos-openapi</text>
+<rect x="368" y="180" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="194" font-size="10.8" fill="#0f172a">Búsqueda y catálogo (/search, /flights)</text>
+<rect x="368" y="204" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="218" font-size="10.8" fill="#0f172a">Hold de cupos y Offers</text>
+<rect x="368" y="228" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="242" font-size="10.8" fill="#0f172a">Bookings: reserva, PNR y billetes</text>
+<rect x="368" y="252" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="266" font-size="10.8" fill="#0f172a">Posventa: equipaje, cambio de fecha, cancelación</text>
+<rect x="368" y="276" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="290" font-size="10.8" fill="#0f172a">Check-in y pases de abordar (QR firmado)</text>
+<rect x="368" y="300" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="314" font-size="10.8" fill="#0f172a">Estado de vuelos</text>
+<rect x="368" y="324" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="338" font-size="10.8" fill="#0f172a">Webhooks (HMAC, reintentos, SSRF guard)</text>
+<rect x="360" y="370" width="320" height="230" rx="9" fill="#fff" stroke="#0369a1" stroke-width="2"/>
+<text x="370" y="390" font-size="12.5" font-weight="700" fill="#0369a1">E-commerce (SRS R1)</text>
+<rect x="368" y="400" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="414" font-size="10.8" fill="#0f172a">Identidad (JWT propio) y roles</text>
+<rect x="368" y="424" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="438" font-size="10.8" fill="#0f172a">Mercados y configuración</text>
+<rect x="368" y="448" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="462" font-size="10.8" fill="#0f172a">Catálogo y precios</text>
+<rect x="368" y="472" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="486" font-size="10.8" fill="#0f172a">Ofertas y checkout</text>
+<rect x="368" y="496" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="510" font-size="10.8" fill="#0f172a">Pagos (pasarela y antifraude simulados)</text>
+<rect x="368" y="520" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="534" font-size="10.8" fill="#0f172a">Órdenes y compras (saga de compra)</text>
+<rect x="368" y="544" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="558" font-size="10.8" fill="#0f172a">Facturación (IVA 15 %)</text>
+<rect x="368" y="568" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="582" font-size="10.8" fill="#0f172a">Notificaciones · Admin (usuarios, vuelos)</text>
+<rect x="360" y="614" width="320" height="134" rx="9" fill="#fff" stroke="#0369a1" stroke-width="2"/>
+<text x="370" y="634" font-size="12.5" font-weight="700" fill="#0369a1">Integración (ecommerce/integracion)</text>
+<rect x="368" y="644" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="658" font-size="10.8" fill="#0f172a">Proveedores: registro, ping, kill-switch</text>
+<rect x="368" y="668" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="682" font-size="10.8" fill="#0f172a">Sincronización de catálogo</text>
+<rect x="368" y="692" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="706" font-size="10.8" fill="#0f172a">Experiencias (catálogo público)</text>
+<rect x="368" y="716" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="730" font-size="10.8" fill="#0f172a">Reservas externas y su cancelación</text>
+<rect x="360" y="762" width="320" height="86" rx="9" fill="#fff" stroke="#0369a1" stroke-width="2"/>
+<text x="370" y="782" font-size="12.5" font-weight="700" fill="#0369a1">Observabilidad</text>
+<rect x="368" y="792" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="806" font-size="10.8" fill="#0f172a">Auditoría de eventos · registro de sagas</text>
+<rect x="368" y="816" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="375" y="830" font-size="10.8" fill="#0f172a">Bitácora HTTP · métricas · /health</text>
+<rect x="360" y="862" width="320" height="110" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="370" y="882" font-size="12.5" font-weight="700" fill="#94a3b8">Microservicios de la referencia</text>
+<rect x="368" y="892" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="375" y="906" font-size="10.8" fill="#64748b" font-style="italic">MS Ingesta Stock (gRPC 50051)</text>
+<rect x="368" y="916" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="375" y="930" font-size="10.8" fill="#64748b" font-style="italic">MS Finanzas y Liquidaciones</text>
+<rect x="368" y="940" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="375" y="954" font-size="10.8" fill="#64748b" font-style="italic">MS Paquetes Dinámicos</text>
+<rect x="725" y="150" width="320" height="134" rx="9" fill="#fff" stroke="#d9582b" stroke-width="2"/>
+<text x="735" y="170" font-size="12.5" font-weight="700" fill="#d9582b">ESB interno (esb/)</text>
+<rect x="733" y="180" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="194" font-size="10.8" fill="#0f172a">EsbRouter: operaciones con nombre + métricas</text>
+<rect x="733" y="204" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="218" font-size="10.8" fill="#0f172a">SagaOrchestrator: pasos + compensación LIFO</text>
+<rect x="733" y="228" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="242" font-size="10.8" fill="#0f172a">Validación de reglas (DTO compartidos)</text>
+<rect x="733" y="252" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="266" font-size="10.8" fill="#0f172a">Saga de compra de vuelos (ComprasService)</text>
+<rect x="725" y="298" width="320" height="182" rx="9" fill="#fff" stroke="#d9582b" stroke-width="2"/>
+<text x="735" y="318" font-size="12.5" font-weight="700" fill="#d9582b">ESB de integración (integracion/acl)</text>
+<rect x="733" y="328" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="342" font-size="10.8" fill="#0f172a">ClienteProveedor: SSRF, tiempo y tamaño acotados</text>
+<rect x="733" y="352" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="366" font-size="10.8" fill="#0f172a">ACL: AdaptadorProveedor por tipo de servicio</text>
+<rect x="733" y="376" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="390" font-size="10.8" fill="#0f172a">Atracciones: catálogo, reserva, cancelación</text>
+<rect x="733" y="400" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="414" font-size="10.8" fill="#0f172a">Autos y Alojamientos: solo salud (fase siguiente)</text>
+<rect x="733" y="424" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="438" font-size="10.8" fill="#0f172a">Circuit breaker por proveedor (opossum)</text>
+<rect x="733" y="448" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="462" font-size="10.8" fill="#0f172a">Kill-switch: proveedores.activo</text>
+<rect x="725" y="510" width="320" height="86" rx="9" fill="#fff" stroke="#6b7280" stroke-width="2"/>
+<text x="735" y="530" font-size="12.5" font-weight="700" fill="#6b7280">Socios externos (otros equipos)</text>
+<rect x="733" y="540" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="554" font-size="10.8" fill="#0f172a">APIs REST: Atracciones, Autos, Alojamientos</text>
+<rect x="733" y="564" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="740" y="578" font-size="10.8" fill="#64748b" font-style="italic">Push de stock gRPC (cliente streaming)</text>
+<rect x="1090" y="150" width="320" height="134" rx="9" fill="#fff" stroke="#5b4bb7" stroke-width="2"/>
+<text x="1100" y="170" font-size="12.5" font-weight="700" fill="#5b4bb7">DomainEventBus (en proceso)</text>
+<rect x="1098" y="180" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="194" font-size="10.8" fill="#0f172a">publish → consumidores; fallo aislado</text>
+<rect x="1098" y="204" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="218" font-size="10.8" fill="#0f172a">subscribeAll: auditoría y suscripciones</text>
+<rect x="1098" y="228" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="242" font-size="10.8" fill="#0f172a">despachar(): reintento por broker</text>
+<rect x="1098" y="252" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="266" font-size="10.8" fill="#0f172a">Respaldo: si el broker cae, entrega local</text>
+<rect x="1090" y="298" width="320" height="158" rx="9" fill="#fff" stroke="#5b4bb7" stroke-width="2"/>
+<text x="1100" y="318" font-size="12.5" font-weight="700" fill="#5b4bb7">RabbitMQ (opcional, RABBITMQ_URL)</text>
+<rect x="1098" y="328" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="342" font-size="10.8" fill="#0f172a">exchange booking.events (direct)</text>
+<rect x="1098" y="352" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="366" font-size="10.8" fill="#0f172a">q.ordenes.confirmadas</text>
+<rect x="1098" y="376" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="390" font-size="10.8" fill="#0f172a">q.sagas.compensacion</text>
+<rect x="1098" y="400" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="414" font-size="10.8" fill="#0f172a">q.general</text>
+<rect x="1098" y="424" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="438" font-size="10.8" fill="#0f172a">q.dead_letter (tras 3 reintentos)</text>
+<rect x="1090" y="470" width="320" height="182" rx="9" fill="#fff" stroke="#5b4bb7" stroke-width="2"/>
+<text x="1100" y="490" font-size="12.5" font-weight="700" fill="#5b4bb7">Consumidores</text>
+<rect x="1098" y="500" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="514" font-size="10.8" fill="#0f172a">Auditoría de transacciones (idempotente)</text>
+<rect x="1098" y="524" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="538" font-size="10.8" fill="#0f172a">Notificaciones · expiración de ofertas</text>
+<rect x="1098" y="548" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="562" font-size="10.8" fill="#0f172a">Reembolsos y estado de la orden</text>
+<rect x="1098" y="572" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="586" font-size="10.8" fill="#0f172a">Webhooks salientes (cola con reintentos)</text>
+<rect x="1098" y="596" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="610" font-size="10.8" fill="#0f172a">Suscripciones GraphQL (estadoReservaCambiado)</text>
+<rect x="1098" y="620" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="634" font-size="10.8" fill="#0f172a">Reconciliación de pagos (cada 60 s)</text>
+<rect x="1090" y="666" width="320" height="110" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="1100" y="686" font-size="12.5" font-weight="700" fill="#94a3b8">Kafka (referencia)</text>
+<rect x="1098" y="696" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1105" y="710" font-size="10.8" fill="#64748b" font-style="italic">puente RabbitMQ–Kafka</text>
+<rect x="1098" y="720" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1105" y="734" font-size="10.8" fill="#64748b" font-style="italic">booking.catalogo.stream</text>
+<rect x="1098" y="744" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1105" y="758" font-size="10.8" fill="#64748b" font-style="italic">booking.compras.audit · telemetría</text>
+<rect x="1455" y="150" width="320" height="158" rx="9" fill="#fff" stroke="#15803d" stroke-width="2"/>
+<text x="1465" y="170" font-size="12.5" font-weight="700" fill="#15803d">ORQ_RES · compra y reservas</text>
+<rect x="1463" y="180" width="304" height="36" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="195.5" font-size="10.8" fill="#0f172a">Compra de vuelo: revalidar → autorizar → orden +</text>
+<text x="1470" y="208.5" font-size="10.8" fill="#0f172a">reserva + billetes (1 tx) → capturar</text>
+<rect x="1463" y="220" width="304" height="36" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="235.5" font-size="10.8" fill="#0f172a">Reserva externa: autorizar → reservar en socio →</text>
+<text x="1470" y="248.5" font-size="10.8" fill="#0f172a">verificar precio → confirmar + facturar → capturar</text>
+<rect x="1463" y="260" width="304" height="36" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="282" font-size="10.8" fill="#0f172a">Compensación: anular pago, cancelar en el socio</text>
+<rect x="1455" y="322" width="320" height="118" rx="9" fill="#fff" stroke="#15803d" stroke-width="2"/>
+<text x="1465" y="342" font-size="12.5" font-weight="700" fill="#15803d">ORQ_FAC · facturación compuesta</text>
+<rect x="1463" y="352" width="304" height="36" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="367.5" font-size="10.8" fill="#0f172a">Factura + detalle + IVA 15 % en la misma transacción</text>
+<text x="1470" y="380.5" font-size="10.8" fill="#0f172a">que la orden o la reserva</text>
+<rect x="1463" y="392" width="304" height="36" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="414" font-size="10.8" fill="#0f172a">Consola fiscal (admin) y factura por cliente</text>
+<rect x="1455" y="454" width="320" height="62" rx="9" fill="#fff" stroke="#15803d" stroke-width="2"/>
+<text x="1465" y="474" font-size="12.5" font-weight="700" fill="#15803d">Reconciliación (outbox de reemplazo)</text>
+<rect x="1463" y="484" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="491.5" font-size="10.8" fill="#0f172a">Captura/anula/reembolsa pendientes; re-anuncia</text>
+<text x="1470" y="504.5" font-size="10.8" fill="#0f172a">órdenes sin aviso</text>
+<rect x="1455" y="530" width="320" height="110" rx="9" fill="#fff" stroke="#15803d" stroke-width="2"/>
+<text x="1465" y="550" font-size="12.5" font-weight="700" fill="#15803d">Seguridad transversal</text>
+<rect x="1463" y="560" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="574" font-size="10.8" fill="#0f172a">JWT HS256 + RBAC (CUSTOMER, ADMIN, invitado)</text>
+<rect x="1463" y="584" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="591.5" font-size="10.8" fill="#0f172a">Propiedad por ownerId; cifrado AES-256-GCM de datos</text>
+<text x="1470" y="604.5" font-size="10.8" fill="#0f172a">personales</text>
+<rect x="1463" y="608" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="622" font-size="10.8" fill="#0f172a">Idempotency-Key en compras, reservas y posventa</text>
+<rect x="1455" y="654" width="320" height="86" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="1465" y="674" font-size="12.5" font-weight="700" fill="#94a3b8">Orquestadores de la referencia</text>
+<rect x="1463" y="684" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1470" y="698" font-size="10.8" fill="#64748b" font-style="italic">ORQ_PKG: paquetes dinámicos</text>
+<rect x="1463" y="708" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1470" y="722" font-size="10.8" fill="#64748b" font-style="italic">ORQ_STK: consolidación de stock</text>
+<rect x="1820" y="150" width="310" height="134" rx="9" fill="#fff" stroke="#db2777" stroke-width="2"/>
+<text x="1830" y="170" font-size="12.5" font-weight="700" fill="#db2777">Seguridad del gateway</text>
+<rect x="1828" y="180" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="194" font-size="10.8" fill="#0f172a">JWT en REST y GraphQL (+ websocket)</text>
+<rect x="1828" y="204" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="218" font-size="10.8" fill="#0f172a">Rate limit global y por cliente</text>
+<rect x="1828" y="228" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="242" font-size="10.8" fill="#0f172a">Profundidad de consulta ≤ 7 · CORS</text>
+<rect x="1828" y="252" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="266" font-size="10.8" fill="#0f172a">Introspección solo fuera de producción</text>
+<rect x="1820" y="298" width="310" height="134" rx="9" fill="#fff" stroke="#db2777" stroke-width="2"/>
+<text x="1830" y="318" font-size="12.5" font-weight="700" fill="#db2777">GraphQL /graphql (BFF, Apollo)</text>
+<rect x="1828" y="328" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="342" font-size="10.8" fill="#0f172a">Una puerta → EsbRouter → dominios</text>
+<rect x="1828" y="352" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="366" font-size="10.8" fill="#0f172a">DataLoaders por petición (anti N+1)</text>
+<rect x="1828" y="376" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="390" font-size="10.8" fill="#0f172a">Errores con extensions.code = REST</text>
+<rect x="1828" y="400" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="414" font-size="10.8" fill="#0f172a">Suscripciones graphql-ws</text>
+<rect x="1820" y="446" width="310" height="206" rx="9" fill="#fff" stroke="#db2777" stroke-width="2"/>
+<text x="1830" y="466" font-size="12.5" font-weight="700" fill="#db2777">Operaciones GraphQL</text>
+<rect x="1828" y="476" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="490" font-size="10.8" fill="#0f172a">Q: catalogoUnificado · misReservas</text>
+<rect x="1828" y="500" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="514" font-size="10.8" fill="#0f172a">Q: facturaCompleta · saludNodos</text>
+<rect x="1828" y="524" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="538" font-size="10.8" fill="#0f172a">Q: auditoriaTransacciones · auditoriaSagas</text>
+<rect x="1828" y="548" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="562" font-size="10.8" fill="#0f172a">M: checkoutExterno · cancelarReservaSaga</text>
+<rect x="1828" y="572" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="586" font-size="10.8" fill="#0f172a">M: checkInDigital</text>
+<rect x="1828" y="596" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="610" font-size="10.8" fill="#0f172a">S: estadoReservaCambiado</text>
+<rect x="1828" y="620" width="294" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1835" y="634" font-size="10.8" fill="#64748b" font-style="italic">S: stockActualizado (fase siguiente)</text>
+<rect x="1820" y="666" width="310" height="110" rx="9" fill="#fff" stroke="#db2777" stroke-width="2"/>
+<text x="1830" y="686" font-size="12.5" font-weight="700" fill="#db2777">REST /api/v1 (Swagger /api/docs)</text>
+<rect x="1828" y="696" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="710" font-size="10.8" fill="#0f172a">Contrato GDS + e-commerce + admin</text>
+<rect x="1828" y="720" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="734" font-size="10.8" fill="#0f172a">OpenAPI generado: 74 rutas · 85 operaciones</text>
+<rect x="1828" y="744" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="758" font-size="10.8" fill="#0f172a">problem+json y X-Correlation-Id</text>
+<rect x="2175" y="150" width="495" height="182" rx="9" fill="#fff" stroke="#0d9488" stroke-width="2"/>
+<text x="2185" y="170" font-size="12.5" font-weight="700" fill="#0d9488">Cliente web — marketplace</text>
+<rect x="2183" y="180" width="479" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="194" font-size="10.8" fill="#0f172a">Búsqueda de vuelos, ofertas y fechas flexibles</text>
+<rect x="2183" y="204" width="479" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="218" font-size="10.8" fill="#0f172a">Checkout: pasajeros, asientos, facturación, pago</text>
+<rect x="2183" y="228" width="479" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="242" font-size="10.8" fill="#0f172a">Confirmación con billetes y QR · verificar /verificar/:código</text>
+<rect x="2183" y="252" width="479" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="266" font-size="10.8" fill="#0f172a">Mis viajes: recuperar orden, post-venta, check-in</text>
+<rect x="2183" y="276" width="479" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="290" font-size="10.8" fill="#0f172a">Experiencias: catálogo, reserva, «Mis experiencias»</text>
+<rect x="2183" y="300" width="479" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="2190" y="314" font-size="10.8" fill="#64748b" font-style="italic">App móvil Flutter / React Native</text>
+<rect x="2175" y="346" width="495" height="272" rx="9" fill="#fff" stroke="#0d9488" stroke-width="2"/>
+<text x="2185" y="366" font-size="12.5" font-weight="700" fill="#0d9488">Administración — 9 paneles</text>
+<rect x="2183" y="376" width="479" height="22" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="391" font-size="10.8" fill="#0f172a">1. Dashboard (ventas, inventario, proveedores caídos)</text>
+<rect x="2183" y="402" width="479" height="22" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="417" font-size="10.8" fill="#0f172a">2. Órdenes (QR y asientos por pasajero)</text>
+<rect x="2183" y="428" width="479" height="22" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="443" font-size="10.8" fill="#0f172a">3. Vuelos: crear, editar, cancelar, reprogramar</text>
+<rect x="2183" y="454" width="479" height="22" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="469" font-size="10.8" fill="#0f172a">4. Usuarios y roles</text>
+<rect x="2183" y="480" width="479" height="22" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="495" font-size="10.8" fill="#0f172a">5. Observabilidad (métricas, jobs, webhooks)</text>
+<rect x="2183" y="506" width="479" height="22" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="521" font-size="10.8" fill="#0f172a">6. Proveedores: registro, semáforo 🟢🟡🔴, 🔄 ping, 📥 sincronizar, kill-switch</text>
+<rect x="2183" y="532" width="479" height="22" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="547" font-size="10.8" fill="#0f172a">7. Facturación (consola fiscal)</text>
+<rect x="2183" y="558" width="479" height="22" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="573" font-size="10.8" fill="#0f172a">8. Auditoría de eventos y sagas (por correlation id)</text>
+<rect x="2183" y="584" width="479" height="22" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="2190" y="599" font-size="10.8" fill="#0f172a">9. Salud de nodos y latencia</text>
+<rect x="2175" y="632" width="495" height="86" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="2185" y="652" font-size="12.5" font-weight="700" fill="#94a3b8">Paneles de la referencia sin equivalente</text>
+<rect x="2183" y="662" width="479" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="2190" y="676" font-size="10.8" fill="#64748b" font-style="italic">Flota de autos · árbol de atracciones · liquidaciones</text>
+<rect x="2183" y="686" width="479" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="2190" y="700" font-size="10.8" fill="#64748b" font-style="italic">Simulador de pagos · monitor de ingesta gRPC</text>
+<path d="M332,330 L348,330" fill="none" stroke="#475569" stroke-width="3" marker-end="url(#m475569)"/>
+<path d="M692,300 L713,300" fill="none" stroke="#1d5fa8" stroke-width="3" marker-end="url(#m1d5fa8)"/>
+<path d="M1057,260 L1078,260" fill="none" stroke="#5b4bb7" stroke-width="3" stroke-dasharray="7 5" marker-end="url(#m5b4bb7)"/>
+<path d="M1422,300 L1443,300" fill="none" stroke="#0d9488" stroke-width="3" stroke-dasharray="7 5" marker-end="url(#m0d9488)"/>
+<path d="M1787,300 L1808,300" fill="none" stroke="#475569" stroke-width="3" marker-end="url(#m475569)"/>
+<path d="M2142,330 L2163,330" fill="none" stroke="#475569" stroke-width="3" marker-end="url(#m475569)"/>
+<path d="M775,481 L775,509" fill="none" stroke="#d9582b" stroke-width="2.6" marker-end="url(#md9582b)"/>
+<text x="785" y="500" font-size="10.5" font-weight="700" fill="#d9582b">HTTP saliente acotado · SSRF guard</text>
+<rect x="20" y="995" width="2660" height="64" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="1.6"/>
+<text x="34" y="1018" font-size="13" font-weight="700" fill="#0f172a">Telemetría y logs técnicos (Winston, archivos en logs/)</text>
+<text x="34" y="1040" font-size="11.5" fill="#475569">combined.log: todo · error.log: excepciones y circuitos · audit.log: eventos de dominio · cada línea con correlationId · además, muestra acotada en BD (peticiones_http, purga a 7 días) — la referencia pedía «cero logs de red en BD»; el registro completo son los archivos.</text>
+<rect x="20" y="1068" width="2660" height="38" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+<line x1="34" y1="1087" x2="74" y2="1087" stroke="#1d5fa8" stroke-width="2.4"/>
+<text x="82" y="1092" font-size="12" fill="#0f172a">Llamada síncrona entre capas</text>
+<line x1="330" y1="1087" x2="370" y2="1087" stroke="#d9582b" stroke-width="2.4"/>
+<text x="378" y="1092" font-size="12" fill="#0f172a">Flujo orquestado (saga)</text>
+<line x1="580" y1="1087" x2="620" y2="1087" stroke="#5b4bb7" stroke-width="2.4" stroke-dasharray="7 5"/>
+<text x="628" y="1092" font-size="12" fill="#0f172a">Evento asíncrono</text>
+<rect x="790" y="1076" width="46" height="22" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-dasharray="5 3"/>
+<text x="846" y="1092" font-size="12" fill="#64748b" font-style="italic">fase siguiente: no implementado en este repositorio</text>
+<circle cx="1360" cy="1087" r="13" fill="#7c3aed"/><text x="1360" y="1091" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">ID</text><text x="1380" y="1092" font-size="12" fill="#0f172a">= capa por la que viaja el Correlation-ID</text>
+<text x="30" y="1135" font-size="16" font-weight="700" fill="#7c3aed">Correlation-ID (X-Correlation-Id): implementado de punta a punta</text>
+<rect x="30" y="1148" width="424" height="118" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.8"/>
+<rect x="30" y="1148" width="424" height="28" rx="10" fill="#7c3aed"/><rect x="30" y="1164" width="424" height="12" fill="#7c3aed"/>
+<text x="42" y="1167" font-size="13" font-weight="700" fill="#fff">UI · capa 7</text>
+<text x="42" y="1200" font-size="12.5" fill="#1e1b4b">La respuesta trae el id; se muestra en los errores</text>
+<text x="42" y="1220" font-size="12.5" fill="#1e1b4b">para soporte</text>
+<rect x="470" y="1148" width="424" height="118" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.8"/>
+<rect x="470" y="1148" width="424" height="28" rx="10" fill="#7c3aed"/><rect x="470" y="1164" width="424" height="12" fill="#7c3aed"/>
+<text x="482" y="1167" font-size="13" font-weight="700" fill="#fff">Gateway · capa 6</text>
+<text x="482" y="1200" font-size="12.5" fill="#1e1b4b">CorrelationInterceptor: acepta el entrante o genera</text>
+<text x="482" y="1220" font-size="12.5" fill="#1e1b4b">un UUID</text>
+<rect x="910" y="1148" width="424" height="118" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.8"/>
+<rect x="910" y="1148" width="424" height="28" rx="10" fill="#7c3aed"/><rect x="910" y="1164" width="424" height="12" fill="#7c3aed"/>
+<text x="922" y="1167" font-size="13" font-weight="700" fill="#fff">ESB · capa 3</text>
+<text x="922" y="1200" font-size="12.5" fill="#1e1b4b">EsbRouter y SagaOrchestrator registran el mismo id</text>
+<text x="922" y="1220" font-size="12.5" fill="#1e1b4b">en cada paso</text>
+<rect x="1350" y="1148" width="424" height="118" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.8"/>
+<rect x="1350" y="1148" width="424" height="28" rx="10" fill="#7c3aed"/><rect x="1350" y="1164" width="424" height="12" fill="#7c3aed"/>
+<text x="1362" y="1167" font-size="13" font-weight="700" fill="#fff">Bus · capa 4</text>
+<text x="1362" y="1200" font-size="12.5" fill="#1e1b4b">Cada DomainEvent lleva correlationId; también en</text>
+<text x="1362" y="1220" font-size="12.5" fill="#1e1b4b">RabbitMQ</text>
+<rect x="1790" y="1148" width="424" height="118" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.8"/>
+<rect x="1790" y="1148" width="424" height="28" rx="10" fill="#7c3aed"/><rect x="1790" y="1164" width="424" height="12" fill="#7c3aed"/>
+<text x="1802" y="1167" font-size="13" font-weight="700" fill="#fff">Dominios · capa 2</text>
+<text x="1802" y="1200" font-size="12.5" fill="#1e1b4b">En logs Winston y en los errores problem+json</text>
+<rect x="2230" y="1148" width="424" height="118" rx="10" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.8"/>
+<rect x="2230" y="1148" width="424" height="28" rx="10" fill="#7c3aed"/><rect x="2230" y="1164" width="424" height="12" fill="#7c3aed"/>
+<text x="2242" y="1167" font-size="13" font-weight="700" fill="#fff">Datos · capa 1</text>
+<text x="2242" y="1200" font-size="12.5" fill="#1e1b4b">auditoria_transacciones, auditoria_sagas y</text>
+<text x="2242" y="1220" font-size="12.5" fill="#1e1b4b">peticiones_http lo guardan</text>
+<text x="30" y="1292" font-size="12" fill="#475569" font-style="italic">Documentación: src/modules/vuelos/docs/ARQUITECTURA-CAPAS.md · MODELO-DE-DATOS.md (generado) · ARQUITECTURA-EVENTOS.md. Diagrama de referencia: mermaid_20261021_28f8d5, adaptado a Vuelos.</text>
+</svg>

@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { EcommerceModule } from './ecommerce/ecommerce.module';
 import { VuelosController } from './vuelos.controller';
+import { GatewayModule } from './gateway/gateway.module';
 import { VuelosCoreModule } from './vuelos-core.module';
 
 @Module({
-  imports: [VuelosCoreModule, EcommerceModule],
+  imports: [VuelosCoreModule, EcommerceModule, GatewayModule],
   controllers: [VuelosController],
 })
 export class VuelosModule {}

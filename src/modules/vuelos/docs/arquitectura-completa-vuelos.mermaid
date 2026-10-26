@@ -1,0 +1,291 @@
+graph LR
+    %% =========================================================================
+    %% ARQUITECTURA POR CAPAS DE RAM ALLIANCE VUELOS
+    %% Adaptación a Vuelos del diagrama de referencia (mermaid_20261021_28f8d5).
+    %% Un solo despliegue (monolito modular NestJS + PostgreSQL/Neon) con fronteras de capa.
+    %% Trazo normal = implementado en este repositorio. Trazo punteado (clase "later") = fase siguiente.
+    %% Detalle en docs/ARQUITECTURA-CAPAS.md · versión gráfica: arquitectura-completa-vuelos.svg
+    %% =========================================================================
+
+    %% =========================================================================
+    %% CAPA 1: PERSISTENCIA (POSTGRESQL / NEON, 3FN, 61 TABLAS, 82 FK)
+    %% =========================================================================
+    subgraph CAPA1 ["CAPA 1: PERSISTENCIA (PostgreSQL 3FN · 61 tablas · 82 FK)"]
+        subgraph GRP_GDS ["Nucleo GDS (vuelos_*)"]
+            T_VUE[("vuelos · aerolineas · fare_families")]
+            T_OFE[("flight_offers · offer_itineraries")]
+            T_HLD[("flight_holds · hold_items")]
+            T_BKG[("bookings · booking_cambios · passengers · tickets")]
+            T_SEA[("seat_assignments · baggage_purchases · check_ins")]
+            T_POS[("date_change_offers · cancellation_quotes")]
+            T_WHK[("webhook_subscriptions · subscription_events · deliveries")]
+            T_IDM[("idempotency_records")]
+        end
+
+        subgraph GRP_ECOM ["E-commerce (ecom_*)"]
+            T_MKT[("mercados + 10 tablas de configuracion")]
+            T_CLI[("clientes · cliente_roles · roles · localidades")]
+            T_OFC[("ofertas · trayectos · precios · pasajeros · aceptaciones")]
+            T_ORD[("ordenes · orden_historial")]
+            T_PAG[("pagos · pago_antifraude_motivos")]
+            T_FAC[("datos_facturacion · facturas · factura_detalles")]
+            T_NTF[("notificaciones · plantillas")]
+        end
+
+        subgraph GRP_INT ["Integracion con proveedores"]
+            T_PRV[("proveedores · proveedor_salud")]
+            T_CAT[("catalogo_externo · categorias")]
+            T_RSV[("reservas_externas")]
+        end
+
+        subgraph GRP_AUD ["Auditoria y observabilidad"]
+            T_AUD_TRX[("auditoria_transacciones")]
+            T_AUD_SAG[("auditoria_sagas · auditoria_saga_pasos")]
+            T_AUD_ADM[("auditoria_administrativa")]
+            T_HTTP[("peticiones_http (purga a 7 dias)")]
+        end
+
+        subgraph GRP_LATER1 ["De la referencia, fase siguiente"]
+            T_LATER1[("un esquema por servicio · finanzas · paquetes")]
+        end
+    end
+
+    %% =========================================================================
+    %% CAPA 2: DOMINIOS (MODULOS NEST, REST + TYPEORM)
+    %% =========================================================================
+    subgraph CAPA2 ["CAPA 2: DOMINIOS (modulos NestJS · REST / TypeORM)"]
+        MS_GDS["Nucleo GDS: Busqueda · Hold · Bookings y billetes · Estado de vuelos"]
+        MS_POS["Posventa: equipaje · cambio de fecha · cancelacion"]
+        MS_CHK["Check-in y pases de abordar (QR firmado)"]
+        MS_WHK["Webhooks (HMAC · reintentos · SSRF guard)"]
+        MS_IDE["Identidad (JWT propio) · Mercados · Catalogo y precios"]
+        MS_OFE["Ofertas y Checkout · Ordenes y Compras"]
+        MS_PAG["Pagos (pasarela y antifraude simulados)"]
+        MS_FAC["Facturacion (IVA 15 %)"]
+        MS_NTF["Notificaciones · Admin (usuarios, vuelos, ordenes)"]
+        MS_PRV["Proveedores: registro · ping · kill-switch · sincronizar"]
+        MS_EXP["Experiencias y Reservas externas"]
+        MS_AUD["Auditoria · registro de sagas · bitacora HTTP · metricas"]
+        MS_STK["MS Ingesta Stock (gRPC 50051)"]
+        MS_FIN["MS Finanzas y Liquidaciones"]
+        MS_PKG["MS Paquetes Dinamicos"]
+    end
+
+    %% Enlaces Capa 1 a Capa 2
+    T_VUE -.-> MS_GDS
+    T_OFE -.-> MS_GDS
+    T_HLD -.-> MS_GDS
+    T_BKG -.-> MS_GDS
+    T_SEA -.-> MS_CHK
+    T_POS -.-> MS_POS
+    T_WHK -.-> MS_WHK
+    T_IDM -.-> MS_OFE
+    T_MKT -.-> MS_IDE
+    T_CLI -.-> MS_IDE
+    T_OFC -.-> MS_OFE
+    T_ORD -.-> MS_OFE
+    T_PAG -.-> MS_PAG
+    T_FAC -.-> MS_FAC
+    T_NTF -.-> MS_NTF
+    T_PRV -.-> MS_PRV
+    T_CAT -.-> MS_EXP
+    T_RSV -.-> MS_EXP
+    T_AUD_TRX -.-> MS_AUD
+    T_AUD_SAG -.-> MS_AUD
+    T_AUD_ADM -.-> MS_AUD
+    T_HTTP -.-> MS_AUD
+    T_LATER1 -.-> MS_FIN
+
+    %% =========================================================================
+    %% CAPA 3: ESB DE DOS CAPAS (esb/ + ecommerce/integracion/acl)
+    %% =========================================================================
+    subgraph CAPA3 ["CAPA 3: ESB DE DOS CAPAS"]
+        subgraph ESB_INT ["ESB Capa Interna: Servicios Propios"]
+            ESB_ROUTER["EsbRouter: operaciones con nombre y metricas"]
+            ESB_SAGA["SagaOrchestrator: pasos y compensacion LIFO"]
+            ESB_POLICIES["Validacion de reglas (DTO compartidos REST y GraphQL)"]
+        end
+
+        subgraph ESB_EXT ["ESB Capa de Integracion: Socios Externos"]
+            ESB_ACL["Capa Anti-Corrupcion (ACL): AdaptadorProveedor por tipo"]
+            ESB_CLI["ClienteProveedor: SSRF guard · tiempo y tamano acotados"]
+            ESB_CB["Circuit Breaker por proveedor (opossum)"]
+            ESB_KILL["Kill-Switch: proveedores.activo"]
+        end
+    end
+
+    %% Enlaces Capa 2 a Capa 3
+    MS_GDS <--> ESB_ROUTER
+    MS_POS <--> ESB_ROUTER
+    MS_CHK <--> ESB_ROUTER
+    MS_IDE <--> ESB_ROUTER
+    MS_OFE <--> ESB_ROUTER
+    MS_PAG <--> ESB_ROUTER
+    MS_FAC <--> ESB_ROUTER
+    MS_AUD <--> ESB_ROUTER
+    MS_PRV <--> ESB_ACL
+    MS_EXP <--> ESB_ACL
+    MS_STK -->|Stream de stock| ESB_ACL
+
+    ESB_ROUTER <--> ESB_SAGA
+    ESB_ROUTER <--> ESB_ACL
+    ESB_ACL --- ESB_CLI
+    ESB_CLI --- ESB_CB
+    ESB_CB --- ESB_KILL
+
+    %% =========================================================================
+    %% SOCIOS EXTERNOS (OTROS EQUIPOS)
+    %% =========================================================================
+    subgraph SOCIOS ["SOCIOS EXTERNOS (otros equipos del curso)"]
+        EXT_ATR["API REST Atracciones: catalogo · reserva · cancelacion"]
+        EXT_AUT["APIs REST Autos y Alojamientos: solo salud"]
+        EXT_GRPC["Push de stock (gRPC client streaming)"]
+    end
+
+    ESB_CLI <-->|HTTP saliente acotado| EXT_ATR
+    ESB_CLI -->|healthcheck| EXT_AUT
+    EXT_GRPC -->|Inbound TCP 50051| MS_STK
+
+    %% =========================================================================
+    %% CAPA 4: EVENT BUS (DomainEventBus + RABBITMQ OPCIONAL) Y KAFKA (FUTURO)
+    %% =========================================================================
+    subgraph CAPA4 ["CAPA 4: EVENT BUS (DomainEventBus + RabbitMQ opcional)"]
+        BUS_LOCAL["DomainEventBus en proceso: publish · subscribeAll · despachar"]
+        subgraph BROKER_RABBIT ["RabbitMQ (AMQP) · solo con RABBITMQ_URL"]
+            RB_EX["Exchange: booking.events (direct)"]
+            Q_BUY["Cola: q.ordenes.confirmadas"]
+            Q_SAGA["Cola: q.sagas.compensacion"]
+            Q_GEN["Cola: q.general"]
+            Q_DLQ["Cola: q.dead_letter (tras 3 reintentos)"]
+        end
+
+        subgraph BROKER_KAFKA ["Kafka (referencia, fase siguiente)"]
+            KF_BRIDGE["Puente RabbitMQ-Kafka"]
+            TOPIC_CAT["booking.catalogo.stream"]
+            TOPIC_AUD["booking.compras.audit"]
+            TOPIC_TEL["booking.telemetria.nodes"]
+        end
+    end
+
+    ESB_ROUTER -->|Publica eventos de negocio| BUS_LOCAL
+    ESB_SAGA -->|Orden confirmada o fallo| BUS_LOCAL
+    MS_OFE -->|OrdenEmitida / OrdenFallidaCompensada| BUS_LOCAL
+    MS_EXP -->|ReservaExternaConfirmada / Fallida| BUS_LOCAL
+    BUS_LOCAL <-->|Transporte opcional| RB_EX
+    RB_EX --> Q_BUY
+    RB_EX --> Q_SAGA
+    RB_EX --> Q_GEN
+    RB_EX --> Q_DLQ
+    RB_EX -.->|Event sourcing| KF_BRIDGE
+    KF_BRIDGE --> TOPIC_CAT
+    KF_BRIDGE --> TOPIC_AUD
+    KF_BRIDGE --> TOPIC_TEL
+
+    %% =========================================================================
+    %% CAPA 5: ORQUESTADOS (SAGAS, FACTURACION COMPUESTA, SEGURIDAD)
+    %% =========================================================================
+    subgraph CAPA5 ["CAPA 5: ORQUESTADOS"]
+        ORQ_RES["ORQ_RES: compra de vuelo y reserva externa (saga con compensacion)"]
+        ORQ_FAC["ORQ_FAC: factura + detalle + IVA 15 % en la transaccion de la orden o reserva"]
+        ORQ_REC["Reconciliacion de pagos y avisos pendientes (cada 60 s)"]
+        ORQ_NTF["Consumidores: auditoria de eventos · notificaciones · reembolsos · webhooks"]
+        SEC_AUTH["Seguridad transversal: JWT + RBAC (CUSTOMER, ADMIN, invitado) · Idempotency-Key · cifrado AES-256-GCM"]
+        ORQ_PKG["ORQ_PKG: paquetes dinamicos"]
+        ORQ_STK["ORQ_STK: consolidacion de stock"]
+    end
+
+    ESB_ROUTER --> ORQ_FAC
+    ESB_SAGA <--> ORQ_RES
+    Q_BUY --> ORQ_FAC
+    Q_BUY --> ORQ_NTF
+    Q_SAGA --> ORQ_RES
+    Q_GEN --> ORQ_NTF
+    BUS_LOCAL --> ORQ_NTF
+    TOPIC_AUD -.->|Stream de auditoria| MS_AUD
+    TOPIC_TEL -.->|Stream de telemetria| MS_PRV
+    MS_PKG -.-> ORQ_PKG
+
+    ORQ_RES --- SEC_AUTH
+    ORQ_FAC --- SEC_AUTH
+    ORQ_REC --- SEC_AUTH
+
+    %% =========================================================================
+    %% CAPA 6: GATEWAY Y BFF (REST /api/v1 + GRAPHQL /graphql)
+    %% =========================================================================
+    subgraph CAPA6 ["CAPA 6: GATEWAY Y BFF (REST + GraphQL)"]
+        GW_SEC["Seguridad: JWT (HTTP y websocket) · rate limit global · profundidad maxima 7 · CORS"]
+        REST_API["REST /api/v1 · Swagger /api/docs · 74 rutas · problem+json"]
+        GQL_SRV["Apollo Server NestJS: /graphql (introspeccion solo fuera de produccion)"]
+        GQL_LOAD["DataLoaders por peticion (anti N+1)"]
+        GQL_WS["Suscripciones graphql-ws"]
+        subgraph GQL_OPS ["Operaciones GraphQL"]
+            GQL_Q["Queries: catalogoUnificado, misReservas, facturaCompleta, saludNodos, auditoriaTransacciones, auditoriaSagas"]
+            GQL_M["Mutations: checkoutExterno, cancelarReservaSaga, checkInDigital"]
+            GQL_S["Subscriptions: estadoReservaCambiado"]
+            GQL_SL["Subscriptions: stockActualizado"]
+        end
+    end
+
+    ORQ_RES --> REST_API
+    ORQ_FAC --> REST_API
+    MS_GDS --> REST_API
+    MS_AUD --> REST_API
+    GQL_SRV ==>|Todo pasa por el ESB| ESB_ROUTER
+    ORQ_NTF -.->|Eventos del propietario| GQL_WS
+    GW_SEC --- GQL_SRV
+    GW_SEC --- REST_API
+    GQL_SRV --- GQL_LOAD
+    GQL_SRV --- GQL_WS
+    GQL_SRV --> GQL_OPS
+
+    %% =========================================================================
+    %% CAPA 7: PRESENTACION (REACT 18, NETLIFY)
+    %% =========================================================================
+    subgraph CAPA7 ["CAPA 7: PRESENTACION (React 18 · Netlify)"]
+        subgraph UI_CLIENT ["Cliente web: marketplace"]
+            UI_VUE["Busqueda de vuelos, ofertas y fechas flexibles"]
+            UI_CHK["Checkout: pasajeros, asientos, facturacion y pago"]
+            UI_BOOK["Mis viajes: recuperar orden, posventa, check-in, billetes con QR"]
+            UI_EXP["Experiencias: catalogo, reserva y Mis experiencias"]
+            UI_MOB["App movil Flutter / React Native"]
+        end
+
+        subgraph UI_ADMIN ["9 paneles administrativos"]
+            ADM_DAS["1. Dashboard: ventas, inventario, proveedores caidos"]
+            ADM_ORD["2. Ordenes: QR y asientos por pasajero"]
+            ADM_VUE["3. Vuelos: crear, editar, cancelar, reprogramar"]
+            ADM_USR["4. Usuarios y roles"]
+            ADM_OBS["5. Observabilidad: metricas, jobs, webhooks"]
+            ADM_PRV["6. Proveedores: semaforo, ping, sincronizar y kill-switch"]
+            ADM_FAC["7. Consola fiscal: facturas, IVA y detalle"]
+            ADM_AUD["8. Auditoria de eventos y sagas por correlation id"]
+            ADM_NOD["9. Salud de nodos y latencia"]
+        end
+    end
+
+    REST_API ==>|HTTPS REST| UI_CLIENT
+    GQL_SRV ==>|HTTPS POST /graphql| UI_CLIENT
+    GQL_WS ==>|ws://| UI_CLIENT
+    GQL_SRV -.->|Consultas y mutaciones administrativas| UI_ADMIN
+    REST_API -.->|Rutas /admin| UI_ADMIN
+    UI_ADMIN -.->|PATCH /admin/proveedores activo=false| ESB_KILL
+
+    %% =========================================================================
+    %% LOGS TECNICOS (WINSTON). ADEMAS: MUESTRA ACOTADA EN BD (peticiones_http)
+    %% =========================================================================
+    subgraph LOGS ["TELEMETRIA Y LOGS TECNICOS (Winston, archivos en logs/)"]
+        LOG_COMB[("logs/combined.log: trazas generales")]
+        LOG_ERR[("logs/error.log: excepciones y circuitos")]
+        LOG_AUD[("logs/audit.log: eventos de dominio")]
+    end
+
+    CAPA2 -.->|Winston con correlationId| LOGS
+    CAPA3 -.->|Winston con correlationId| LOGS
+    CAPA5 -.->|Winston con correlationId| LOGS
+    CAPA6 -.->|Winston con correlationId| LOGS
+
+    %% =========================================================================
+    %% ESTILOS: lo que no esta implementado se dibuja punteado y gris
+    %% =========================================================================
+    classDef later fill:#f8fafc,stroke:#94a3b8,color:#64748b,stroke-dasharray: 6 4
+    class T_LATER1,MS_STK,MS_FIN,MS_PKG,EXT_GRPC,KF_BRIDGE,TOPIC_CAT,TOPIC_AUD,TOPIC_TEL,ORQ_PKG,ORQ_STK,GQL_SL,UI_MOB later

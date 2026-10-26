@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RolesGuard } from '../../auth/roles.guard';
+import { EsbModule } from '../../esb/esb.module';
 import { VuelosCoreModule } from '../../vuelos-core.module';
 import { FacturacionModule } from '../facturacion/facturacion.module';
 import { MercadosModule } from '../mercados/mercados.module';
@@ -30,10 +31,11 @@ import { SaludProveedoresService } from './salud-proveedores.service';
     PagosModule,
     FacturacionModule,
     ObservabilidadModule,
+    EsbModule,
     TypeOrmModule.forFeature([Proveedor, ProveedorSalud, CatalogoExterno, CatalogoExternoCategoria, ReservaExterna]),
   ],
   controllers: [ProveedoresController, ExperienciasController, ReservasExternasController],
   providers: [ClienteProveedor, CircuitBreakers, AtraccionesAdapter, ProveedoresService, ExperienciasService, ReservasExternasService, SaludProveedoresService, RolesGuard],
-  exports: [ProveedoresService, CircuitBreakers, TypeOrmModule],
+  exports: [ProveedoresService, ExperienciasService, ReservasExternasService, CircuitBreakers, TypeOrmModule],
 })
 export class IntegracionModule {}

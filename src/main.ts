@@ -2,10 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { WinstonLogger } from './modules/vuelos/common/winston-logger';
 import { createGlobalRateLimit } from './modules/vuelos/ecommerce/common/global-rate-limit.middleware';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger: new WinstonLogger() });
 
   // Behind a reverse proxy (Render) req.ip is the proxy's address unless it is trusted, and the
   // per-client rate limits (login, order lookup) would then be shared by every user. No-op unless set.

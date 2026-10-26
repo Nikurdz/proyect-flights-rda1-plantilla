@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import * as http from 'node:http';
 import { AddressInfo } from 'node:net';
 import { INestApplication } from '@nestjs/common';
 import request = require('supertest');
@@ -13,65 +12,12 @@ import { SaludProveedoresService } from '../ecommerce/integracion/salud-proveedo
 import { AuditoriaSaga } from '../ecommerce/observabilidad/entities/auditoria.entity';
 import { Pago } from '../ecommerce/pagos/entities/pago.entity';
 import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
+import { partnerFalso } from './partner-falso';
 import { IntegrationApp, createIntegrationApp, describeIntegration } from './integration-app';
 
 jest.setTimeout(180_000);
 
 const ADMIN = { correo: 'admin@example.com', contrasena: 'AdminPass-12345' };
-
-type Modo = 'ok' | 'down' | 'refuse';
-
-/** A partner service that speaks the Atracciones contract, with switches to make it fail. */
-function partnerFalso() {
-  const estado = {
-    modo: 'ok' as Modo,
-    productos: [
-      { id: 'p-1', name: 'City tour Quito', long_description: 'Recorrido por el centro histórico', duration: '3 horas', price: { currency: 'USD', total: 45 }, categories: ['Tours', 'Cultura'], photos: [{ url: 'https://img.example.com/1.jpg' }], product_type: 'GUIDED_TOUR', free_cancellation: true },
-      { id: 'p-2', name: 'Teleférico', long_description: 'Subida al Pichincha', duration: '2 horas', price: { currency: 'USD', total: 20 }, categories: ['Aventura'], product_type: 'SINGLE_TICKET', free_cancellation: false },
-      { name: 'Sin id ni precio' },
-    ] as Record<string, unknown>[],
-    reservas: new Map<string, { key: string; total: number }>(),
-    llamadas: [] as string[],
-    cancelaciones: [] as string[],
-  };
-  const server = http.createServer((req, res) => {
-    const send = (status: number, body?: unknown) => {
-      res.writeHead(status, { 'Content-Type': 'application/json' });
-      res.end(body === undefined ? '' : JSON.stringify(body));
-    };
-    let raw = '';
-    req.on('data', (c) => (raw += c));
-    req.on('end', () => {
-      const url = new URL(req.url ?? '/', 'http://x');
-      estado.llamadas.push(`${req.method} ${url.pathname}`);
-      if (estado.modo === 'down') return send(503, { title: 'down' });
-      if (req.method === 'GET' && url.pathname === '/api/v2/atracciones/health') return send(200);
-      if (req.method === 'GET' && url.pathname === '/api/v2/atracciones') {
-        const offset = Number(url.searchParams.get('offset') ?? 0);
-        return send(200, { data: estado.productos.slice(offset, offset + Number(url.searchParams.get('limit') ?? 10)), meta: { totalItems: estado.productos.length } });
-      }
-      const reservar = /^\/api\/v2\/atracciones\/([^/]+)\/reservations$/.exec(url.pathname);
-      if (req.method === 'POST' && reservar) {
-        if (estado.modo === 'refuse') return send(409, { detail: 'No hay cupo para esa fecha' });
-        const body = JSON.parse(raw) as { ticket_count: number };
-        const key = String(req.headers['idempotency-key']);
-        const previa = [...estado.reservas.entries()].find(([, r]) => r.key === key);
-        const id = previa?.[0] ?? randomUUID();
-        const producto = estado.productos.find((p) => p.id === reservar[1]) as { price: { total: number } };
-        const total = producto.price.total * body.ticket_count;
-        estado.reservas.set(id, { key, total });
-        return send(201, { reservation_id: id, status: 'CONFIRMED', ticket_count: body.ticket_count, total_price: { currency: 'USD', total } });
-      }
-      const cancelar = /^\/api\/v2\/atracciones\/reservations\/([^/]+)\/cancel$/.exec(url.pathname);
-      if (req.method === 'POST' && cancelar) {
-        estado.cancelaciones.push(cancelar[1]);
-        return send(200, { reservation_id: cancelar[1], status: 'CANCELLED' });
-      }
-      send(404, { detail: 'not found' });
-    });
-  });
-  return { estado, server };
-}
 
 describeIntegration('Gestión de Proveedores y reservas de experiencias against a real Postgres', () => {
   let ctx: IntegrationApp;
@@ -196,7 +142,7 @@ describeIntegration('Gestión de Proveedores y reservas de experiencias against 
     const token = await guest();
     const key = randomUUID();
     const res = await reservar(token, tourId, cuerpo(), key).expect(201);
-    expect(res.body).toMatchObject({ estado: 'CONFIRMADA', cantidad: 2, total: { moneda: 'USD' }, experiencia: { nombre: 'City tour Quito', proveedor: 'Atracciones Quito' } });
+    expect(res.body).toMatchObject({ estado: 'CONFIRMADA', cantidad: 2, cancelacionGratis: true, total: { moneda: 'USD' }, experiencia: { nombre: 'City tour Quito', proveedor: 'Atracciones Quito' } });
     expect(res.body.factura).toMatch(/^FAC-[A-Z0-9]{10}$/);
     expect(res.body.referenciaProveedor).toBeTruthy();
     expect(partner.estado.reservas.has(res.body.referenciaProveedor)).toBe(true);
@@ -214,7 +160,7 @@ describeIntegration('Gestión de Proveedores y reservas de experiencias against 
 
     const saga = await ds.getRepository(AuditoriaSaga).findOneOrFail({ where: { referencia: reserva.id }, relations: { pasos: true } });
     expect(saga).toMatchObject({ tipo: 'RESERVA_EXTERNA', estado: 'COMPLETADA' });
-    expect([...saga.pasos].sort((a, b) => a.secuencia - b.secuencia).map((p) => p.nombre)).toEqual(['AUTORIZAR_PAGO', 'RESERVAR_PROVEEDOR', 'CONFIRMAR_Y_FACTURAR', 'CAPTURAR_PAGO']);
+    expect([...saga.pasos].sort((a, b) => a.secuencia - b.secuencia).map((p) => p.nombre)).toEqual(['AUTORIZAR_PAGO', 'RESERVAR_PROVEEDOR', 'VERIFICAR_PRECIO', 'CONFIRMAR_Y_FACTURAR', 'CAPTURAR_PAGO']);
 
     const antes = partner.estado.reservas.size;
     const replay = await reservar(token, tourId, cuerpo(), key).expect(201);
@@ -225,6 +171,15 @@ describeIntegration('Gestión de Proveedores y reservas de experiencias against 
     expect((await api().get('/api/v1/reservas-externas').set(bearer(token)).expect(200)).body.items).toHaveLength(1);
     await api().get(`/api/v1/reservas-externas/${res.body.id}`).set(bearer(await guest())).expect(404); // somebody else's
     expect((await admin('get', '/reservas/todas').expect(200)).body.items.length).toBeGreaterThan(0);
+
+    // The fiscal console lists the invoice, with its lines in the detail; only for an ADMIN.
+    const lista = (await api().get('/api/v1/admin/facturas').query({ origen: 'EXPERIENCIA' }).set(bearer(adminToken)).expect(200)).body;
+    expect(lista.items.map((f: { numeroFactura: string }) => f.numeroFactura)).toContain(res.body.factura);
+    expect(lista.items[0]).toMatchObject({ origen: 'EXPERIENCIA', estado: 'EMITIDA' });
+    const detalle = (await api().get('/api/v1/admin/facturas/' + res.body.factura).set(bearer(adminToken)).expect(200)).body;
+    expect(detalle.detalles).toHaveLength(1);
+    await api().get('/api/v1/admin/facturas').set(bearer(token)).expect(403);
+    await api().get('/api/v1/admin/facturas').expect(401);
   });
 
   it('refuses before touching the partner: declined card, bad tax id, past date, brand not accepted', async () => {
