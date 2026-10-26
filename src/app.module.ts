@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
+import { dbSsl } from './modules/vuelos/common/db-ssl';
 import { VuelosModule } from './modules/vuelos/vuelos.module';
 
 @Module({
@@ -25,7 +26,7 @@ import { VuelosModule } from './modules/vuelos/vuelos.module';
         extra: { max: Number(configService.get<string>('DB_POOL_MAX')) || 5 },
         // Managed Postgres needs TLS. DB_SSL_CA (the provider's CA certificate, PEM) turns on full verification; without it
         // PGSSLMODE=require (read by `pg`) encrypts the connection as before.
-        ...(configService.get<string>('DB_SSL_CA') ? { ssl: { ca: configService.get<string>('DB_SSL_CA'), rejectUnauthorized: true } } : {}),
+        ssl: dbSsl({ DB_SSL_CA: configService.get<string>('DB_SSL_CA') }),
       }),
     }),
 

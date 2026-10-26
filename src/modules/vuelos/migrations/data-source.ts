@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { join } from 'node:path';
 import { config } from 'dotenv';
 import { DataSource } from 'typeorm';
+import { dbSsl } from '../common/db-ssl';
 
 config({ quiet: true });
 
@@ -17,5 +18,6 @@ export default new DataSource({
   entities: [join(__dirname, '..', '**', '*.entity.{ts,js}')],
   migrations: [join(__dirname, '[0-9]*.{ts,js}')],
   migrationsTableName: 'vuelos_migrations',
+  ssl: dbSsl(),
   synchronize: false,
 });
