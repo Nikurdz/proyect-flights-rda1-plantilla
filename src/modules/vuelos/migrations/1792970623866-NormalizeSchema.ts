@@ -402,7 +402,8 @@ export class NormalizeSchema1792970623866 implements MigrationInterface {
        SELECT DISTINCT x."id", e.producto FROM "_medios" x CROSS JOIN LATERAL jsonb_array_elements_text(x.medio->'productos') AS e(producto)`,
     );
 
-    // Regulatory windows: one row per kind of rule that is configured.
+    // Regulatory windows: one row per kind of rule that is configured. A family code that is not a fare family (old configuration
+    // data) is left out: the foreign key could not hold it.
     await q.query(
       `INSERT INTO "ecom_mercado_reglas" ("mercadoCodigo", "regla", "diasHabiles")
        SELECT "codigo", 'RETRACTO', ("reglasRegulatorias"->'retracto'->>'diasHabiles')::int FROM "ecom_mercados" WHERE "reglasRegulatorias" ? 'retracto'`,
@@ -417,7 +418,7 @@ export class NormalizeSchema1792970623866 implements MigrationInterface {
        SELECT DISTINCT r."id", e.familia FROM "ecom_mercado_reglas" r
        JOIN "ecom_mercados" m ON m."codigo" = r."mercadoCodigo"
        CROSS JOIN LATERAL jsonb_array_elements_text(m."reglasRegulatorias"->'desistimiento'->'familias') AS e(familia)
-       WHERE r."regla" = 'DESISTIMIENTO'`,
+       WHERE r."regla" = 'DESISTIMIENTO' AND EXISTS (SELECT 1 FROM "vuelos_fare_families" ff WHERE ff."code" = e.familia)`,
     );
     await q.query(
       `INSERT INTO "ecom_mercado_reglas" ("mercadoCodigo", "regla", "horasAntesDelVuelo", "maximoPorPasaje", "maximoPorAnio")
