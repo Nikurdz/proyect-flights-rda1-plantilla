@@ -5,6 +5,7 @@ import { runtimeMetrics } from '../common/runtime-metrics';
 import { postJson, resolveSafeTarget, signWebhookBody } from '../common/safe-http';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
+import { activityGate } from '../common/activity-gate';
 import { WebhookSubscription } from '../entities/webhook-subscription.entity';
 
 // The shortest retry delay is 1 minute, so polling faster than that only wakes the database; override with WEBHOOK_POLL_INTERVAL_MS.
@@ -41,7 +42,8 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    this.timer = setInterval(() => void this.process(), POLL_INTERVAL_MS);
+    // With nobody using the system the tick is skipped, so a serverless database can sleep (common/activity-gate.ts).
+    this.timer = setInterval(() => activityGate.isActive() && void this.process(), POLL_INTERVAL_MS);
     // Never keep the process (or a test run) alive just for housekeeping.
     this.timer.unref();
   }

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { CallHandler, ExecutionContext, HttpException, Injectable, Logger, NestInterceptor } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { Observable } from 'rxjs';
+import { activityGate, isProbePath } from './activity-gate';
 import { runtimeMetrics } from './runtime-metrics';
 
 const storage = new AsyncLocalStorage<{ correlationId: string }>();
@@ -57,6 +58,9 @@ export class CorrelationInterceptor implements NestInterceptor {
     const inbound = request.headers[CORRELATION_HEADER];
     const correlationId = typeof inbound === 'string' && SAFE_ID.test(inbound) ? inbound : randomUUID();
     response.setHeader('X-Correlation-Id', correlationId);
+
+    // A real request counts as use of the system (the background jobs only run while somebody is around); a health probe does not.
+    if (!isProbePath(request.path)) activityGate.touch();
 
     const startedAt = Date.now();
     return new Observable((subscriber) => {

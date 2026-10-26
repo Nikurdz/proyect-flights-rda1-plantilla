@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { activityGate } from '../../common/activity-gate';
 import { runtimeMetrics } from '../../common/runtime-metrics';
 import { MercadosService } from '../mercados/mercados.service';
 import { Notificacion } from '../notificaciones/entities/notificacion.entity';
@@ -34,7 +35,8 @@ export class ReconciliacionService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    this.timer = setInterval(() => void this.reconciliar(), INTERVAL_MS);
+    // Skipped while nobody uses the system, so a serverless database can sleep (common/activity-gate.ts).
+    this.timer = setInterval(() => activityGate.isActive() && void this.reconciliar(), INTERVAL_MS);
     this.timer.unref();
   }
 

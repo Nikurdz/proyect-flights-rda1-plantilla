@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { currentCorrelationId } from './correlation';
+import { activityGate } from './activity-gate';
 import { runtimeMetrics } from './runtime-metrics';
 
 // SRS §10.3: every event carries id, type, schema version, instant, market, correlation id
@@ -72,6 +73,7 @@ export class DomainEventBus {
 
     this.logger.log(`${type} aggregate=${aggregateId} [${event.correlationId}]`);
     runtimeMetrics.recordEvent(type);
+    activityGate.touch();
     if (this.transport) {
       try {
         await this.transport.publicar(event);

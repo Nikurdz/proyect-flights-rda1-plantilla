@@ -7,6 +7,11 @@ Pasos para llevar esta versión a producción (Railway + Neon + Netlify). La mig
 - La migración `NormalizeSchema` sobre bases con el esquema anterior y datos reales (siete muestras generadas por el código anterior y una copia de la base de desarrollo): todas migran y `migration:check` queda sin diferencias.
 - Un detalle que solo apareció con datos reales: una regla de desistimiento con una familia tarifaria que no existe (mercado antiguo). La migración ya la omite. **Ensaya siempre en una copia de la base de producción antes de migrar la real.**
 
+## Base de datos y cuotas (Neon agotado)
+Neon Free apaga el cómputo tras 5 minutos sin consultas, pero las tareas de fondo antiguas lo mantenían despierto y el cupo mensual se agotó. Esta versión las detiene cuando nadie usa el sistema (`APP_IDLE_MS`) y trae `GET /api/v1/health/live`, que no toca la base: **apunta ahí el health check de Railway y cualquier monitor**.
+
+Si Neon sigue bloqueado, una opción gratuita y siempre encendida es **Aiven PostgreSQL (plan gratuito)**: crea el servicio, copia la *Service URI* (con `sslmode=require`) y úsala como `DATABASE_URL` (opcional: `DB_SSL_CA` con el certificado de Aiven para verificar el servidor). Límites: 1 GB y 20 conexiones (el pool usa 5 por defecto, `DB_POOL_MAX`). Una base nueva se llena sola con `start:render` (migra y siembra); el administrador sale de `ADMIN_EMAIL`/`ADMIN_PASSWORD`, y `DATA_ENCRYPTION_KEY` puede ser nueva porque no hay datos cifrados que conservar.
+
 ## 1. Antes de desplegar
 1. **Copia de seguridad de Neon** (rama de Neon o `pg_dump`), y guarda el archivo fuera del repositorio.
 2. **Ensayo en una copia**: restaura la copia en una base desechable y, desde tu máquina, con `DATABASE_URL` apuntando a ella y la **misma** `DATA_ENCRYPTION_KEY` que usa producción:

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
+import { activityGate } from '../../common/activity-gate';
 import { runtimeMetrics } from '../../common/runtime-metrics';
 import { ProveedorSalud } from './entities/proveedor-salud.entity';
 import { Proveedor } from './entities/proveedor.entity';
@@ -24,7 +25,8 @@ export class SaludProveedoresService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    this.timer = setInterval(() => void this.comprobarTodos(), INTERVAL_MS);
+    // Skipped while nobody uses the system, so a serverless database can sleep (common/activity-gate.ts).
+    this.timer = setInterval(() => activityGate.isActive() && void this.comprobarTodos(), INTERVAL_MS);
     this.timer.unref();
   }
 

@@ -4,6 +4,7 @@ import { DataSource, LessThan } from 'typeorm';
 import { CancellationQuote } from '../entities/cancellation-quote.entity';
 import { DateChangeOffer } from '../entities/date-change-offer.entity';
 import { FlightOffer } from '../entities/flight-offer.entity';
+import { activityGate } from '../common/activity-gate';
 import { runtimeMetrics } from '../common/runtime-metrics';
 import { IdempotencyService } from './idempotency.service';
 import { OffersService } from './offers.service';
@@ -32,7 +33,8 @@ export class HoldsSweeper implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    this.timer = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
+    // Skipped while nobody uses the system, so a serverless database can sleep (common/activity-gate.ts).
+    this.timer = setInterval(() => activityGate.isActive() && void this.sweep(), SWEEP_INTERVAL_MS);
     // Never keep the process (or a test run) alive just for housekeeping.
     this.timer.unref();
   }

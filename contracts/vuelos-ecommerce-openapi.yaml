@@ -3114,6 +3114,17 @@ paths:
       summary: Estado del servicio
       tags:
         - Sistema
+  /health/live:
+    get:
+      description: 200 siempre que la API responda; no consulta la base de datos (para sondas y health checks de la plataforma).
+      operationId: HealthController_vivo
+      parameters: []
+      responses:
+        '200':
+          description: UP
+      summary: El proceso está vivo
+      tags:
+        - Sistema
   /itinerarios/{id}/tarifas:
     get:
       description: 'RF-PRC-002/003/005/009: precios con impuestos por pasajero, condiciones estructuradas y vigencia.'

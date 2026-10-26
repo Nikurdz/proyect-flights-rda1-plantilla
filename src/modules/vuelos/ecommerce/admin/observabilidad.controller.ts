@@ -57,6 +57,15 @@ export class ObservabilidadController {
 export class HealthController {
   constructor(private readonly observabilidad: ObservabilidadService) {}
 
+  // For uptime probes and the platform's health check: answers without touching the database, so a probe never wakes a
+  // serverless Postgres and does not count as use of the system (common/activity-gate.ts).
+  @Get('live')
+  @ApiOperation({ summary: 'El proceso está vivo', description: '200 siempre que la API responda; no consulta la base de datos (para sondas y health checks de la plataforma).' })
+  @ApiResponse({ status: 200, description: 'UP' })
+  vivo() {
+    return { status: 'UP' };
+  }
+
   @Get()
   @ApiOperation({ summary: 'Estado del servicio', description: '200 si la API alcanza su base de datos; 503 si no.' })
   @ApiResponse({ status: 200, description: 'UP' })

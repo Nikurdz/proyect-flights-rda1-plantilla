@@ -21,6 +21,11 @@ import { VuelosModule } from './modules/vuelos/vuelos.module';
         url: configService.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
         synchronize: configService.get<string>('NODE_ENV') !== 'production', // Precaución en producción
+        // A free Postgres allows few connections (Aiven: 20): keep the pool small. DB_POOL_MAX overrides.
+        extra: { max: Number(configService.get<string>('DB_POOL_MAX')) || 5 },
+        // Managed Postgres needs TLS. DB_SSL_CA (the provider's CA certificate, PEM) turns on full verification; without it
+        // PGSSLMODE=require (read by `pg`) encrypts the connection as before.
+        ...(configService.get<string>('DB_SSL_CA') ? { ssl: { ca: configService.get<string>('DB_SSL_CA'), rejectUnauthorized: true } } : {}),
       }),
     }),
 

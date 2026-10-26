@@ -10,7 +10,8 @@ services:
     # then starts the API. The app does not `synchronize` in production, so migrations are the only
     # way the schema reaches this database.
     startCommand: npm run start:render
-    healthCheckPath: /api/v1/mercados/ec
+    # Does not touch the database: a probe every few seconds would keep a serverless Postgres awake (Neon free quota).
+    healthCheckPath: /api/v1/health/live
     envVars:
       - key: NODE_ENV
         value: production

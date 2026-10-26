@@ -13,6 +13,7 @@ import { AuditoriaSaga } from '../ecommerce/observabilidad/entities/auditoria.en
 import { Pago } from '../ecommerce/pagos/entities/pago.entity';
 import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
 import { partnerFalso } from './partner-falso';
+import { activityGate } from '../common/activity-gate';
 import { IntegrationApp, createIntegrationApp, describeIntegration } from './integration-app';
 
 jest.setTimeout(180_000);
@@ -53,6 +54,15 @@ describeIntegration('Gestión de Proveedores y reservas de experiencias against 
   afterAll(async () => {
     await ctx?.close();
     await new Promise((resolve) => partner.server.close(resolve));
+  });
+
+  it('a health probe is not use of the system (so a serverless database can sleep); a real request is', async () => {
+    activityGate.reset(Date.now() - 30 * 60_000);
+    await api().get('/api/v1/health/live').expect(200, { status: 'UP' });
+    await api().get('/api/v1/health').expect(200);
+    expect(activityGate.isActive()).toBe(false);
+    await api().get('/api/v1/mercados/ec').expect(200);
+    expect(activityGate.isActive()).toBe(true);
   });
 
   it('is for ADMIN only: 401 anonymous, 403 guest', async () => {

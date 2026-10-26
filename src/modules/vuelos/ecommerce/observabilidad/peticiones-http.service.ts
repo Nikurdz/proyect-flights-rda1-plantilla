@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
+import { activityGate } from '../../common/activity-gate';
 import { HttpRequestRecord, setHttpRequestSink } from '../../common/correlation';
 import { runtimeMetrics } from '../../common/runtime-metrics';
 import { PeticionHttp } from './entities/auditoria.entity';
@@ -30,7 +31,7 @@ export class PeticionesHttpService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     setHttpRequestSink((record) => this.encolar(record));
     this.flushTimer = setInterval(() => void this.vaciar(), FLUSH_MS);
-    this.purgeTimer = setInterval(() => void this.purgar(), PURGE_MS);
+    this.purgeTimer = setInterval(() => activityGate.isActive() && void this.purgar(), PURGE_MS);
     this.flushTimer.unref();
     this.purgeTimer.unref();
   }
