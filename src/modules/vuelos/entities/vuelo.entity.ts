@@ -3,7 +3,8 @@ import { ColumnNumericTransformer } from '../../../common/transformers/column-nu
 import { Localidad } from '../ecommerce/catalogo/entities/localidad.entity';
 import { Aerolinea } from './aerolinea.entity';
 
-export type VueloEstado = 'SCHEDULED' | 'CANCELLED';
+/** Operational status of a flight (contract v2 FlightOperationalStatus). SCHEDULED means "no override": the status then follows the clock. */
+export type VueloEstado = 'SCHEDULED' | 'BOARDING' | 'DEPARTED' | 'DELAYED' | 'ARRIVED' | 'CANCELLED' | 'DIVERTED';
 
 @Entity('vuelos')
 @Unique('UQ_vuelos_codigo_salida', ['codigoVuelo', 'fechaSalida'])
@@ -69,6 +70,22 @@ export class Vuelo {
   // CANCELLED flights are closed to search, holds and bookings; an admin cancels or reschedules a flight.
   @Column({ type: 'varchar', length: 12, default: 'SCHEDULED' })
   estado: VueloEstado;
+
+  // Operational detail set by PATCH /api/v2/vuelos/flights/{n}/status.
+  @Column({ type: 'int', nullable: true })
+  retrasoMinutos?: number | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  salidaEstimada?: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  llegadaEstimada?: Date | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  puertaSalida?: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  estadoActualizadoEn?: Date | null;
 
   /** The airline's name (read from its row; needs `aerolineaRef` loaded). */
   get aerolinea(): string {

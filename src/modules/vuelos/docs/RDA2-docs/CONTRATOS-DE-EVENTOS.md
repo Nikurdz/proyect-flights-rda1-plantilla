@@ -1,7 +1,7 @@
 # Contratos de eventos (semanas 6 y 7)
 
 ## Qué hay
-- **33 JSON Schema** en `contracts/eventos/<tipo>.v1.schema.json`, uno por tipo de evento que el código publica. Describen el payload; el sobre (`DomainEvent`: `id`, `type`, `schemaVersion`, `occurredAt`, `market`, `correlationId`, `aggregateId`) es común.
+- **39 JSON Schema** en `contracts/eventos/<tipo>.v1.schema.json`, uno por tipo de evento que el código publica. Describen el payload; el sobre (`DomainEvent`: `id`, `type`, `schemaVersion`, `occurredAt`, `market`, `correlationId`, `aggregateId`) es común.
 - **AsyncAPI** `contracts/vuelos-eventos-asyncapi.yaml`: exchange `booking.events`, colas `q.ordenes.confirmadas`, `q.sagas.compensacion`, `q.general`, `q.dead_letter`, un mensaje por evento que referencia su esquema.
 - **Validación** (`common/event-schemas.ts`, usada por `DomainEventBus`): al publicar y al despachar. `EVENT_SCHEMA_MODE` = `strict` (por defecto fuera de producción: lanza), `warn` (por defecto en producción: registra y entrega), `off`. Un mensaje inválido llegado del broker no llega a los consumidores: cuenta como fallo, se reintenta 3 veces y termina en `q.dead_letter`. `schemaVersion` del sobre = versión mayor del esquema.
 - **Compatibilidad** (`common/schema-compat.ts`, `scripts/check-schema-compat.ts`): `npm run contract:events:check -- <ref>` compara los esquemas con una referencia de git y falla si hay un cambio incompatible o un esquema publicado se borró.

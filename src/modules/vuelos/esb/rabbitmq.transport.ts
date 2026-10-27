@@ -12,6 +12,10 @@ export const Q_CONFIRMADAS = 'q.ordenes.confirmadas';
 export const Q_COMPENSACION = 'q.sagas.compensacion';
 export const Q_GENERAL = 'q.general';
 export const Q_DEAD_LETTER = 'q.dead_letter';
+/** Events Booking Prototipo publishes for the airline (contract v2 §8): payments and cancelled packages. */
+export const Q_ENTRANTES = 'q.vuelos.entrantes';
+export const ENTRANTES_ROUTING_KEYS = ['pagos.payment.confirmed', 'pagos.payment.failed', 'paquetes.package.cancelled'];
+const CLOUD_EVENT_PREFIX = 'ec.edu.epn.booking.';
 export const MAX_REINTENTOS = 3;
 
 const CONFIRMADAS = new Set(['OrdenEmitida', 'ReservaExternaConfirmada', 'booking.confirmed', 'booking.ticket_issued']);
@@ -99,6 +103,10 @@ export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModule
         await canal.bindQueue(cola, EXCHANGE, cola);
         await canal.consume(cola, (mensaje) => void this.alRecibir(canal, mensaje));
       }
+      // Events from Booking arrive as structured CloudEvents under their own routing keys.
+      await canal.assertQueue(Q_ENTRANTES, { durable: true, arguments: { 'x-dead-letter-exchange': DEAD_LETTER_EXCHANGE } });
+      for (const clave of ENTRANTES_ROUTING_KEYS) await canal.bindQueue(Q_ENTRANTES, EXCHANGE, clave);
+      await canal.consume(Q_ENTRANTES, (mensaje) => void this.alRecibir(canal, mensaje, (crudo) => this.deCloudEvent(crudo)));
       this.conexion = conexion;
       this.canal = canal;
       this.bus.setTransport(this);
@@ -124,11 +132,28 @@ export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModule
     this.reconectar.unref();
   }
 
-  private async alRecibir(canal: Canal, mensaje: amqp.ConsumeMessage | null): Promise<void> {
+  /** A CloudEvent from Booking as a domain event whose type is the short name (`pagos.payment.confirmed`). */
+  private deCloudEvent(crudo: unknown): DomainEvent {
+    const ce = crudo as { id?: string; type?: string; time?: string; correlationid?: string; subject?: string; data?: Record<string, unknown> };
+    if (!ce || typeof ce.id !== 'string' || typeof ce.type !== 'string' || !ce.type.startsWith(CLOUD_EVENT_PREFIX) || typeof ce.data !== 'object') throw new Error('not a Booking CloudEvent');
+    return {
+      id: ce.id,
+      type: ce.type.slice(CLOUD_EVENT_PREFIX.length),
+      schemaVersion: 1,
+      occurredAt: ce.time ?? new Date().toISOString(),
+      market: null,
+      correlationId: ce.correlationid ?? 'no-correlation',
+      aggregateId: ce.subject ?? String(ce.data?.bookingId ?? ce.id),
+      payload: ce.data,
+    };
+  }
+
+  private async alRecibir(canal: Canal, mensaje: amqp.ConsumeMessage | null, convertir?: (crudo: unknown) => DomainEvent): Promise<void> {
     if (!mensaje) return;
     let evento: DomainEvent;
     try {
-      evento = JSON.parse(mensaje.content.toString('utf8')) as DomainEvent;
+      const crudo = JSON.parse(mensaje.content.toString('utf8')) as unknown;
+      evento = convertir ? convertir(crudo) : (crudo as DomainEvent);
     } catch {
       // Not an event: it can never succeed, so it goes straight to the dead letters.
       this.contadores.muertos++;

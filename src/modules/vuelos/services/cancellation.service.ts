@@ -1,5 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, MoreThan } from 'typeorm';
 import type { AuthClaims } from '../auth/token.service';
 import { DomainEventBus } from '../common/domain-event-bus';
@@ -18,7 +19,7 @@ import { BookingContext, BookingContextService } from './booking-context.service
 import { IdempotencyService } from './idempotency.service';
 import { InventoryService } from './inventory.service';
 
-interface CancelOutcome {
+export interface CancelOutcome {
   response: CancelBookingResponseDto;
   event: Record<string, unknown>;
 }
@@ -70,6 +71,11 @@ export class CancellationService {
   }
 
   async cancel(auth: AuthClaims, idempotencyKey: string, bookingId: string, request: CancelBookingRequestDto): Promise<CancelBookingResponseDto> {
+    return (await this.cancelWithEvent(auth, idempotencyKey, bookingId, request)).response;
+  }
+
+  /** The cancellation with the event it announced (contract v2 builds its richer answer from both). */
+  async cancelWithEvent(auth: AuthClaims, idempotencyKey: string, bookingId: string, request: CancelBookingRequestDto): Promise<CancelOutcome> {
     const outcome = await this.idempotency.execute<CancelOutcome>(
       { key: idempotencyKey, route: `POST /bookings/${bookingId}/cancel`, ownerId: auth.ownerId, body: request },
       HttpStatus.OK,
@@ -78,26 +84,36 @@ export class CancellationService {
         this.context.assertConfirmed(context.booking);
         this.assertCancellable(context);
 
-        const quote = await manager.findOne(CancellationQuote, { where: { quoteId: request.quoteId, bookingId }, lock: { mode: 'pessimistic_write' } });
-        if (!quote) {
-          throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Unknown quote', `Quote ${request.quoteId} does not belong to booking ${bookingId}.`, [
-            { name: 'quoteId', reason: 'not a quote of this booking' },
-          ]);
+        const reasonCode = request.reasonCode ?? 'CUSTOMER_REQUEST';
+        let amounts: CancellationAmounts;
+        let refundId: string;
+        if (request.quoteId) {
+          const quote = await manager.findOne(CancellationQuote, { where: { quoteId: request.quoteId, bookingId }, lock: { mode: 'pessimistic_write' } });
+          if (!quote) {
+            throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Unknown quote', `Quote ${request.quoteId} does not belong to booking ${bookingId}.`, [
+              { name: 'quoteId', reason: 'not a quote of this booking' },
+            ]);
+          }
+          if (quote.status !== 'OPEN' || quote.expiresAt.getTime() <= Date.now()) {
+            throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Quote expired', `Quote ${quote.quoteId} is no longer valid; ask for a new one.`);
+          }
+          quote.status = 'USED';
+          await manager.save(quote);
+          amounts = { isRefundable: quote.isRefundable, refundMinor: quote.refundMinor, penaltyMinor: quote.penaltyMinor };
+          refundId = quote.quoteId;
+        } else {
+          // Contract v2: no quote asked for. The airline cancelling (FLIGHT_CANCELLED) refunds everything.
+          amounts = await this.amountsFor(manager, context, this.config.postSale.cancelPenaltyPercent, reasonCode === 'FLIGHT_CANCELLED');
+          refundId = randomUUID();
         }
-        if (quote.status !== 'OPEN' || quote.expiresAt.getTime() <= Date.now()) {
-          throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Quote expired', `Quote ${quote.quoteId} is no longer valid; ask for a new one.`);
-        }
-        quote.status = 'USED';
-        await manager.save(quote);
-
-        const amounts: CancellationAmounts = { isRefundable: quote.isRefundable, refundMinor: quote.refundMinor, penaltyMinor: quote.penaltyMinor };
-        return this.applyCancellation(manager, context, amounts, request.reason ?? 'Cancelada por el viajero');
+        const applied = await this.applyCancellation(manager, context, amounts, request.reason ?? 'Cancelada por el viajero');
+        return { ...applied, event: { ...applied.event, reasonCode, refundId } };
       },
     );
     if (!outcome.replayed) {
       await this.events.publish('booking.cancelled', bookingId, outcome.result.event);
     }
-    return outcome.result.response;
+    return outcome.result;
   }
 
   /**
@@ -117,6 +133,7 @@ export class CancellationService {
     await manager.delete(CheckIn, { bookingId: booking.bookingId });
     // Exactly what the hold took from each flight goes back; never a recomputed figure.
     await this.inventory.restore(manager, hold.inventory);
+    const seatsReleased = hold.inventory.reduce((sum, item) => sum + item.seats, 0);
 
     return {
       response: {
@@ -135,8 +152,10 @@ export class CancellationService {
         refundAmount: formatMinorUnits(amounts.refundMinor),
         refundMinor: amounts.refundMinor,
         penaltyAmount: formatMinorUnits(amounts.penaltyMinor),
+        penaltyMinor: amounts.penaltyMinor,
         currency: booking.currency,
         reason,
+        seatsReleased,
       },
     };
   }

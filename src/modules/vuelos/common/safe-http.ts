@@ -82,6 +82,11 @@ export async function resolveSafeTarget(rawUrl: string, allowPrivateHosts: boole
   return { url, address: addresses[0].address, family: addresses[0].family as 4 | 6 };
 }
 
+/** Contract v2 signature: `sha256=<hex>` of HMAC-SHA256(secret, body) (the body only, no timestamp). */
+export function signWebhookBodyV2(secret: string, body: string): string {
+  return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+}
+
 /** `sha256=<hex>` of HMAC-SHA256(secret, `${timestamp}.${body}`): the receiver recomputes it to authenticate a delivery. */
 export function signWebhookBody(secret: string, timestamp: string, body: string): string {
   return `sha256=${createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')}`;
@@ -170,7 +175,7 @@ export function postJson(
         port: url.port || (secure ? 443 : 80),
         path: `${url.pathname}${url.search}`,
         method: 'POST',
-        headers: { ...headers, Host: url.host, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        headers: { 'Content-Type': 'application/json', ...headers, Host: url.host, 'Content-Length': Buffer.byteLength(body) },
         // The certificate is checked against the hostname, not the pinned address.
         ...(secure ? { servername: url.hostname } : {}),
         timeout: options.timeoutMs,

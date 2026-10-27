@@ -9,9 +9,9 @@ import { toIso, utcDayRange } from '../common/date.util';
 import { mapBookingUniqueViolation } from '../common/db-errors';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { findHold } from '../common/hold-loader';
-import { formatMinorUnits } from '../common/money.util';
+import { formatMinorUnits, toMinorUnits } from '../common/money.util';
 import { PassengerBreakdown, PassengerType, countFor, PASSENGER_TYPES } from '../common/pricing.util';
-import type { ProblemDetailsBody } from '../common/problem-details.exception';
+import type { ProblemDetailsBody, ProblemDetailsCode } from '../common/problem-details.exception';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { seatExists } from '../common/seat-grid';
 import { buildTicketCode } from '../common/ticket-qr';
@@ -24,6 +24,7 @@ import { FlightHoldItem } from '../entities/flight-hold-item.entity';
 import { Passenger } from '../entities/passenger.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
 import { Ticket } from '../entities/ticket.entity';
+import { Localidad } from '../ecommerce/catalogo/entities/localidad.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import type {
   BookingDetailResponseDto,
@@ -37,6 +38,12 @@ import { OffersService } from './offers.service';
 
 const PNR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid confusion
 const BOOKING_ROUTE = 'POST /bookings';
+
+/** Rules that differ between contract versions; v1 callers pass none. */
+export interface BookingOptions {
+  /** Contract v2: international trips need a passport for every passenger. */
+  passportForInternational?: boolean;
+}
 
 export interface BookingOutcome {
   response: BookingDetailResponseDto;
@@ -61,7 +68,7 @@ export class BookingsService {
    * visible unless everything succeeded, and two concurrent requests for one hold serialise
    * on the row lock, so exactly one wins.
    */
-  async createBooking(auth: AuthClaims, idempotencyKey: string, request: BookingRequestDto): Promise<BookingDetailResponseDto> {
+  async createBooking(auth: AuthClaims, idempotencyKey: string, request: BookingRequestDto, options: BookingOptions = {}): Promise<BookingDetailResponseDto> {
     let outcome;
     try {
       outcome = await this.idempotency.execute<BookingOutcome>(
@@ -69,7 +76,7 @@ export class BookingsService {
         HttpStatus.CREATED,
         async (manager) => {
           try {
-            return await this.createBookingWithin(manager, auth.ownerId, request);
+            return await this.createBookingWithin(manager, auth.ownerId, request, options);
           } catch (error) {
             throw mapBookingUniqueViolation(error);
           }
@@ -104,7 +111,9 @@ export class BookingsService {
       pnr: outcome.response.pnr,
       holdId: outcome.holdId,
       ownerId,
+      grandTotal: outcome.response.grandTotal,
       ticketNumbers: (outcome.response.tickets ?? []).map((t) => t.eTicketNumber),
+      tickets: (outcome.response.tickets ?? []).map((t) => ({ ticketId: t.ticketId, eTicketNumber: t.eTicketNumber, passengerId: t.passengerId })),
     };
     await this.events.publish('booking.confirmed', outcome.response.bookingId, { ...base, status: 'CONFIRMED' });
     await this.events.publish('booking.ticket_issuing', outcome.response.bookingId, { ...base, status: 'TICKET_ISSUING' });
@@ -130,7 +139,7 @@ export class BookingsService {
    * Public so the e-commerce order saga can issue the booking and update its own order atomically.
    * The caller publishes the domain event with announceConfirmed() once its transaction commits.
    */
-  async createBookingWithin(manager: EntityManager, ownerId: string, request: BookingRequestDto): Promise<BookingOutcome> {
+  async createBookingWithin(manager: EntityManager, ownerId: string, request: BookingRequestDto, options: BookingOptions = {}): Promise<BookingOutcome> {
     const hold = await findHold(manager, request.holdId, { lock: true });
     if (!hold) {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'OFFER_NO_LONGER_AVAILABLE', 'Hold not found', `Hold ${request.holdId} was not found.`);
@@ -149,7 +158,7 @@ export class BookingsService {
     const lastFlight = ordered[ordered.length - 1];
 
     if (vuelos.some((v) => v.estado === 'CANCELLED')) {
-      throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight cancelled', 'A flight of this hold was cancelled.');
+      throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight cancelled', 'A flight of this hold was cancelled.').forV2('FLIGHT_CANCELLED', HttpStatus.CONFLICT);
     }
     // A hold taken before departure must not turn into a booking once the flight has left.
     if (new Date(firstFlight.fechaSalida).getTime() <= Date.now()) {
@@ -157,6 +166,18 @@ export class BookingsService {
     }
 
     this.validatePassengers(request, hold.passengersBreakdown, firstFlight, lastFlight, vuelos, hold.itinerarySelections.map((s) => s.itineraryId));
+    if (options.passportForInternational) await this.assertPassportForInternational(manager, request, vuelos);
+
+    // Booking charged the customer: when it says how much, it must be what the hold priced.
+    const paid = request.payment.amount;
+    if (paid && (paid.currency !== hold.currency || toMinorUnits(paid.total) !== hold.lockedPriceMinor)) {
+      throw new ProblemDetailsException(
+        HttpStatus.CONFLICT,
+        'AMOUNT_MISMATCH',
+        'Amount does not match the held price',
+        `The payment reports ${paid.total} ${paid.currency} but the hold was priced at ${formatMinorUnits(hold.lockedPriceMinor)} ${hold.currency}.`,
+      );
+    }
 
     if (await manager.exists(Booking, { where: { paymentReference: request.payment.paymentReference } })) {
       throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PAYMENT_REFERENCE_INVALID', 'Payment already used', 'This paymentReference is already attached to another booking.');
@@ -164,7 +185,7 @@ export class BookingsService {
 
     const consumed = await manager.update(FlightHold, { holdId: hold.holdId, status: 'HELD' }, { status: 'CONSUMED' });
     if (consumed.affected !== 1) {
-      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BOOKING_NOT_CONFIRMED', 'Hold already consumed', `Hold ${hold.holdId} was already used to create a booking.`);
+      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BOOKING_NOT_CONFIRMED', 'Hold already consumed', `Hold ${hold.holdId} was already used to create a booking.`).forV2('HOLD_ALREADY_CONSUMED');
     }
 
     const booking = await manager.save(
@@ -176,6 +197,11 @@ export class BookingsService {
         totalMinor: hold.lockedPriceMinor,
         currency: hold.currency,
         paymentReference: request.payment.paymentReference,
+        channelPartnerId: request.salesChannel?.partnerId ?? null,
+        channelPartnerOrderId: request.salesChannel?.partnerOrderId ?? null,
+        channelPackageId: request.salesChannel?.packageId ?? null,
+        channelPromotionApplied: request.salesChannel?.promotionApplied ?? false,
+        channelDiscountPercentage: request.salesChannel?.discountPercentage ?? null,
       }),
     );
 
@@ -258,10 +284,28 @@ export class BookingsService {
       throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BOOKING_NOT_CONFIRMED', 'Hold already consumed', `Hold ${hold.holdId} was already used to create a booking.`);
     }
     if (hold.status !== 'HELD') {
-      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold is no longer active', `Hold ${hold.holdId} has status ${hold.status}.`);
+      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold is no longer active', `Hold ${hold.holdId} has status ${hold.status}.`).forV2('HOLD_EXPIRED');
     }
     if (hold.expiresAt.getTime() <= Date.now()) {
-      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold expired', `Hold ${hold.holdId} expired at ${toIso(hold.expiresAt)}.`);
+      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold expired', `Hold ${hold.holdId} expired at ${toIso(hold.expiresAt)}.`).forV2('HOLD_EXPIRED');
+    }
+  }
+
+  /** Contract v2: a trip that crosses a border needs a passport for every traveller (a national id is not enough). */
+  private async assertPassportForInternational(manager: EntityManager, request: BookingRequestDto, vuelos: Vuelo[]): Promise<void> {
+    const iatas = [...new Set(vuelos.flatMap((v) => [v.origenIATA, v.destinoIATA]))];
+    const countries = new Map((await manager.find(Localidad, { where: { iata: In(iatas) } })).map((l) => [l.iata, l.pais]));
+    const international = vuelos.some((v) => countries.has(v.origenIATA) && countries.has(v.destinoIATA) && countries.get(v.origenIATA) !== countries.get(v.destinoIATA));
+    if (!international) return;
+    const without = request.passengers.find((p) => p.documentType !== 'PASSPORT');
+    if (without) {
+      throw new ProblemDetailsException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'VALIDATION_FAILED',
+        'Passport required',
+        `Passenger ${without.passengerId} needs a passport: the trip crosses a border.`,
+        [{ name: 'passengers.documentType', reason: 'a passport is required on international trips' }],
+      ).forV2('PASSPORT_REQUIRED_INTERNATIONAL');
     }
   }
 
@@ -273,8 +317,9 @@ export class BookingsService {
     vuelos: Vuelo[],
     itineraryIds: string[],
   ): void {
-    const fail = (title: string, detail: string, invalid?: { name: string; reason: string }) => {
-      throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', title, detail, invalid ? [invalid] : undefined);
+    const fail = (title: string, detail: string, invalid?: { name: string; reason: string }, v2Code?: ProblemDetailsCode) => {
+      const problem = new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', title, detail, invalid ? [invalid] : undefined);
+      throw v2Code ? problem.forV2(v2Code) : problem;
     };
 
     // The party must be exactly the one that was priced and held.
@@ -285,6 +330,7 @@ export class BookingsService {
           'Passengers do not match the hold',
           `The hold was priced for ${countFor(breakdown, type)} ${type} passenger(s) but ${provided} were provided.`,
           { name: 'passengers', reason: `expected ${countFor(breakdown, type)} ${type}` },
+          'PASSENGER_COUNT_MISMATCH',
         );
       }
     }
@@ -315,7 +361,7 @@ export class BookingsService {
         fail('Travel document expired', `The document of ${passenger.firstName} ${passenger.lastName} expires before the last flight.`, {
           name: 'passengers.documentExpiryDate',
           reason: 'expires before the trip ends',
-        });
+        }, 'DOCUMENT_EXPIRED');
       }
     }
 
@@ -473,7 +519,7 @@ export class BookingsService {
     throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PNR_CREATION_FAILED', 'Could not allocate a record locator', 'Retry the request with the same Idempotency-Key.');
   }
 
-  private async generateUniqueETicketNumber(manager: EntityManager): Promise<string> {
+  async generateUniqueETicketNumber(manager: EntityManager): Promise<string> {
     // 13 digits, no airline-prefix table in this phase — a documented simplification.
     for (let attempt = 0; attempt < 10; attempt++) {
       let digits = '';

@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsString, IsUUID, Matches, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, Min, ValidateNested } from 'class-validator';
 import { CABIN_CLASSES } from './enums';
 import { MoneyAmountDto, PassengerBreakdownDto } from './search.dto';
 import { ToUpperTrimmed } from './validators';
@@ -38,6 +38,13 @@ export class HoldRequestDto {
   @ValidateNested()
   @Type(() => PassengerBreakdownDto)
   passengersBreakdown: PassengerBreakdownDto;
+
+  @ApiPropertyOptional({ minimum: 5, maximum: 30, default: 15, description: 'Minutos que dura el bloqueo (contrato v2). Sin él, HOLD_TTL_MINUTES.' })
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(30)
+  ttlMinutes?: number;
 }
 
 export class HoldResponseDto {

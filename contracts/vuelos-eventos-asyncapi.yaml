@@ -41,10 +41,13 @@ channels:
           - $ref: '#/components/messages/booking_changed'
           - $ref: '#/components/messages/booking_checked_in'
           - $ref: '#/components/messages/booking_failed'
+          - $ref: '#/components/messages/booking_seat_changed'
           - $ref: '#/components/messages/booking_ticket_failed'
           - $ref: '#/components/messages/booking_ticket_issuing'
           - $ref: '#/components/messages/flight_cancelled'
           - $ref: '#/components/messages/flight_schedule_changed'
+          - $ref: '#/components/messages/flight_status_changed'
+          - $ref: '#/components/messages/hold_created'
           - $ref: '#/components/messages/hold_expired'
           - $ref: '#/components/messages/hold_released'
           - $ref: '#/components/messages/proveedor_activado'
@@ -89,6 +92,22 @@ channels:
           - $ref: '#/components/messages/ReservaExternaCancelada'
           - $ref: '#/components/messages/ReservaExternaFallida'
           - $ref: '#/components/messages/booking_cancelled'
+  q.vuelos.entrantes:
+    description: Eventos que publica Booking Prototipo para la aerolinea (CloudEvents; routing keys pagos.payment.confirmed, pagos.payment.failed, paquetes.package.cancelled).
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: q.vuelos.entrantes
+          durable: true
+          deadLetterExchange: booking.dlx
+    publish:
+      operationId: recibir_q_vuelos_entrantes
+      message:
+        oneOf:
+          - $ref: '#/components/messages/pagos_payment_confirmed'
+          - $ref: '#/components/messages/pagos_payment_failed'
+          - $ref: '#/components/messages/paquetes_package_cancelled'
   q.dead_letter:
     description: Mensajes que agotaron 3 reintentos; requieren revisión manual (alerta sugerida si hay más de 10).
     subscribe:
@@ -502,6 +521,25 @@ components:
                 const: booking.failed
               payload:
                 $ref: './eventos/booking.failed.v1.schema.json'
+    booking_seat_changed:
+      name: booking.seat_changed
+      title: booking.seat_changed
+      summary: Cambio de asiento sobre una reserva emitida.
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: booking.seat_changed
+              payload:
+                $ref: './eventos/booking.seat_changed.v1.schema.json'
     booking_ticket_failed:
       name: booking.ticket_failed
       title: booking.ticket_failed
@@ -597,6 +635,44 @@ components:
                 const: flight.schedule_changed
               payload:
                 $ref: './eventos/flight.schedule_changed.v1.schema.json'
+    flight_status_changed:
+      name: flight.status_changed
+      title: flight.status_changed
+      summary: Cambio de estado operativo de un vuelo (retraso, abordaje, salida, llegada, desvío, cancelación).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: flight.status_changed
+              payload:
+                $ref: './eventos/flight.status_changed.v1.schema.json'
+    hold_created:
+      name: hold.created
+      title: hold.created
+      summary: Bloqueo de cupos creado (carrito).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/Envelope'
+          - type: object
+            properties:
+              type:
+                const: hold.created
+              payload:
+                $ref: './eventos/hold.created.v1.schema.json'
     hold_expired:
       name: hold.expired
       title: hold.expired
@@ -635,6 +711,63 @@ components:
                 const: hold.released
               payload:
                 $ref: './eventos/hold.released.v1.schema.json'
+    pagos_payment_confirmed:
+      name: pagos.payment.confirmed
+      title: pagos.payment.confirmed
+      summary: Booking cobró al cliente - la aerolínea emite los boletos de la reserva (evento entrante, contrato v2).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/CloudEvent'
+          - type: object
+            properties:
+              type:
+                const: ec.edu.epn.booking.pagos.payment.confirmed
+              data:
+                $ref: './eventos/pagos.payment.confirmed.v1.schema.json'
+    pagos_payment_failed:
+      name: pagos.payment.failed
+      title: pagos.payment.failed
+      summary: El pago falló - la aerolínea libera el hold y marca la reserva FAILED (evento entrante).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/CloudEvent'
+          - type: object
+            properties:
+              type:
+                const: ec.edu.epn.booking.pagos.payment.failed
+              data:
+                $ref: './eventos/pagos.payment.failed.v1.schema.json'
+    paquetes_package_cancelled:
+      name: paquetes.package.cancelled
+      title: paquetes.package.cancelled
+      summary: Se canceló el paquete - compensación, se cancela la parte de vuelo (evento entrante).
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          correlation_id:
+            type: string
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/CloudEvent'
+          - type: object
+            properties:
+              type:
+                const: ec.edu.epn.booking.paquetes.package.cancelled
+              data:
+                $ref: './eventos/paquetes.package.cancelled.v1.schema.json'
     proveedor_activado:
       name: proveedor.activado
       title: proveedor.activado
@@ -731,6 +864,31 @@ components:
               payload:
                 $ref: './eventos/proveedor.sincronizado.v1.schema.json'
   schemas:
+    CloudEvent:
+      type: object
+      description: CloudEvents v1.0 estructurado (eventos de Booking hacia la aerolinea y webhooks v2 hacia Booking).
+      required: [specversion, type, source, id, time, correlationid, data]
+      properties:
+        specversion:
+          type: string
+          enum: ['1.0']
+        type:
+          type: string
+        source:
+          type: string
+        id:
+          type: string
+        time:
+          type: string
+          format: date-time
+        subject:
+          type: string
+        datacontenttype:
+          type: string
+        correlationid:
+          type: string
+        data:
+          type: object
     Envelope:
       type: object
       required: [id, type, schemaVersion, occurredAt, correlationId, aggregateId, payload]

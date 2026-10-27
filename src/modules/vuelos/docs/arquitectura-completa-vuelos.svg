@@ -157,7 +157,8 @@
 <rect x="360" y="862" width="320" height="110" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
 <text x="370" y="882" font-size="12.5" font-weight="700" fill="#94a3b8">Microservicios de la referencia</text>
 <rect x="368" y="892" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="375" y="906" font-size="10.8" fill="#64748b" font-style="italic">MS Ingesta Stock (gRPC 50051)</text>
+<text x="375" y="899.5" font-size="10.8" fill="#64748b" font-style="italic">MS Ingesta Stock: lado de Booking (nosotros empujamos</text>
+<text x="375" y="912.5" font-size="10.8" fill="#64748b" font-style="italic">por gRPC)</text>
 <rect x="368" y="916" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
 <text x="375" y="930" font-size="10.8" fill="#64748b" font-style="italic">MS Finanzas y Liquidaciones</text>
 <rect x="368" y="940" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
@@ -186,12 +187,16 @@
 <text x="740" y="438" font-size="10.8" fill="#0f172a">Circuit breaker por proveedor (opossum)</text>
 <rect x="733" y="448" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="740" y="462" font-size="10.8" fill="#0f172a">Kill-switch: proveedores.activo</text>
-<rect x="725" y="510" width="320" height="86" rx="9" fill="#fff" stroke="#6b7280" stroke-width="2"/>
+<rect x="725" y="510" width="320" height="110" rx="9" fill="#fff" stroke="#6b7280" stroke-width="2"/>
 <text x="735" y="530" font-size="12.5" font-weight="700" fill="#6b7280">Socios externos (otros equipos)</text>
 <rect x="733" y="540" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="740" y="554" font-size="10.8" fill="#0f172a">APIs REST: Atracciones, Autos, Alojamientos</text>
-<rect x="733" y="564" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="740" y="578" font-size="10.8" fill="#64748b" font-style="italic">Push de stock gRPC (cliente streaming)</text>
+<rect x="733" y="564" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="571.5" font-size="10.8" fill="#0f172a">Booking Prototipo: push de stock gRPC</text>
+<text x="740" y="584.5" font-size="10.8" fill="#0f172a">(inventory.proto)</text>
+<rect x="733" y="588" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="740" y="595.5" font-size="10.8" fill="#0f172a">Booking Prototipo: eventos pagos.* y paquetes.* por</text>
+<text x="740" y="608.5" font-size="10.8" fill="#0f172a">RabbitMQ</text>
 <rect x="1090" y="150" width="320" height="134" rx="9" fill="#fff" stroke="#5b4bb7" stroke-width="2"/>
 <text x="1100" y="170" font-size="12.5" font-weight="700" fill="#5b4bb7">DomainEventBus (en proceso)</text>
 <rect x="1098" y="180" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
@@ -228,24 +233,26 @@
 <text x="1105" y="610" font-size="10.8" fill="#0f172a">Suscripciones GraphQL (estadoReservaCambiado)</text>
 <rect x="1098" y="620" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="1105" y="634" font-size="10.8" fill="#0f172a">Reconciliación de pagos (cada 60 s)</text>
-<rect x="1090" y="666" width="320" height="134" rx="9" fill="#fff" stroke="#5b4bb7" stroke-width="2"/>
+<rect x="1090" y="666" width="320" height="158" rx="9" fill="#fff" stroke="#5b4bb7" stroke-width="2"/>
 <text x="1100" y="686" font-size="12.5" font-weight="700" fill="#5b4bb7">Contratos de eventos (contracts/eventos)</text>
 <rect x="1098" y="696" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
-<text x="1105" y="710" font-size="10.8" fill="#0f172a">33 JSON Schema versionados (v1…)</text>
+<text x="1105" y="710" font-size="10.8" fill="#0f172a">39 JSON Schema versionados (v1…)</text>
 <rect x="1098" y="720" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="1105" y="734" font-size="10.8" fill="#0f172a">AsyncAPI: exchange, colas y mensajes</text>
 <rect x="1098" y="744" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="1105" y="758" font-size="10.8" fill="#0f172a">ajv valida al publicar y al despachar</text>
 <rect x="1098" y="768" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
-<text x="1105" y="782" font-size="10.8" fill="#0f172a">SemVer · BACKWARD_TRANSITIVE · CI</text>
-<rect x="1090" y="814" width="320" height="110" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
-<text x="1100" y="834" font-size="12.5" font-weight="700" fill="#94a3b8">Kafka (referencia)</text>
-<rect x="1098" y="844" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="1105" y="858" font-size="10.8" fill="#64748b" font-style="italic">puente RabbitMQ–Kafka</text>
+<text x="1105" y="782" font-size="10.8" fill="#0f172a">CloudEvents v1.0 en webhooks v2 y /eventos</text>
+<rect x="1098" y="792" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1105" y="806" font-size="10.8" fill="#0f172a">SemVer · BACKWARD_TRANSITIVE · CI</text>
+<rect x="1090" y="838" width="320" height="110" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="1100" y="858" font-size="12.5" font-weight="700" fill="#94a3b8">Kafka (referencia)</text>
 <rect x="1098" y="868" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="1105" y="882" font-size="10.8" fill="#64748b" font-style="italic">booking.catalogo.stream</text>
+<text x="1105" y="882" font-size="10.8" fill="#64748b" font-style="italic">puente RabbitMQ–Kafka</text>
 <rect x="1098" y="892" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="1105" y="906" font-size="10.8" fill="#64748b" font-style="italic">booking.compras.audit · telemetría</text>
+<text x="1105" y="906" font-size="10.8" fill="#64748b" font-style="italic">booking.catalogo.stream</text>
+<rect x="1098" y="916" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1105" y="930" font-size="10.8" fill="#64748b" font-style="italic">booking.compras.audit · telemetría</text>
 <rect x="1455" y="150" width="320" height="158" rx="9" fill="#fff" stroke="#15803d" stroke-width="2"/>
 <text x="1465" y="170" font-size="12.5" font-weight="700" fill="#15803d">ORQ_RES · compra y reservas</text>
 <rect x="1463" y="180" width="304" height="36" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
@@ -268,7 +275,7 @@
 <rect x="1463" y="484" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="1470" y="491.5" font-size="10.8" fill="#0f172a">Captura/anula/reembolsa pendientes; re-anuncia</text>
 <text x="1470" y="504.5" font-size="10.8" fill="#0f172a">órdenes sin aviso</text>
-<rect x="1455" y="530" width="320" height="110" rx="9" fill="#fff" stroke="#15803d" stroke-width="2"/>
+<rect x="1455" y="530" width="320" height="134" rx="9" fill="#fff" stroke="#15803d" stroke-width="2"/>
 <text x="1465" y="550" font-size="12.5" font-weight="700" fill="#15803d">Seguridad transversal</text>
 <rect x="1463" y="560" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="1470" y="574" font-size="10.8" fill="#0f172a">JWT HS256 + RBAC (CUSTOMER, ADMIN, invitado)</text>
@@ -277,12 +284,15 @@
 <text x="1470" y="604.5" font-size="10.8" fill="#0f172a">personales</text>
 <rect x="1463" y="608" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="1470" y="622" font-size="10.8" fill="#0f172a">Idempotency-Key en compras, reservas y posventa</text>
-<rect x="1455" y="654" width="320" height="86" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
-<text x="1465" y="674" font-size="12.5" font-weight="700" fill="#94a3b8">Orquestadores de la referencia</text>
-<rect x="1463" y="684" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="1470" y="698" font-size="10.8" fill="#64748b" font-style="italic">ORQ_PKG: paquetes dinámicos</text>
+<rect x="1463" y="632" width="304" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1470" y="639.5" font-size="10.8" fill="#0f172a">Partner OAuth2 (v2):</text>
+<text x="1470" y="652.5" font-size="10.8" fill="#0f172a">flights:read|hold|book|cancel|webhooks|ops|admin</text>
+<rect x="1455" y="678" width="320" height="86" rx="9" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 5"/>
+<text x="1465" y="698" font-size="12.5" font-weight="700" fill="#94a3b8">Orquestadores de la referencia</text>
 <rect x="1463" y="708" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
-<text x="1470" y="722" font-size="10.8" fill="#64748b" font-style="italic">ORQ_STK: consolidación de stock</text>
+<text x="1470" y="722" font-size="10.8" fill="#64748b" font-style="italic">ORQ_PKG: paquetes dinámicos</text>
+<rect x="1463" y="732" width="304" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="1470" y="746" font-size="10.8" fill="#64748b" font-style="italic">ORQ_STK: consolidación de stock</text>
 <rect x="1820" y="150" width="310" height="134" rx="9" fill="#fff" stroke="#db2777" stroke-width="2"/>
 <text x="1830" y="170" font-size="12.5" font-weight="700" fill="#db2777">Seguridad del gateway</text>
 <rect x="1828" y="180" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
@@ -319,7 +329,7 @@
 <text x="1835" y="610" font-size="10.8" fill="#0f172a">S: estadoReservaCambiado</text>
 <rect x="1828" y="620" width="294" height="20" rx="5" fill="#f8fafc" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5 3"/>
 <text x="1835" y="634" font-size="10.8" fill="#64748b" font-style="italic">S: stockActualizado (fase siguiente)</text>
-<rect x="1820" y="666" width="310" height="110" rx="9" fill="#fff" stroke="#db2777" stroke-width="2"/>
+<rect x="1820" y="666" width="310" height="158" rx="9" fill="#fff" stroke="#db2777" stroke-width="2"/>
 <text x="1830" y="686" font-size="12.5" font-weight="700" fill="#db2777">REST /api/v1 (Swagger /api/docs)</text>
 <rect x="1828" y="696" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="1835" y="710" font-size="10.8" fill="#0f172a">Contrato GDS + e-commerce + admin</text>
@@ -327,6 +337,12 @@
 <text x="1835" y="734" font-size="10.8" fill="#0f172a">OpenAPI generado: 74 rutas · 85 operaciones</text>
 <rect x="1828" y="744" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
 <text x="1835" y="758" font-size="10.8" fill="#0f172a">problem+json y X-Correlation-Id</text>
+<rect x="1828" y="768" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="775.5" font-size="10.8" fill="#0f172a">Contrato v2: /api/v2/vuelos · 30 operaciones ·</text>
+<text x="1835" y="788.5" font-size="10.8" fill="#0f172a">/api/docs-v2</text>
+<rect x="1828" y="792" width="294" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="1835" y="799.5" font-size="10.8" fill="#0f172a">OAuth2 client_credentials con scopes · CloudEvents</text>
+<text x="1835" y="812.5" font-size="10.8" fill="#0f172a">· feed /eventos</text>
 <rect x="2175" y="150" width="495" height="182" rx="9" fill="#fff" stroke="#0d9488" stroke-width="2"/>
 <text x="2185" y="170" font-size="12.5" font-weight="700" fill="#0d9488">Cliente web — marketplace</text>
 <rect x="2183" y="180" width="479" height="20" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>

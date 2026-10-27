@@ -5,6 +5,7 @@ import { DomainEvent, DomainEventBus } from '../common/domain-event-bus';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { resolveSafeTarget, UnsafeUrlError } from '../common/safe-http';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
+import { toCloudEvent, VUELOS_EVENT_NAMES } from '../common/cloud-events';
 import { WEBHOOK_EVENTS } from '../dto/enums';
 import type { WebhookSubscriptionDto } from '../dto/webhooks.dto';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
@@ -20,6 +21,14 @@ export interface WebhookSubscriptionView {
 }
 
 const view = (s: WebhookSubscription): WebhookSubscriptionView => ({ id: s.id, url: s.url, events: s.events });
+
+/** The view contract v2 returns: the same plus `active` and `createdAt` (the secret is write-only). */
+export interface WebhookSubscriptionViewV2 extends WebhookSubscriptionView {
+  active: boolean;
+  createdAt: string;
+}
+
+export const viewV2 = (s: WebhookSubscription): WebhookSubscriptionViewV2 => ({ ...view(s), active: s.active, createdAt: s.createdAt.toISOString() });
 
 /**
  * Subscriptions to booking events (GET/POST/DELETE /webhooks) and the fan-out of domain events into deliveries.
@@ -40,12 +49,17 @@ export class WebhooksService implements OnModuleInit {
   onModuleInit(): void {
     // Every event the contract lets a subscriber ask for is announced on the in-process bus; a failing consumer is
     // isolated by the bus, so a webhook problem can never fail the operation that produced the event.
-    for (const type of WEBHOOK_EVENTS) {
+    for (const type of new Set<string>([...WEBHOOK_EVENTS, ...VUELOS_EVENT_NAMES])) {
       this.events.subscribe(type, (event) => this.enqueue(event));
     }
   }
 
-  async create(ownerId: string, request: WebhookSubscriptionDto): Promise<WebhookSubscriptionView> {
+  async create(ownerId: string, request: WebhookSubscriptionDto, apiVersion = 1): Promise<WebhookSubscriptionView> {
+    return view(await this.createRow(ownerId, request, apiVersion));
+  }
+
+  /** Same as `create`, returning the stored subscription (v2 shows `active` and `createdAt` too). */
+  async createRow(ownerId: string, request: WebhookSubscriptionDto, apiVersion = 1): Promise<WebhookSubscription> {
     try {
       await resolveSafeTarget(request.url, this.config.webhooks.allowPrivateHosts);
     } catch (error) {
@@ -64,13 +78,17 @@ export class WebhooksService implements OnModuleInit {
         eventos: [...new Set(request.events)].map((evento) => this.subscriptions.manager.create(WebhookSubscriptionEvent, { evento })),
         secret: request.secret,
         active: true,
+        apiVersion,
       }));
-    return view(saved);
+    return saved;
   }
 
   async list(ownerId: string): Promise<WebhookSubscriptionView[]> {
-    const rows = await this.subscriptions.find({ where: { ownerId, active: true }, relations: { eventos: true }, order: { createdAt: 'ASC' } });
-    return rows.map(view);
+    return (await this.listRows(ownerId)).map(view);
+  }
+
+  async listRows(ownerId: string): Promise<WebhookSubscription[]> {
+    return this.subscriptions.find({ where: { ownerId, active: true }, relations: { eventos: true }, order: { createdAt: 'ASC' } });
   }
 
   async remove(ownerId: string, id: string): Promise<void> {
@@ -86,8 +104,10 @@ export class WebhooksService implements OnModuleInit {
   /** Queues one delivery per matching subscription of the account(s) the event is about; announcing twice queues once. */
   async enqueue(event: DomainEvent): Promise<void> {
     const payload = event.payload as Record<string, unknown>;
-    const owners = [...new Set([...(Array.isArray(payload.ownerIds) ? payload.ownerIds : []), payload.ownerId].filter((o): o is string => typeof o === 'string'))];
-    if (owners.length === 0) return;
+    const eventOwners = [...new Set([...(Array.isArray(payload.ownerIds) ? payload.ownerIds : []), payload.ownerId].filter((o): o is string => typeof o === 'string'))];
+    if (eventOwners.length === 0) return;
+    // A booking made by a partner for one of its users (`partner:<id>:user:<u>`) is also heard by the partner's own webhooks (`partner:<id>`).
+    const owners = [...new Set(eventOwners.flatMap((o) => (o.startsWith('partner:') ? [o, o.split(':').slice(0, 2).join(':')] : [o])))];
 
     const subscribers = await this.subscriptions
       .createQueryBuilder('s')
@@ -97,8 +117,10 @@ export class WebhooksService implements OnModuleInit {
       .getMany();
     if (subscribers.length === 0) return;
 
-    const body = this.payloadOf(event, payload);
+    const legacyBody = this.payloadOf(event, payload);
+    const cloudEvent = toCloudEvent(event, this.config.nodeSource);
     for (const subscription of subscribers) {
+      const body = subscription.apiVersion === 2 && cloudEvent ? (cloudEvent as unknown as Record<string, unknown>) : legacyBody;
       await this.deliveries
         .createQueryBuilder()
         .insert()

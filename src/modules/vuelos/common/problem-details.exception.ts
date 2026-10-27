@@ -64,7 +64,19 @@ export type ExtensionProblemCode =
   | 'PROVIDER_UNAVAILABLE'
   | 'PROVIDER_ACTION_NOT_SUPPORTED'
   | 'EXTERNAL_RESERVATION_FAILED_COMPENSATED'
-  | 'EXTERNAL_RESERVATION_NOT_REFUNDABLE';
+  | 'EXTERNAL_RESERVATION_NOT_REFUNDABLE'
+  // Contract v2 (/api/v2/vuelos): codes the v2 contract adds to ProblemDetails.code.
+  | 'IDEMPOTENCY_KEY_REUSED'
+  | 'HOLD_EXPIRED'
+  | 'HOLD_ALREADY_CONSUMED'
+  | 'INFANT_WITHOUT_ADULT'
+  | 'PASSENGER_COUNT_MISMATCH'
+  | 'DOCUMENT_EXPIRED'
+  | 'PASSPORT_REQUIRED_INTERNATIONAL'
+  | 'BOOKING_NOT_CANCELLABLE'
+  | 'FLIGHT_CANCELLED'
+  | 'INVALID_STATUS_TRANSITION'
+  | 'PROMOTION_DISCOUNT_OUT_OF_RANGE';
 
 // Nest's HttpStatus has no 423; used for temporarily locked accounts.
 export const HTTP_LOCKED = 423 as HttpStatus;
@@ -101,6 +113,9 @@ export class ProblemDetailsException extends HttpException {
   /** Sent as the Retry-After header (429, and 409 for a request still in progress); never part of the body. */
   readonly retryAfterSeconds?: number;
 
+  /** How the same failure reads on /api/v2 when the v2 contract uses another status or code (v1 stays as it was). */
+  v2?: { status?: number; code: ProblemDetailsCode };
+
   constructor(
     status: HttpStatus,
     code: ProblemDetailsCode,
@@ -121,5 +136,11 @@ export class ProblemDetailsException extends HttpException {
     }
     super(body, status);
     this.retryAfterSeconds = retryAfterSeconds;
+  }
+
+  /** Declares the status/code the v2 contract uses for this failure. */
+  forV2(code: ProblemDetailsCode, status?: number): this {
+    this.v2 = { code, status };
+    return this;
   }
 }

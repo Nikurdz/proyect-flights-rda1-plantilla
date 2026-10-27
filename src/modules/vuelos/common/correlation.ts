@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
 import { activityGate, isProbePath } from './activity-gate';
 import { runtimeMetrics } from './runtime-metrics';
 
-const storage = new AsyncLocalStorage<{ correlationId: string }>();
+const storage = new AsyncLocalStorage<{ correlationId: string; idempotentReplay?: boolean }>();
 
 export const CORRELATION_HEADER = 'x-correlation-id';
 
@@ -29,11 +29,27 @@ export function currentCorrelationId(): string {
   return storage.getStore()?.correlationId ?? 'no-correlation';
 }
 
+/** Called when a request was answered from a stored idempotent response (v2 reports it with Idempotent-Replayed and 200). */
+export function markIdempotentReplay(): void {
+  const store = storage.getStore();
+  if (store) store.idempotentReplay = true;
+}
+
+export function wasIdempotentReplay(): boolean {
+  return storage.getStore()?.idempotentReplay === true;
+}
+
 export function runWithCorrelation<T>(correlationId: string, fn: () => T): T {
   return storage.run({ correlationId }, fn);
 }
 
 const SAFE_ID = /^[A-Za-z0-9._-]{8,100}$/;
+
+/** The id a request carries: a well-formed inbound X-Correlation-Id, else a new UUID. */
+export function resolveCorrelationId(request: Request): string {
+  const inbound = request.headers[CORRELATION_HEADER];
+  return typeof inbound === 'string' && SAFE_ID.test(inbound) ? inbound : randomUUID();
+}
 
 /** The route pattern (`/api/v1/ofertas/:id`), never the raw path, so ids do not create one entry each. */
 function routeLabel(request: Request): string {
@@ -55,8 +71,7 @@ export class CorrelationInterceptor implements NestInterceptor {
     const request = http.getRequest<Request>();
     const response = http.getResponse<Response>();
 
-    const inbound = request.headers[CORRELATION_HEADER];
-    const correlationId = typeof inbound === 'string' && SAFE_ID.test(inbound) ? inbound : randomUUID();
+    const correlationId = resolveCorrelationId(request);
     response.setHeader('X-Correlation-Id', correlationId);
 
     // A real request counts as use of the system (the background jobs only run while somebody is around); a health probe does not.

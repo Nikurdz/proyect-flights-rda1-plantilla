@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -23,11 +24,65 @@ import { DOCUMENT_TYPES, GENDERS, PASSENGER_TYPE_VALUES } from './enums';
 import { MoneyAmountDto } from './search.dto';
 import { E164_PHONE, IsDateOnly, ToUpperTrimmed } from './validators';
 
+/** An amount sent by the caller (contract v2 `PaymentReference.amount`). */
+export class MoneyInputDto {
+  @ApiProperty({ example: 'USD', pattern: '^[A-Z]{3}$' })
+  @Matches(/^[A-Z]{3}$/)
+  currency: string;
+
+  @ApiProperty({ example: '120.00', pattern: '^\\d+\\.\\d{2}$' })
+  @Matches(/^\d+\.\d{2}$/)
+  total: string;
+}
+
 export class PaymentReferenceDto {
   @ApiProperty({ description: 'Referencia a un pago gestionado por la Payment API', pattern: '^[A-Za-z0-9._:-]{8,100}$' })
   @IsString()
   @Matches(/^[A-Za-z0-9._:-]{8,100}$/, { message: 'paymentReference must be 8-100 characters: letters, digits, . _ : -' })
   paymentReference: string;
+
+  @ApiPropertyOptional({ type: MoneyInputDto, description: 'Monto cobrado por Booking; si viene y no coincide con el precio retenido, 409 AMOUNT_MISMATCH (contrato v2).' })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MoneyInputDto)
+  amount?: MoneyInputDto;
+
+  @ApiPropertyOptional({ enum: ['BOOKING_PROTOTIPO', 'AIRLINE_DIRECT'], default: 'BOOKING_PROTOTIPO' })
+  @IsOptional()
+  @IsIn(['BOOKING_PROTOTIPO', 'AIRLINE_DIRECT'])
+  provider?: string;
+}
+
+/** Where the sale came from (contract v2 `SalesChannel`): the partner order, an optional package and the promotion applied. */
+export class SalesChannelDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  partnerId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  partnerOrderId?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  packageId?: string | null;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  promotionApplied?: boolean;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
+  @IsOptional()
+  @Min(0)
+  @Max(100)
+  discountPercentage?: number;
 }
 
 export class SeatAssignmentDto {
@@ -156,6 +211,12 @@ export class BookingRequestDto {
   @ValidateNested()
   @Type(() => PaymentReferenceDto)
   payment: PaymentReferenceDto;
+
+  @ApiPropertyOptional({ type: SalesChannelDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SalesChannelDto)
+  salesChannel?: SalesChannelDto;
 }
 
 export class ListBookingsQueryDto {

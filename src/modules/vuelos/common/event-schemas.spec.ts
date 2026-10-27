@@ -36,9 +36,11 @@ describe('event contracts', () => {
     expect(registry.size).toBeGreaterThanOrEqual(30);
   });
 
-  it('has no schema for an event nobody publishes', () => {
+  it('has no schema for an event nobody publishes (other than the ones Booking sends us)', () => {
     const published = publishedTypes();
-    expect(registry.types().filter((type) => !published.has(type))).toEqual([]);
+    const inbound = ['pagos.payment.confirmed', 'pagos.payment.failed', 'paquetes.package.cancelled'];
+    expect(registry.types().filter((type) => !published.has(type) && !inbound.includes(type))).toEqual([]);
+    expect(inbound.filter((type) => !registry.has(type))).toEqual([]);
   });
 
   it('lists every schema in the AsyncAPI document', () => {

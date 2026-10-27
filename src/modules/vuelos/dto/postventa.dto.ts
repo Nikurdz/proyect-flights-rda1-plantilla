@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ValidateNested } from 'class-validator';
 import { PaymentReferenceDto, SeatAssignmentDto } from './booking.dto';
 import { FlightSegmentDto, MoneyAmountDto } from './search.dto';
 import { IsDateOnly } from './validators';
@@ -70,9 +70,15 @@ export class DateChangeRequestDto {
 }
 
 export class CancelBookingRequestDto {
-  @ApiProperty({ format: 'uuid', description: 'quoteId of a live cancellation quote of this booking.' })
+  @ApiPropertyOptional({ format: 'uuid', description: 'quoteId of a live cancellation quote of this booking. Optional: without it the cancellation is quoted and applied at once (contract v2).' })
   @IsUUID()
-  quoteId: string;
+  @IsOptional()
+  quoteId?: string;
+
+  @ApiPropertyOptional({ enum: ['CUSTOMER_REQUEST', 'SAGA_COMPENSATION', 'FLIGHT_CANCELLED', 'OTHER'], default: 'CUSTOMER_REQUEST' })
+  @IsIn(['CUSTOMER_REQUEST', 'SAGA_COMPENSATION', 'FLIGHT_CANCELLED', 'OTHER'])
+  @IsOptional()
+  reasonCode?: string;
 
   @ApiPropertyOptional()
   @IsString()

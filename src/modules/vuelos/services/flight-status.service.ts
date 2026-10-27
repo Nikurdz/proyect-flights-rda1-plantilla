@@ -40,8 +40,9 @@ export class FlightStatusService {
     const now = Date.now();
 
     let status: string;
-    if (vuelo.estado === 'CANCELLED') {
-      status = 'CANCELLED';
+    if (vuelo.estado !== 'SCHEDULED') {
+      // Set by operations (PATCH status): it wins over the clock.
+      status = vuelo.estado;
     } else if (now < departure.getTime() - this.config.postSale.boardingWindowMinutes * 60_000) {
       status = 'SCHEDULED';
     } else if (now < departure.getTime()) {
@@ -60,19 +61,22 @@ export class FlightStatusService {
       departure: {
         iataCode: vuelo.origenIATA,
         terminal: null,
+        gate: vuelo.puertaSalida,
         scheduledAt: toIso(departure),
-        estimatedAt: null,
+        estimatedAt: vuelo.salidaEstimada ? toIso(vuelo.salidaEstimada) : null,
         actualAt: null,
       },
       arrival: {
         iataCode: vuelo.destinoIATA,
         terminal: null,
         scheduledAt: toIso(arrival),
-        estimatedAt: null,
+        estimatedAt: vuelo.llegadaEstimada ? toIso(vuelo.llegadaEstimada) : null,
         actualAt: null,
       },
       aircraft: null,
       status,
+      delayMinutes: vuelo.retrasoMinutos,
+      updatedAt: vuelo.estadoActualizadoEn ? toIso(vuelo.estadoActualizadoEn) : null,
     };
   }
 }

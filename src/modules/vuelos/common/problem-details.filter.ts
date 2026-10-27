@@ -92,7 +92,13 @@ export class VuelosProblemDetailsFilter implements ExceptionFilter {
       response.setHeader('Retry-After', String(exception.retryAfterSeconds));
     }
 
+    body = this.adapt(body, exception, host);
     runtimeMetrics.recordProblem(body.code);
     response.status(body.status).type('application/problem+json').json(body);
+  }
+
+  /** Hook for a filter that serves another contract version; v1 sends the body as built. */
+  protected adapt(body: ProblemDetailsBody, _exception: unknown, _host: ArgumentsHost): ProblemDetailsBody {
+    return body;
   }
 }

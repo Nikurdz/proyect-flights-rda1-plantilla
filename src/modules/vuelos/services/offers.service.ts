@@ -97,6 +97,20 @@ export class OffersService {
         this.createHoldWithin(manager, auth.ownerId, request),
       );
     }
+    if (!outcome.replayed) {
+      const hold = outcome.result;
+      const party = request.passengersBreakdown;
+      await this.events.publish('hold.created', hold.holdId, {
+        holdId: hold.holdId,
+        offerId: request.offerId,
+        ownerId: auth.ownerId,
+        status: hold.status,
+        expiresAt: hold.expiresAt,
+        ttlMinutes: hold.ttlMinutes,
+        // Infants travel on a lap and take no seat.
+        seatsHeld: (party.adults ?? 1) + (party.youths ?? 0) + (party.children ?? 0),
+      });
+    }
     return outcome.result;
   }
 
@@ -196,7 +210,7 @@ export class OffersService {
         throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight already departed', `Flight ${vuelo.codigoVuelo} has already departed.`);
       }
       if (vuelo.estado === 'CANCELLED') {
-        throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight cancelled', `Flight ${vuelo.codigoVuelo} was cancelled.`);
+        throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight cancelled', `Flight ${vuelo.codigoVuelo} was cancelled.`).forV2('FLIGHT_CANCELLED', HttpStatus.CONFLICT);
       }
 
       const parts = priceForPartyParts(toMinorUnits(vuelo.precioBase), family.priceMultiplier, breakdown, this.config.taxRate);
@@ -207,7 +221,8 @@ export class OffersService {
 
     await this.inventory.reserve(manager, inventory);
 
-    const expiresAt = new Date(Date.now() + this.config.holdTtlMinutes * 60_000);
+    const ttlMinutes = request.ttlMinutes ?? this.config.holdTtlMinutes;
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
     // Legs are stored in the offer's order (0 = outbound), whatever order the request listed them in.
     const items = offer.itineraries.map((leg, index) => {
       const selection = request.itinerarySelections.find((s) => s.itineraryId === leg.itineraryId)!;
@@ -228,7 +243,7 @@ export class OffersService {
         lockedPriceMinor: lockedMinor,
         lockedTaxesMinor,
         currency: offer.currency,
-        ttlMinutes: this.config.holdTtlMinutes,
+        ttlMinutes,
         ...breakdownColumns(breakdown),
         items,
         expiresAt,
@@ -269,9 +284,9 @@ export class OffersService {
         case 'RELEASED':
           return false;
         case 'CONSUMED':
-          throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BOOKING_NOT_CONFIRMED', 'Hold already consumed', `Hold ${holdId} was already used for a booking and cannot be released.`);
+          throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BOOKING_NOT_CONFIRMED', 'Hold already consumed', `Hold ${holdId} was already used for a booking and cannot be released.`).forV2('HOLD_ALREADY_CONSUMED');
         case 'EXPIRED':
-          throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold expired', `Hold ${holdId} has already expired.`);
+          throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold expired', `Hold ${holdId} has already expired.`).forV2('HOLD_EXPIRED');
         default:
           if (hold.expiresAt.getTime() <= Date.now()) {
             await this.transition(manager, hold, 'EXPIRED');
@@ -284,7 +299,7 @@ export class OffersService {
 
     if (released === 'expired') {
       await this.events.publish('hold.expired', holdId, { holdId, ownerId, status: 'EXPIRED' });
-      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold expired', `Hold ${holdId} has already expired.`);
+      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold expired', `Hold ${holdId} has already expired.`).forV2('HOLD_EXPIRED');
     }
     if (released) {
       await this.events.publish('hold.released', holdId, { holdId, ownerId, status: 'RELEASED' });
@@ -294,21 +309,23 @@ export class OffersService {
   /** Expires one hold if (and only if) it is still HELD past its expiry, restoring its seats. Idempotent. */
   async expireIfDue(holdId: string): Promise<boolean> {
     let ownerId = '';
+    let seatsReleased = 0;
     const expired = await this.dataSource.transaction(async (manager) => {
       const hold = await findHold(manager, holdId, { lock: true });
       if (!hold || hold.status !== 'HELD' || hold.expiresAt.getTime() > Date.now()) return false;
       ownerId = hold.ownerId;
+      seatsReleased = hold.inventory.reduce((sum, item) => sum + item.seats, 0);
       return this.transition(manager, hold, 'EXPIRED');
     });
     if (expired) {
-      await this.events.publish('hold.expired', holdId, { holdId, ownerId, status: 'EXPIRED' });
+      await this.events.publish('hold.expired', holdId, { holdId, ownerId, status: 'EXPIRED', seatsReleased });
     }
     return expired;
   }
 
   /** Sweeps every overdue hold. Safe to run from several instances: rows are claimed with SKIP LOCKED. */
   async expireDueHolds(): Promise<number> {
-    const expiredIds: { holdId: string; ownerId: string }[] = await this.dataSource.transaction(async (manager) => {
+    const expiredIds: { holdId: string; ownerId: string; seatsReleased: number }[] = await this.dataSource.transaction(async (manager) => {
       const due = await manager
         .getRepository(FlightHold)
         .createQueryBuilder('h')
@@ -318,15 +335,15 @@ export class OffersService {
         .getMany();
       await attachItemsToMany(manager, due);
 
-      const ids: { holdId: string; ownerId: string }[] = [];
+      const ids: { holdId: string; ownerId: string; seatsReleased: number }[] = [];
       for (const hold of due) {
-        if (await this.transition(manager, hold, 'EXPIRED')) ids.push({ holdId: hold.holdId, ownerId: hold.ownerId });
+        if (await this.transition(manager, hold, 'EXPIRED')) ids.push({ holdId: hold.holdId, ownerId: hold.ownerId, seatsReleased: hold.inventory.reduce((sum, item) => sum + item.seats, 0) });
       }
       return ids;
     });
 
-    for (const { holdId, ownerId } of expiredIds) {
-      await this.events.publish('hold.expired', holdId, { holdId, ownerId, status: 'EXPIRED' });
+    for (const { holdId, ownerId, seatsReleased } of expiredIds) {
+      await this.events.publish('hold.expired', holdId, { holdId, ownerId, status: 'EXPIRED', seatsReleased });
     }
     if (expiredIds.length > 0) {
       this.logger.log(`Expired ${expiredIds.length} overdue hold(s) and restored their seats`);

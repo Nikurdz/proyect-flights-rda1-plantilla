@@ -1,7 +1,10 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { NestFactory } from '@nestjs/core';
+import * as yaml from 'js-yaml';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { DocumentBuilder, OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import { WinstonLogger } from './modules/vuelos/common/winston-logger';
 import { createGlobalRateLimit } from './modules/vuelos/ecommerce/common/global-rate-limit.middleware';
 
@@ -28,8 +31,8 @@ async function bootstrap() {
         callback(null, allowed);
       },
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Authorization', 'Content-Type', 'Accept', 'Accept-Language', 'Idempotency-Key', 'X-Device-Fingerprint', 'X-Correlation-Id'],
-      exposedHeaders: ['X-Correlation-Id', 'Retry-After'],
+      allowedHeaders: ['Authorization', 'Content-Type', 'Accept', 'Accept-Language', 'Idempotency-Key', 'X-Device-Fingerprint', 'X-Correlation-Id', 'X-Request-Id', 'X-User-Id', 'X-User-Roles'],
+      exposedHeaders: ['X-Correlation-Id', 'X-Request-Id', 'Idempotent-Replayed', 'Retry-After'],
       maxAge: 600,
     });
   }
@@ -37,7 +40,9 @@ async function bootstrap() {
   // Registered after `trust proxy` so req.ip is the real client; it runs before any route touches the database.
   app.use(createGlobalRateLimit());
 
-  app.setGlobalPrefix('api/v1');
+  // /api/v1 (contract 1.5, every existing route) and /api/v2/vuelos (contract 2.0) live side by side: a controller without a version is v1.
+  app.setGlobalPrefix('api');
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -56,6 +61,12 @@ async function bootstrap() {
   
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
+
+  // Contract v2 (/api/v2/vuelos) is documented by the contract itself, served as published.
+  const contractV2 = [join(__dirname, '..', 'contracts', 'vuelos-openapi-v2.yaml'), join(process.cwd(), 'contracts', 'vuelos-openapi-v2.yaml')].find(existsSync);
+  if (contractV2) {
+    SwaggerModule.setup('api/docs-v2', app, yaml.load(readFileSync(contractV2, 'utf8')) as OpenAPIObject);
+  }
 
   await app.listen(process.env.PORT || 3000);
 }

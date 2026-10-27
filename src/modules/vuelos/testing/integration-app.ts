@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -65,7 +65,8 @@ export async function createIntegrationApp(env: Record<string, string> = {}): Pr
   }).compile();
 
   const app = moduleRef.createNestApplication();
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api');
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
   await app.init();
   // One long-lived listener: supertest reuses it instead of opening and closing a port per request.

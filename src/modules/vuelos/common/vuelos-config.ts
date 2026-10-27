@@ -22,6 +22,11 @@ export interface VuelosConfig {
   postSale: PostSaleConfig;
   webhooks: WebhooksConfig;
   integraciones: IntegracionesConfig;
+  /** How this node presents itself to Booking (contract v2): health `nodo_id`, CloudEvents `source` and the gRPC stock `service_id`. */
+  nodeId: string;
+  nodeSource: string;
+  /** Booking's gRPC stock ingestion endpoint (`host:port`); empty = no stock push. */
+  stockGrpcUrl: string;
 }
 
 /** Calls to partner services (providers): bounded in time and size, and private hosts only for the course network and tests. */
@@ -181,5 +186,8 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
     postSale,
     webhooks,
     integraciones,
+    nodeId: config.get<string>('NODE_ID', 'NODE_VUE_RAM_ALLIANCE'),
+    nodeSource: config.get<string>('NODE_SOURCE', '/aerolineas/ram-alliance/vuelos'),
+    stockGrpcUrl: config.get<string>('GRPC_STOCK_URL', ''),
   };
 }

@@ -8,7 +8,10 @@ import { DataSource } from 'typeorm';
 import { FieldCipher } from '../common/cifrado';
 import { dbSsl, dbUrl } from '../common/db-ssl';
 import { loadVuelosConfig } from '../common/vuelos-config';
+import { hashPassword } from '../ecommerce/identidad/password.util';
 import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
+import { PartnerClient } from '../entities/partner-client.entity';
+import { PARTNER_SCOPES } from '../v2/auth/scopes';
 import { seedDemoScenarios, seedFlights } from './flights.seed';
 
 // Entities are discovered by glob so every sub-domain of this module is covered without a
@@ -45,6 +48,16 @@ async function main(): Promise<void> {
   }
   const ecommerce = await seedEcommerce(dataSource, adminCorreo && adminContrasena ? { correo: adminCorreo, contrasena: adminContrasena } : undefined);
   console.log(`E-commerce created this run: ${JSON.stringify(ecommerce)}.`);
+
+  // The integrator of contract v2 (Booking Prototipo) signs in with client_credentials: created only when configured, never with a default secret.
+  const partnerId = process.env.PARTNER_CLIENT_ID ?? 'booking-prototipo';
+  const partnerSecret = process.env.PARTNER_CLIENT_SECRET;
+  if (partnerSecret) {
+    if (partnerSecret.length < 24) throw new Error('PARTNER_CLIENT_SECRET must have at least 24 characters.');
+    if (!/^[a-z0-9][a-z0-9_-]{2,29}$/.test(partnerId)) throw new Error('PARTNER_CLIENT_ID must be 3-30 characters: lowercase letters, digits, - and _.');
+    await dataSource.getRepository(PartnerClient).save({ clientId: partnerId, secretHash: await hashPassword(partnerSecret), scopes: PARTNER_SCOPES.join(' '), activo: true });
+    console.log(`Partner client "${partnerId}" is ready for /api/v2/oauth2/token.`);
+  }
 
   await dataSource.destroy();
 }

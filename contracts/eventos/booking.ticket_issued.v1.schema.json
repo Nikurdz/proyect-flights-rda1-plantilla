@@ -4,7 +4,7 @@
   "title": "booking.ticket_issued",
   "description": "Billetes emitidos.",
   "x-event-type": "booking.ticket_issued",
-  "x-schema-version": "1.0.0",
+  "x-schema-version": "1.1.0",
   "type": "object",
   "required": [
     "bookingId",
@@ -34,6 +34,41 @@
       "items": {
         "type": "string"
       }
+    },
+    "grandTotal": {
+      "type": "object",
+      "required": [
+        "currency",
+        "total"
+      ],
+      "properties": {
+        "currency": {
+          "type": "string"
+        },
+        "total": {
+          "type": "string"
+        }
+      }
+    },
+    "tickets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string"
+          },
+          "eTicketNumber": {
+            "type": "string"
+          },
+          "passengerId": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "paymentReference": {
+      "type": "string"
     }
   }
 }

@@ -217,6 +217,8 @@ graph LR
     subgraph CAPA6 ["CAPA 6: GATEWAY Y BFF (REST + GraphQL)"]
         GW_SEC["Seguridad: JWT (HTTP y websocket) · rate limit global · profundidad maxima 7 · CORS"]
         REST_API["REST /api/v1 · Swagger /api/docs · 74 rutas · problem+json"]
+        REST_V2["REST /api/v2/vuelos · contrato v2 (30 operaciones) · OAuth2 client_credentials + scopes · CloudEvents · /api/docs-v2"]
+        GRPC_PUSH["Push de stock a Booking por gRPC (inventory.proto)"]
         GQL_SRV["Apollo Server NestJS: /graphql (introspeccion solo fuera de produccion)"]
         GQL_LOAD["DataLoaders por peticion (anti N+1)"]
         GQL_WS["Suscripciones graphql-ws"]
@@ -229,6 +231,9 @@ graph LR
     end
 
     ORQ_RES --> REST_API
+    MS_GDS --> REST_V2
+    BUS_LOCAL -.->|inventario cambiado| GRPC_PUSH
+    GRPC_PUSH -->|HTTP/2| EXT_GRPC
     ORQ_FAC --> REST_API
     MS_GDS --> REST_API
     MS_AUD --> REST_API

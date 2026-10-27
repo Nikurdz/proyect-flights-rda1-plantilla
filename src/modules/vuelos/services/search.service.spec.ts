@@ -19,6 +19,9 @@ const config: VuelosConfig = {
   postSale: { baggagePriceMinor: 4000, baggageMaxPerLeg: 2, cutoffHours: 3, changeFeeMinor: 3000, cancelPenaltyPercent: 10, quoteTtlMinutes: 15, checkInOpensHours: 48, checkInClosesHours: 1, boardingWindowMinutes: 30 },
   webhooks: { maxPerOwner: 10, allowPrivateHosts: false },
   integraciones: { allowPrivateHosts: false, timeoutMs: 8000, maxResponseBytes: 2_000_000, syncMaxItems: 500, breakerResetMs: 30_000 },
+  nodeId: 'NODE_TEST',
+  nodeSource: '/aerolineas/test/vuelos',
+  stockGrpcUrl: '',
 };
 
 const vuelo = (id: string, precioBase: number): Vuelo => ({

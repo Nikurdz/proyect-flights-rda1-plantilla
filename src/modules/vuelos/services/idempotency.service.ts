@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, LessThan, Repository } from 'typeorm';
+import { markIdempotentReplay } from '../common/correlation';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { IdempotencyRecord } from '../entities/idempotency-record.entity';
 
@@ -90,6 +91,7 @@ export class IdempotencyService {
     const identity = this.identityOf(scope);
     const replay = await this.claimOrReplay(identity, hashRequestBody(scope.body));
     if (replay) {
+      markIdempotentReplay();
       return { result: replay.body as T, replayed: true };
     }
 
@@ -117,6 +119,7 @@ export class IdempotencyService {
     const identity = this.identityOf(scope);
     const replay = await this.claimOrReplay(identity, hashRequestBody(scope.body));
     if (replay) {
+      markIdempotentReplay();
       return { outcome: replay as SagaOutcome<T>, replayed: true };
     }
 
@@ -162,7 +165,7 @@ export class IdempotencyService {
           'Idempotency-Key reused with a different request',
           'This Idempotency-Key was already used with a different payload. Use a new key for a new operation.',
           [{ name: 'Idempotency-Key', reason: 'already used with a different request body' }],
-        );
+        ).forV2('IDEMPOTENCY_KEY_REUSED', HttpStatus.CONFLICT);
       }
       if (existing.state === 'COMPLETED') {
         return { status: existing.responseStatus ?? HttpStatus.OK, body: existing.responseBody };

@@ -64,7 +64,7 @@ export function assertInfantRatio(passengers: PassengerBreakdown): void {
       'INFANT_SEAT_NOT_ALLOWED',
       'Too many infants',
       `${passengers.infants} infant(s) cannot exceed ${passengers.adults} adult(s)`,
-    );
+    ).forV2('INFANT_WITHOUT_ADULT');
   }
 }
 
@@ -185,7 +185,7 @@ export function assertInfantAssociations(passengers: { passengerId: string; pass
         'Infant without an accompanying adult',
         `Infant ${infant.passengerId} must reference an adult of this booking in associatedAdultId.`,
         [{ name: 'passengers.associatedAdultId', reason: 'must reference an adult of the booking' }],
-      );
+      ).forV2('INFANT_WITHOUT_ADULT');
     }
     const count = (infantsPerAdult.get(infant.associatedAdultId) ?? 0) + 1;
     infantsPerAdult.set(infant.associatedAdultId, count);

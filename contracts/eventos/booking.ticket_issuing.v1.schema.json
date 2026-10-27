@@ -4,7 +4,7 @@
   "title": "booking.ticket_issuing",
   "description": "Emisión de billetes anunciada (se publica junto con ticket_issued).",
   "x-event-type": "booking.ticket_issuing",
-  "x-schema-version": "1.0.0",
+  "x-schema-version": "1.1.0",
   "type": "object",
   "required": [
     "bookingId",
@@ -33,6 +33,38 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "grandTotal": {
+      "type": "object",
+      "required": [
+        "currency",
+        "total"
+      ],
+      "properties": {
+        "currency": {
+          "type": "string"
+        },
+        "total": {
+          "type": "string"
+        }
+      }
+    },
+    "tickets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string"
+          },
+          "eTicketNumber": {
+            "type": "string"
+          },
+          "passengerId": {
+            "type": "string"
+          }
+        }
       }
     }
   }

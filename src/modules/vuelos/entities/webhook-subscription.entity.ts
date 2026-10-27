@@ -41,6 +41,10 @@ export class WebhookSubscription {
   @Column({ type: 'boolean', default: true })
   active: boolean;
 
+  /** Contract the subscriber registered under: 1 gets the v1.5 JSON, 2 gets CloudEvents signed over the body. */
+  @Column({ type: 'smallint', default: 1 })
+  apiVersion?: number;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 

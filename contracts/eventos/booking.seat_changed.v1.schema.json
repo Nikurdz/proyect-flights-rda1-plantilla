@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/booking.seat_changed/1",
+  "title": "booking.seat_changed",
+  "description": "Cambio de asiento sobre una reserva emitida.",
+  "x-event-type": "booking.seat_changed",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "bookingId",
+    "ownerId",
+    "seats"
+  ],
+  "properties": {
+    "bookingId": {
+      "type": "string"
+    },
+    "pnr": {
+      "type": "string"
+    },
+    "ownerId": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "seats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "passengerId",
+          "segmentId",
+          "seatNumber"
+        ],
+        "properties": {
+          "passengerId": {
+            "type": "string"
+          },
+          "segmentId": {
+            "type": "string"
+          },
+          "previousSeatNumber": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "seatNumber": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "amountCharged": {
+      "type": "string"
+    }
+  }
+}

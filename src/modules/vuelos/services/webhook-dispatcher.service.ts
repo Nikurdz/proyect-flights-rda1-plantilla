@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nest
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { runtimeMetrics } from '../common/runtime-metrics';
-import { postJson, resolveSafeTarget, signWebhookBody } from '../common/safe-http';
+import { postJson, resolveSafeTarget, signWebhookBody, signWebhookBodyV2 } from '../common/safe-http';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
 import { activityGate } from '../common/activity-gate';
@@ -107,6 +107,8 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
       const target = await resolveSafeTarget(subscription.url, this.config.webhooks.allowPrivateHosts);
       const body = JSON.stringify(delivery.payload);
       const timestamp = String(Math.floor(now.getTime() / 1000));
+      // Contract v2 subscribers get a structured CloudEvent signed over the body; v1.5 ones keep `timestamp.body`.
+      const v2 = subscription.apiVersion === 2;
       const response = await postJson(
         target,
         body,
@@ -115,7 +117,8 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
           'X-Webhook-Id': delivery.deliveryId,
           'X-Webhook-Event': delivery.eventType,
           'X-Webhook-Timestamp': timestamp,
-          'X-Webhook-Signature': signWebhookBody(subscription.secret, timestamp, body),
+          'X-Webhook-Signature': v2 ? signWebhookBodyV2(subscription.secret, body) : signWebhookBody(subscription.secret, timestamp, body),
+          ...(v2 ? { 'Content-Type': 'application/cloudevents+json', 'X-Correlation-Id': String((delivery.payload as { correlationid?: string }).correlationid ?? '') } : {}),
         },
         { timeoutMs: REQUEST_TIMEOUT_MS, maxResponseBytes: MAX_RESPONSE_BYTES },
       );

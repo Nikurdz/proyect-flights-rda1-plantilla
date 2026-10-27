@@ -59,6 +59,22 @@ export class Booking {
   @Column({ type: 'varchar', length: 100, unique: true })
   paymentReference: string;
 
+  // Sales channel of contract v2 (who sold it: the partner, its order, a package, the promotion applied). All optional.
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  channelPartnerId?: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  channelPartnerOrderId?: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  channelPackageId?: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  channelPromotionApplied?: boolean;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true, transformer: { to: (v: number | null) => v, from: (v: string | null) => (v === null ? null : Number(v)) } })
+  channelDiscountPercentage?: number | null;
+
   // Millisecond precision so the (createdAt, bookingId) pagination cursor round-trips exactly.
   @CreateDateColumn({ type: 'timestamp', precision: 3 })
   createdAt: Date;

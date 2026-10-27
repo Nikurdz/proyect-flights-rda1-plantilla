@@ -10,6 +10,8 @@ export interface AuthClaims {
   ownerId: string;
   kind: TokenKind;
   roles: string[];
+  /** OAuth2 scopes (`flights:read`…). Service tokens carry them in the `scope` claim; a user token gets them from its roles at the guard. */
+  scopes?: string[];
 }
 
 export interface SignedToken {
@@ -30,7 +32,7 @@ export class TokenService {
 
   sign(claims: AuthClaims): SignedToken {
     const accessToken = jwt.sign(
-      { kind: claims.kind, roles: claims.roles },
+      { kind: claims.kind, roles: claims.roles, ...(claims.scopes ? { scope: claims.scopes.join(' ') } : {}) },
       this.config.jwtSecret,
       { algorithm: 'HS256', subject: claims.ownerId, expiresIn: this.config.jwtTtlSeconds, issuer: 'vuelos-identity' },
     );
@@ -50,7 +52,8 @@ export class TokenService {
       }
       const kind: TokenKind = payload.kind === 'guest' || payload.kind === 'service' ? payload.kind : 'customer';
       const roles = Array.isArray(payload.roles) ? payload.roles.filter((r): r is string => typeof r === 'string') : [];
-      return { ownerId: payload.sub, kind, roles };
+      const scopes = typeof payload.scope === 'string' ? payload.scope.split(' ').filter(Boolean) : undefined;
+      return { ownerId: payload.sub, kind, roles, ...(scopes ? { scopes } : {}) };
     } catch {
       throw new ProblemDetailsException(
         HttpStatus.UNAUTHORIZED,

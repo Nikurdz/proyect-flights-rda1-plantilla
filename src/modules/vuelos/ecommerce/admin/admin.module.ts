@@ -22,5 +22,6 @@ import { ObservabilidadService } from './observabilidad.service';
   imports: [VuelosCoreModule, OrdenesModule, IdentidadModule, TypeOrmModule.forFeature([Vuelo, SeatAssignment, Booking, AuditoriaCambio])],
   controllers: [AdminController, ObservabilidadController, DashboardController, UsuariosController, HealthController],
   providers: [AdminService, VuelosAdminService, UsuariosService, ObservabilidadService, DashboardService, RolesGuard],
+  exports: [AdminService],
 })
 export class AdminModule {}
