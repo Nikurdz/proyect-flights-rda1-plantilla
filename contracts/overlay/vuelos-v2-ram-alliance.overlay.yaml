@@ -20,7 +20,7 @@ info:
     | Dato | Valor |
     |---|---|
     | URL base | `http://{host}:{port}/api/v2` — endpoints en `/vuelos/...` |
-    | Pruebas locales (Tailscale) | `http://100.121.62.72:3000/api/v2/vuelos` |
+    | Pruebas locales (Tailscale) | `http://100.118.24.48:3000/api/v2/vuelos` |
     | Token OAuth2 | `POST /api/v2/oauth2/token` |
     | Salud (sin token) | `GET /api/v2/vuelos/health` |
     | Documentación navegable | `/api/docs-v2` |
@@ -83,7 +83,7 @@ servers:
     description: Este nodo. Por defecto, la laptop del equipo en la red Tailscale (pruebas de integración).
     variables:
       host:
-        default: 100.121.62.72
+        default: 100.118.24.48
         description: IP de Tailscale (o nombre de host) donde corre el nodo
       port:
         default: '3000'
@@ -236,6 +236,50 @@ paths:
                   description: Entrega aceptada
                 default:
                   description: Cualquier otra respuesta (o un tiempo de espera de 5 s) se reintenta
+
+  /vuelos/webhooks/booking:
+    post:
+      tags: [MS.Clientes — Webhooks]
+      operationId: receiveBookingEvent
+      x-microservice: MS.Clientes
+      summary: Recibir un evento de Booking (CloudEvent firmado)
+      description: |
+        Endpoint donde **Booking publica sus eventos hacia este nodo** (los mismos que la cola `q.vuelos.entrantes`, para despliegues sin RabbitMQ, como las pruebas locales por Tailscale):
+        `pagos.payment.confirmed` (emite los boletos), `pagos.payment.failed` (reserva en espera → FAILED; confirmada → cancelada como compensación) y `paquetes.package.cancelled` (cancela la parte de vuelo del combo).
+        El cuerpo es un CloudEvent v1.0 estructurado (`type` = `ec.edu.epn.booking.<evento>`). La petición se autentica con la firma
+        `X-Webhook-Signature: sha256=` + HMAC-SHA256(`BOOKING_WEBHOOK_SECRET`, **cuerpo crudo**) en hexadecimal (si se envía `X-Webhook-Timestamp` también se acepta la forma `timestamp.cuerpo`).
+        Es idempotente por `id` del evento: Booking puede reintentar. Si el evento no se pudo procesar responde **500** para que se reintente.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingInboundEvent'
+          application/cloudevents+json:
+            schema:
+              $ref: '#/components/schemas/BookingInboundEvent'
+      responses:
+        '200':
+          description: Evento aceptado y procesado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received, eventId]
+                properties:
+                  received:
+                    type: boolean
+                  eventId:
+                    type: string
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '429':
+          $ref: '#/components/responses/Problem429'
+        '500':
+          $ref: '#/components/responses/Problem500'
 
 components:
   securitySchemes:
@@ -436,9 +480,37 @@ components:
         - $ref: '#/components/schemas/EventFlightScheduleChanged'
         - $ref: '#/components/schemas/EventFlightCancelled'
 
+    BookingInboundEvent:
+      description: CloudEvent que publica Booking hacia este nodo.
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.pagos.payment.confirmed
+                - ec.edu.epn.booking.pagos.payment.failed
+                - ec.edu.epn.booking.paquetes.package.cancelled
+            data:
+              type: object
+              description: 'payment.confirmed/failed: { paymentReference, bookingId, amount, failureReason? }. package.cancelled: { packageId, bookingId, reason? }.'
+              properties:
+                bookingId:
+                  type: string
+                  format: uuid
+                paymentReference:
+                  type: string
+                packageId:
+                  type: string
+                reason:
+                  type: string
+                failureReason:
+                  type: string
+
 x-asyncapi-inbound:
   description: |
-    Eventos que **publica Booking** y consume este nodo. Solo funcionan si el nodo tiene `RABBITMQ_URL`; sin broker, use las operaciones REST equivalentes (`POST /bookings/{id}/tickets`, `POST /bookings/{id}/cancel`).
+    Eventos que **publica Booking** y consume este nodo. Llegan por RabbitMQ (`RABBITMQ_URL`) o, sin broker, por HTTP firmado a `POST /vuelos/webhooks/booking` (operación `receiveBookingEvent`); también existen las operaciones REST equivalentes (`POST /bookings/{id}/tickets`, `POST /bookings/{id}/cancel`).
     Detalle y esquemas: `contracts/vuelos-eventos-asyncapi.yaml` y `contracts/eventos/pagos.*`, `paquetes.*`.
   exchange: booking.events (direct, durable)
   queue: q.vuelos.entrantes (durable; dead-letter booking.dlx; 3 reintentos y luego q.dead_letter)

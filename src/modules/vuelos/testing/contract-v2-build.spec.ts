@@ -41,7 +41,7 @@ describe('Our contract v2 (contracts/vuelos-openapi-v2-ram-alliance.yaml)', () =
     const ourIds = operationsOf(ours).map((o) => o.operation.operationId);
     expect(templateIds).toHaveLength(30);
     expect(templateIds.filter((id) => !ourIds.includes(id))).toEqual([]);
-    expect(ourIds.filter((id) => !templateIds.includes(id))).toEqual(['issueToken']);
+    expect(ourIds.filter((id) => !templateIds.includes(id))).toEqual(['issueToken', 'receiveBookingEvent']);
     expect(ours.paths['/oauth2/token']).toBeDefined();
     expect(ours.components.securitySchemes.PartnerOAuth2.flows?.clientCredentials?.tokenUrl).toBe('/api/v2/oauth2/token');
   });
@@ -56,6 +56,6 @@ describe('Our contract v2 (contracts/vuelos-openapi-v2-ram-alliance.yaml)', () =
     expect(uuidParams.every((p) => p.schema?.format === 'uuid')).toBe(true);
     expect(readFileSync(CONTRACT_V2_FILE, 'utf8')).not.toMatch(/(?<![A-Za-z0-9])(OFF|SEG|TKT|QTE|CHG)-[A-Z0-9]{2,}-/);
     expect(ours.servers[0].url).toBe('http://{host}:{port}/api/v2');
-    expect(ours.servers[0].variables?.host.default).toBe('100.121.62.72');
+    expect(ours.servers[0].variables?.host.default).toBe('100.118.24.48');
   });
 });

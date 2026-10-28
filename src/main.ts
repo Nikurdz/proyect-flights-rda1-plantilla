@@ -9,7 +9,7 @@ import { WinstonLogger } from './modules/vuelos/common/winston-logger';
 import { createGlobalRateLimit } from './modules/vuelos/ecommerce/common/global-rate-limit.middleware';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { logger: new WinstonLogger() });
+  const app = await NestFactory.create(AppModule, { logger: new WinstonLogger(), rawBody: true });
 
   // Behind a reverse proxy (Render) req.ip is the proxy's address unless it is trusted, and the
   // per-client rate limits (login, order lookup) would then be shared by every user. No-op unless set.
@@ -68,7 +68,8 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs-v2', app, yaml.load(readFileSync(contractV2, 'utf8')) as OpenAPIObject);
   }
 
-  await app.listen(process.env.PORT || 3000);
+  // 0.0.0.0: every network interface (the Tailscale one included), not only localhost.
+  await app.listen(process.env.PORT || 3000, '0.0.0.0');
 }
 // A failed start must stop the process with a readable error, not leave an unhandled rejection behind.
 bootstrap().catch((error: unknown) => {

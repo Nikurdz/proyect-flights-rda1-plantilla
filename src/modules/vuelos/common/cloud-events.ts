@@ -104,6 +104,28 @@ export function toCloudEvent(event: DomainEvent, source: string): CloudEvent | n
   };
 }
 
+/** Events Booking publishes for us (`ec.edu.epn.booking.pagos.payment.confirmed`…). */
+export const BOOKING_CLOUD_EVENT_PREFIX = 'ec.edu.epn.booking.';
+export const BOOKING_INBOUND_TYPES = ['pagos.payment.confirmed', 'pagos.payment.failed', 'paquetes.package.cancelled'] as const;
+
+/** A CloudEvent from Booking as a domain event whose type is the short name (`pagos.payment.confirmed`). Throws if it is not one. */
+export function bookingCloudEventToDomainEvent(raw: unknown): DomainEvent {
+  const ce = raw as { id?: string; type?: string; time?: string; correlationid?: string; subject?: string; data?: Record<string, unknown> };
+  if (!ce || typeof ce.id !== 'string' || typeof ce.type !== 'string' || !ce.type.startsWith(BOOKING_CLOUD_EVENT_PREFIX) || typeof ce.data !== 'object' || ce.data === null) {
+    throw new Error('not a Booking CloudEvent');
+  }
+  return {
+    id: ce.id,
+    type: ce.type.slice(BOOKING_CLOUD_EVENT_PREFIX.length),
+    schemaVersion: 1,
+    occurredAt: ce.time ?? new Date().toISOString(),
+    market: null,
+    correlationId: ce.correlationid ?? 'no-correlation',
+    aggregateId: ce.subject ?? String(ce.data.bookingId ?? ce.id),
+    payload: ce.data,
+  };
+}
+
 /** The short event name inside a CloudEvent type (`ec.edu.epn.booking.vuelos.booking.confirmed` → `booking.confirmed`). */
 export function shortEventName(cloudType: string): string {
   return cloudType.startsWith(CLOUD_EVENT_TYPE_PREFIX) ? cloudType.slice(CLOUD_EVENT_TYPE_PREFIX.length) : cloudType;

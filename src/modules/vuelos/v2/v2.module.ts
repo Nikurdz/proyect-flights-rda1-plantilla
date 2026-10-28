@@ -8,6 +8,7 @@ import { VuelosCoreModule } from '../vuelos-core.module';
 import { OAuth2Controller } from './auth/oauth2.controller';
 import { PartnerAuthGuard } from './auth/partner-auth.guard';
 import { PartnerAuthService } from './auth/partner-auth.service';
+import { BookingInboundV2Controller } from './booking-inbound-v2.controller';
 import { BookingBootstrapV2Service } from './booking-bootstrap-v2.service';
 import { BookingViewV2Service } from './booking-view-v2.service';
 import { FlightOpsV2Service } from './flight-ops-v2.service';
@@ -23,7 +24,7 @@ import { VuelosV2Controller } from './vuelos-v2.controller';
 /** Contract v2 (/api/v2/vuelos): the same core services behind OAuth2 partner tokens, CloudEvents and the new operations. */
 @Module({
   imports: [VuelosCoreModule, AdminModule, TypeOrmModule.forFeature([PartnerClient, OutboxEvent, PromocionContrato, PromocionAlcance])],
-  controllers: [VuelosV2Controller, OAuth2Controller],
+  controllers: [VuelosV2Controller, BookingInboundV2Controller, OAuth2Controller],
   providers: [PartnerAuthService, PartnerAuthGuard, BookingViewV2Service, SeatChangeV2Service, TicketsV2Service, FlightOpsV2Service, OutboxV2Service, PromotionsV2Service, HealthV2Service, InboundEventsV2Service, StockPushService, BookingBootstrapV2Service],
   exports: [PartnerAuthService, PromotionsV2Service, TicketsV2Service, StockPushService],
 })

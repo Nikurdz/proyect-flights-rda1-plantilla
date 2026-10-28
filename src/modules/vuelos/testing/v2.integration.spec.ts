@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import * as http from 'node:http';
 import { AddressInfo } from 'node:net';
 import { INestApplication } from '@nestjs/common';
@@ -433,6 +433,41 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       expect((await inbound('pagos.payment.failed', { paymentReference: booked2.body.paymentReference, bookingId: booked2.body.bookingId, failureReason: 'card_declined' })).fallos).toBe(0);
       expect((await api().get(`${V2}/bookings/${booked2.body.bookingId}`).set(bearer(token, 'user-9')).expect(200)).body.status).toBe('CANCELLED');
       expect((await inbound('pagos.payment.failed', { paymentReference: 'pay_unknown_0001', bookingId: randomUUID() })).fallos).toBe(0);
+    });
+  });
+
+  describe('Booking events over HTTP (no broker)', () => {
+    const SIGNING_SECRET = 'a-secret-of-sixteen-chars'; // BOOKING_WEBHOOK_SECRET of this suite
+    const sign = (body: string) => `sha256=${createHmac('sha256', SIGNING_SECRET).update(body).digest('hex')}`;
+    const cloudEvent = (type: string, data: Record<string, unknown>) => ({ specversion: '1.0', type: `ec.edu.epn.booking.${type}`, source: '/booking', id: randomUUID(), time: new Date().toISOString(), correlationid: 'corr-booking-http-1', data });
+    const post = (event: object, signature?: string) => {
+      const body = JSON.stringify(event);
+      return api().post(`${V2}/webhooks/booking`).set('Content-Type', 'application/json').set('X-Webhook-Signature', signature ?? sign(body)).send(body);
+    };
+
+    it('accepts a signed CloudEvent, refuses a bad signature or an unsupported type, and applies the effect once', async () => {
+      const token = await tokenFor();
+      const held = await hold(token, 'user-10', dayAhead(day++));
+      const booked = await book(token, 'user-10', held.res.body.holdId);
+      const bookingId = booked.body.bookingId as string;
+
+      const bad = await post(cloudEvent('paquetes.package.cancelled', { packageId: 'PKG-9', bookingId }), 'sha256=00');
+      expect(bad.status).toBe(401);
+      contract.check('post', '/vuelos/webhooks/booking', 401, bad.body, bad.headers['content-type']);
+      expect((await api().post(`${V2}/webhooks/booking`).send({})).status).toBe(401); // no signature at all
+
+      const unsupported = await post(cloudEvent('pagos.refund.done', { bookingId }));
+      expect(unsupported.status).toBe(400);
+      expect((await post({ hello: 'world' })).status).toBe(400);
+
+      const confirmed = await post(cloudEvent('pagos.payment.confirmed', { paymentReference: booked.body.paymentReference, bookingId }));
+      expect(confirmed.status).toBe(200);
+      contract.check('post', '/vuelos/webhooks/booking', 200, confirmed.body);
+
+      const cancel = cloudEvent('paquetes.package.cancelled', { packageId: 'PKG-9', bookingId, reason: 'Hotel sin cupo' });
+      expect((await post(cancel)).status).toBe(200);
+      expect((await api().get(`${V2}/bookings/${bookingId}`).set(bearer(token, 'user-10')).expect(200)).body.status).toBe('CANCELLED');
+      expect((await post(cancel)).status).toBe(200); // delivered twice: nothing more happens
     });
   });
 

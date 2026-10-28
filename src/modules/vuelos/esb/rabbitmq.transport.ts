@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
+import { bookingCloudEventToDomainEvent } from '../common/cloud-events';
 import { DomainEvent, DomainEventBus, EventTransport } from '../common/domain-event-bus';
 import { runtimeMetrics } from '../common/runtime-metrics';
 
@@ -15,7 +16,6 @@ export const Q_DEAD_LETTER = 'q.dead_letter';
 /** Events Booking Prototipo publishes for the airline (contract v2 §8): payments and cancelled packages. */
 export const Q_ENTRANTES = 'q.vuelos.entrantes';
 export const ENTRANTES_ROUTING_KEYS = ['pagos.payment.confirmed', 'pagos.payment.failed', 'paquetes.package.cancelled'];
-const CLOUD_EVENT_PREFIX = 'ec.edu.epn.booking.';
 export const MAX_REINTENTOS = 3;
 
 const CONFIRMADAS = new Set(['OrdenEmitida', 'ReservaExternaConfirmada', 'booking.confirmed', 'booking.ticket_issued']);
@@ -106,7 +106,7 @@ export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModule
       // Events from Booking arrive as structured CloudEvents under their own routing keys.
       await canal.assertQueue(Q_ENTRANTES, { durable: true, arguments: { 'x-dead-letter-exchange': DEAD_LETTER_EXCHANGE } });
       for (const clave of ENTRANTES_ROUTING_KEYS) await canal.bindQueue(Q_ENTRANTES, EXCHANGE, clave);
-      await canal.consume(Q_ENTRANTES, (mensaje) => void this.alRecibir(canal, mensaje, (crudo) => this.deCloudEvent(crudo)));
+      await canal.consume(Q_ENTRANTES, (mensaje) => void this.alRecibir(canal, mensaje, bookingCloudEventToDomainEvent));
       this.conexion = conexion;
       this.canal = canal;
       this.bus.setTransport(this);
@@ -130,22 +130,6 @@ export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModule
     if (this.cerrando) return;
     this.reconectar = setTimeout(() => void this.conectarYConsumir(), 15_000);
     this.reconectar.unref();
-  }
-
-  /** A CloudEvent from Booking as a domain event whose type is the short name (`pagos.payment.confirmed`). */
-  private deCloudEvent(crudo: unknown): DomainEvent {
-    const ce = crudo as { id?: string; type?: string; time?: string; correlationid?: string; subject?: string; data?: Record<string, unknown> };
-    if (!ce || typeof ce.id !== 'string' || typeof ce.type !== 'string' || !ce.type.startsWith(CLOUD_EVENT_PREFIX) || typeof ce.data !== 'object') throw new Error('not a Booking CloudEvent');
-    return {
-      id: ce.id,
-      type: ce.type.slice(CLOUD_EVENT_PREFIX.length),
-      schemaVersion: 1,
-      occurredAt: ce.time ?? new Date().toISOString(),
-      market: null,
-      correlationId: ce.correlationid ?? 'no-correlation',
-      aggregateId: ce.subject ?? String(ce.data?.bookingId ?? ce.id),
-      payload: ce.data,
-    };
   }
 
   private async alRecibir(canal: Canal, mensaje: amqp.ConsumeMessage | null, convertir?: (crudo: unknown) => DomainEvent): Promise<void> {

@@ -49,9 +49,9 @@ describeIntegration('The v2 contract describes exactly what /api/v2/vuelos serve
     await ctx?.close();
   });
 
-  it('lists the 31 operations of the contract (the 30 of the template plus the token endpoint)', () => {
-    expect(operations).toHaveLength(31);
-    expect(new Set(operations.map((o) => o.operation.operationId)).size).toBe(31);
+  it('lists the 32 operations of the contract (the 30 of the template plus the token and Booking-event endpoints)', () => {
+    expect(operations).toHaveLength(32);
+    expect(new Set(operations.map((o) => o.operation.operationId)).size).toBe(32);
   });
 
   it.each(operations.map((o) => [`${o.method.toUpperCase()} ${o.path}`, o] as const))('%s exists and enforces the scope the contract names', async (_name, op) => {
@@ -62,6 +62,11 @@ describeIntegration('The v2 contract describes exactly what /api/v2/vuelos serve
     const anonymous = await call();
     // Nest answers "Cannot GET /path" with its own 404 when the route does not exist.
     expect(JSON.stringify(anonymous.body)).not.toContain('Cannot ');
+    if (op.operation.operationId === 'receiveBookingEvent') {
+      // Not a Bearer operation: it is authenticated by the HMAC signature of Booking.
+      expect(anonymous.status).toBe(401);
+      return;
+    }
     if (op.scope === null) {
       expect(anonymous.status).not.toBe(401);
       return;
