@@ -16,7 +16,8 @@ interface Contract {
   paths: Record<string, Record<string, Operation>>;
 }
 
-const CONTRACT = yaml.load(readFileSync(join(__dirname, '..', '..', '..', '..', 'contracts', 'vuelos-openapi-v2.yaml'), 'utf8')) as Contract;
+// Our contract (generated from Booking's template + our overlay); the template itself is checked by contract-v2-build.spec.ts.
+const CONTRACT = yaml.load(readFileSync(join(__dirname, '..', '..', '..', '..', 'contracts', 'vuelos-openapi-v2-ram-alliance.yaml'), 'utf8')) as Contract;
 const METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 const operations = Object.entries(CONTRACT.paths).flatMap(([path, item]) =>
   Object.entries(item)
@@ -48,9 +49,9 @@ describeIntegration('The v2 contract describes exactly what /api/v2/vuelos serve
     await ctx?.close();
   });
 
-  it('lists the 30 operations of the contract', () => {
-    expect(operations).toHaveLength(30);
-    expect(new Set(operations.map((o) => o.operation.operationId)).size).toBe(30);
+  it('lists the 31 operations of the contract (the 30 of the template plus the token endpoint)', () => {
+    expect(operations).toHaveLength(31);
+    expect(new Set(operations.map((o) => o.operation.operationId)).size).toBe(31);
   });
 
   it.each(operations.map((o) => [`${o.method.toUpperCase()} ${o.path}`, o] as const))('%s exists and enforces the scope the contract names', async (_name, op) => {

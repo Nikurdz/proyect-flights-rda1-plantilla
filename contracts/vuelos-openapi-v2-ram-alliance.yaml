@@ -1,0 +1,4314 @@
+# GENERADO por scripts/build-contract-v2.js — no editar a mano.
+# Base: contracts/vuelos-openapi-v2.yaml (plantilla de Booking). Parche propio: contracts/overlay/vuelos-v2-ram-alliance.overlay.yaml.
+# Regenerar: npm run contract:v2:build
+openapi: 3.0.3
+info:
+  title: RAM Alliance Vuelos — API de vuelos (contrato v2)
+  version: 2.0.0-ram-alliance
+  license:
+    name: Uso académico — Integración de Sistemas PUCE
+  contact:
+    name: Equipo RAM Alliance Vuelos (PUCE) — David Tapia
+    email: alejandro.floreslu@outlook.com
+  description: |
+    # RAM Alliance Vuelos — contrato de integración v2
+
+    > **Sistema proveedor:** RAM Alliance Vuelos (categoría *Vuelos*), detrás de una sola URL base.
+    > **Sistema consumidor:** Booking Prototipo (marketplace multimodal).
+    > **Base del contrato:** la plantilla común de Booking (`vuelos-openapi-v2.yaml`), **ajustada a lo que este nodo realmente responde**.
+    > Este documento se genera con `npm run contract:v2:build` y las respuestas reales de la API se validan contra sus esquemas en las pruebas.
+
+    ## 1. Cómo conectarse
+    | Dato | Valor |
+    |---|---|
+    | URL base | `http://{host}:{port}/api/v2` — endpoints en `/vuelos/...` |
+    | Pruebas locales (Tailscale) | `http://100.121.62.72:3000/api/v2/vuelos` |
+    | Token OAuth2 | `POST /api/v2/oauth2/token` |
+    | Salud (sin token) | `GET /api/v2/vuelos/health` |
+    | Documentación navegable | `/api/docs-v2` |
+    | `X-API-Key` | **No se usa.** La autenticación es OAuth2 `client_credentials` (Bearer) |
+
+    ## 2. Autenticación
+    1. Booking pide un token con su `client_id` y `client_secret` (cuerpo `application/x-www-form-urlencoded` o JSON, o cabecera HTTP Basic).
+    2. Envía `Authorization: Bearer <access_token>` en cada llamada. El token dura `expires_in` segundos (3600 por defecto); al vencer se pide otro.
+    3. **Scopes:** `flights:read`, `flights:hold`, `flights:book`, `flights:cancel`, `flights:webhooks`, `flights:ops`, `flights:admin` (este último equivale a todos). Un token sin el scope de la operación recibe **403**; sin token, **401**.
+    4. Booking identifica al cliente final con `X-User-Id` (hasta 50 caracteres `A-Z a-z 0-9 . _ : @ -`): las reservas, holds y suscripciones quedan a nombre de ese usuario y **solo él las ve** (otro `X-User-Id` recibe 403). Sin `X-User-Id` el dueño es el propio socio. Un webhook registrado **sin** `X-User-Id` recibe los eventos de **todos** los usuarios del socio.
+    5. Operaciones públicas (sin token): `search`, `seatmap`, `GET flights/{n}/status`, `health` y el propio `oauth2/token`.
+
+    ## 3. Convenciones
+    * **Ids generados por este nodo son UUID**: `offerId`, `itineraryId`, `segmentId` (= id del vuelo), `holdId`, `bookingId`, `ticketId`, `quoteId`, `changeOfferId`, `refundId`. Use siempre los valores que devuelve la API (los ejemplos con prefijo `OFF-`/`SEG-`… de la plantilla no existen aquí).
+    * **Ids que elige Booking:** `passengerId`, `paymentReference` (8–100 caracteres `A-Za-z0-9._:-`, de un solo uso), `partnerOrderId`, `packageId`.
+    * **Idempotency-Key** (UUID v4) obligatoria en las escrituras que lo indican: se retiene 24 h. Mismo cuerpo → misma respuesta, con `Idempotent-Replayed: true` y código **200**; otro cuerpo con la misma clave → **409 `IDEMPOTENCY_KEY_REUSED`**.
+    * **Trazabilidad:** `X-Correlation-Id` (8–100 caracteres `A-Za-z0-9._-`) se acepta y se devuelve sin cambios; si no viene o es inválido se genera uno. `X-Request-Id` identifica cada llamada. Todo error trae `correlation_id`, `instance` y `timestamp` (RFC 7807).
+    * **Búsqueda:** `X-Device-Fingerprint` obligatorio y no vacío.
+    * **Límite de tasa:** 300 peticiones por 60 s **por dirección IP** del cliente; al excederlo, **429** con `Retry-After`. `health` está exento.
+    * **Paginación:** `limit` y `cursor` opacos (`nextCursor`); `GET /bookings` por defecto 10 (máx. 50), `operaciones/vuelos` por defecto 20 (máx. 100), `eventos` por defecto 20 (máx. 100).
+    * **Dinero:** cadenas con dos decimales y moneda ISO-4217 (`USD`). Solo se vende en **clase ECONÓMICA**, vuelos directos.
+    * **Pagos:** cobra Booking; este nodo solo recibe `payment.paymentReference` (y opcionalmente `amount`: si no coincide con el precio retenido, **422 `AMOUNT_MISMATCH`**). En cancelaciones el nodo **calcula** el reembolso y Booking lo ejecuta.
+
+    ## 4. Eventos que publica este nodo (webhooks CloudEvents)
+    Se registran con `POST /vuelos/webhooks` (la `url` debe ser **https** a una IP pública; en las pruebas locales por Tailscale el nodo se arranca con `WEBHOOKS_ALLOW_PRIVATE_HOSTS=true`). Cada entrega es un `POST` con el CloudEvent v1.0 estructurado:
+
+    | Cabecera | Valor |
+    |---|---|
+    | `Content-Type` | `application/cloudevents+json` |
+    | `X-Webhook-Id` | id de la entrega |
+    | `X-Webhook-Event` | tipo corto (`booking.confirmed`…) |
+    | `X-Webhook-Timestamp` | epoch en segundos (**no** forma parte de la firma) |
+    | `X-Webhook-Signature` | `sha256=` + HMAC-SHA256(secret, **cuerpo crudo**) en hexadecimal |
+    | `X-Correlation-Id` | `correlationid` del evento |
+
+    Responda **2xx**; cualquier otra respuesta se reintenta a 1 min, 5 min, 30 min, 2 h y 6 h y luego la entrega queda `DEAD` (el evento sigue en `GET /vuelos/eventos`). Los 15 tipos y su `data` están en los esquemas `Event*`. `type` = `ec.edu.epn.booking.vuelos.<evento>`, `source` = `/aerolineas/ram-alliance/vuelos`.
+
+    ## 5. Eventos que consume este nodo (publica Booking) — ver `x-asyncapi-inbound`
+    ## 6. Stock por gRPC (este nodo es el cliente) — ver `x-grpc-stock`
+
+    ## 7. Diferencias respecto a la plantilla de Booking
+    | Tema | Plantilla | Este nodo |
+    |---|---|---|
+    | Ids | ejemplos `OFF-…`, `SEG-…`, `TKT-…`… | UUID (ver §3) |
+    | 202 (`TICKET_ISSUING`, `CHANGE_PENDING`, `CANCELLATION_PENDING`) | posible | **nunca**: la emisión, el equipaje, el cambio de fecha y la cancelación son síncronos |
+    | `BookingDetail.itineraries` / `passengers` | opcionales | **no se devuelven** (no se exponen datos personales) |
+    | Check-in repetido | 409 | **200 idempotente** (no cambia nada). Cierra a la hora de salida si el nodo corre con `CHECKIN_CLOSES_HOURS=0` |
+    | Cancelación sin `quoteId` | solo SAGA/FLIGHT | también `CUSTOMER_REQUEST`: se cotiza y aplica en el acto |
+    | Límite de tasa de `search` | por `X-Device-Fingerprint` | por IP |
+    | `health.circuit_breaker_estado` | real | siempre `CLOSED` |
+    | `aircraft` en operaciones | modelo | `null` |
+    | Mapa de asientos | `HELD` por asiento | un hold no fija asientos concretos: `AVAILABLE`, `BOOKED`/`TICKETED`, `CHECKED_IN`, `BOARDED` |
+    | Asientos | con costo opcional | gratis; `payment` se acepta pero no se usa |
+
+    ## 8. Máquinas de estado
+    **Asiento:** `AVAILABLE → BOOKED/TICKETED → CHECKED_IN → BOARDED`. **Hold:** `HELD → CONSUMED | RELEASED | EXPIRED` (TTL 5–30 min, 15 por defecto; vencido = **410 `HOLD_EXPIRED`**). **Reserva:** `CONFIRMED`, `CANCELLED`, `FAILED` (y los estados transitorios del contrato). **Vuelo:** `SCHEDULED → BOARDING → DEPARTED → ARRIVED`, con `DELAYED`, `CANCELLED`, `DIVERTED`. **Check-in:** abre 48 h antes de la salida.
+servers:
+  - url: http://{host}:{port}/api/v2
+    description: Este nodo. Por defecto, la laptop del equipo en la red Tailscale (pruebas de integración).
+    variables:
+      host:
+        default: 100.121.62.72
+        description: IP de Tailscale (o nombre de host) donde corre el nodo
+      port:
+        default: '3000'
+        description: Puerto del nodo
+  - url: /api/v2
+    description: Ruta relativa canónica (detrás del gateway del nodo)
+security:
+  - PartnerOAuth2: []
+tags:
+  - name: MS.Vuelos — Búsqueda y Catálogo
+    description: Búsqueda multidestino, mapa de asientos y estado público de vuelos.
+  - name: MS.Vuelos — Operaciones
+    description: Panel de ocupación por vuelo y cabina y cambio de estado operativo (scope flights:ops).
+  - name: MS.Vuelos — Promociones B2B
+    description: Acuerdo comercial de promociones y combos con Booking Prototipo.
+  - name: MS.Vuelos — Telemetría
+    description: Salud del nodo y feed outbox de eventos.
+  - name: MS.Reservas — Bloqueo de Cupos (Hold)
+    description: Retención temporal de asientos con precio congelado y TTL.
+  - name: MS.Reservas — Reservas y Emisión
+    description: Creación de reservas con paymentReference, consulta y emisión de boletos.
+  - name: MS.Reservas — Asientos, Check-in y Boarding Pass
+    description: Cambio de asiento, check-in en línea y pases de abordar.
+  - name: MS.Postventa
+    description: Equipaje extra, cambio de fecha, cotización y cancelación.
+  - name: MS.Clientes — Webhooks
+    description: Suscripciones para recibir eventos CloudEvents firmados.
+  - name: MS.Clientes — OAuth2
+    description: Token de servicio (client_credentials) para Booking Prototipo.
+x-tagGroups:
+  - name: MS.Vuelos
+    tags:
+      - MS.Vuelos — Búsqueda y Catálogo
+      - MS.Vuelos — Operaciones
+      - MS.Vuelos — Promociones B2B
+      - MS.Vuelos — Telemetría
+  - name: MS.Reservas
+    tags:
+      - MS.Reservas — Bloqueo de Cupos (Hold)
+      - MS.Reservas — Reservas y Emisión
+      - MS.Reservas — Asientos, Check-in y Boarding Pass
+  - name: MS.Postventa
+    tags:
+      - MS.Postventa
+  - name: MS.Clientes
+    tags:
+      - MS.Clientes — Webhooks
+      - MS.Clientes — OAuth2
+paths:
+  /vuelos/health:
+    get:
+      tags:
+        - MS.Vuelos — Telemetría
+      operationId: getHealth
+      x-microservice: MS.Vuelos
+      summary: Salud y telemetría del nodo de vuelos (semáforo 🟢/🔴 del Panel 1)
+      description: |
+        Consumido por el Monitor de Nodos de Booking. Responde **200** si el nodo está `HEALTHY` o `DEGRADED` y **503**
+        si está `DOWN`. Debe responder en menos de 1 s y no requiere token. Usa los mismos campos que el resto de verticales.
+
+        **Nota de implementación (RAM Alliance):** `circuit_breaker_estado` es siempre `CLOSED`. `status` es `DOWN` (503) si la base de datos no responde y `DEGRADED` si tarda más de 1 s.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Nodo operativo (HEALTHY o DEGRADED)
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VuelosHealthResponse'
+        '429':
+          $ref: '#/components/responses/Problem429'
+        '503':
+          description: Nodo caído (DOWN) — mismo cuerpo de salud con `status = DOWN`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VuelosHealthResponse'
+  /vuelos/eventos:
+    get:
+      tags:
+        - MS.Vuelos — Telemetría
+      operationId: listOutboxEvents
+      x-microservice: MS.Vuelos
+      summary: Feed outbox de eventos CloudEvents (respaldo de los webhooks)
+      description: |
+        Expone en orden cronológico los eventos registrados por el patrón Transactional Outbox. Booking lo usa para
+        reconciliar eventos que no llegaron por webhook. Paginación por cursor con `after` (id del último evento leído).
+
+        **Nota de implementación (RAM Alliance):** El `id` de cada evento es el UUID del evento (el mismo del webhook). El cursor es `metadata.next_after` (`evt-vue-000120`); un `after` desconocido responde 400 en lugar de reiniciar. `metadata.total` es el tamaño de la página.
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: after
+          in: query
+          required: false
+          description: Id del último evento ya procesado; devuelve los posteriores.
+          schema:
+            type: string
+          example: evt-vue-000120
+        - name: type
+          in: query
+          required: false
+          description: Filtra por tipo corto de evento (ej. `booking.confirmed`).
+          schema:
+            $ref: '#/components/schemas/VuelosEventName'
+      responses:
+        '200':
+          description: Página de eventos
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VuelosEventosResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/promociones/contrato:
+    get:
+      tags:
+        - MS.Vuelos — Promociones B2B
+      operationId: getPromotionAgreement
+      x-microservice: MS.Vuelos
+      summary: Consultar el acuerdo B2B de promociones y combos
+      description: Devuelve si la aerolínea acepta participar en combos y el porcentaje máximo de descuento autorizado.
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Acuerdo vigente
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContratoPromocionesResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '429':
+          $ref: '#/components/responses/Problem429'
+    put:
+      tags:
+        - MS.Vuelos — Promociones B2B
+      operationId: putPromotionAgreement
+      x-microservice: MS.Vuelos
+      summary: Formalizar o actualizar el acuerdo B2B de promociones
+      description: |
+        Responde una sola vez el cuestionario de la cátedra:
+        1. ¿Acepta participar en promociones y combos? (`permite_promociones`)
+        2. ¿Cuál es el porcentaje máximo de descuento? (`porcentaje_descuento_maximo`)
+        3. ¿En qué rutas, destinos y cabinas aplica?
+
+        **Nota de implementación (RAM Alliance):** Responde el contrato plano (`permite_promociones`, `porcentaje_descuento_maximo`, listas…). Las `rutas_habilitadas` son `AAA-BBB` y los `destinos_habilitados` códigos IATA de 3 letras. Una venta con `salesChannel.promotionApplied` se rechaza con 422 `PROMOTION_DISCOUNT_OUT_OF_RANGE` si supera el máximo o no hay acuerdo vigente.
+      security:
+        - PartnerOAuth2:
+            - flights:admin
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContratoPromocionesRequest'
+      responses:
+        '200':
+          description: Acuerdo registrado
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  mensaje:
+                    type: string
+                    example: Acuerdo B2B de promociones de vuelos actualizado exitosamente.
+                  contrato:
+                    $ref: '#/components/schemas/ContratoPromocionesResponse'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '422':
+          $ref: '#/components/responses/Problem422'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/search:
+    post:
+      tags:
+        - MS.Vuelos — Búsqueda y Catálogo
+      operationId: searchFlights
+      x-microservice: MS.Vuelos
+      summary: Búsqueda de vuelos (solo ida, ida y vuelta o multidestino)
+      description: |
+        Devuelve ofertas con precios por tipo de pasajero, cabina, reglas tarifarias y equipaje incluido.
+        Solo muestra cabinas con `availableSeats > 0`. Límite de peticiones por dispositivo (`X-Device-Fingerprint`) → 429.
+
+        **Nota de implementación (RAM Alliance):** Vuelos directos, clase económica; como máximo `OFFER_MAX_COMBINATIONS` ofertas (5 por defecto), las más baratas primero. El límite de tasa es por IP, no por dispositivo.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/DeviceFingerprint'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Ofertas encontradas
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '422':
+          $ref: '#/components/responses/Problem422'
+        '429':
+          $ref: '#/components/responses/Problem429'
+        '503':
+          $ref: '#/components/responses/Problem503'
+  /vuelos/offers/{offerId}/seatmap:
+    get:
+      tags:
+        - MS.Vuelos — Búsqueda y Catálogo
+      operationId: getSeatMap
+      x-microservice: MS.Vuelos
+      summary: Mapa de asientos de un segmento con el estado de cada asiento
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/OfferId'
+        - name: segmentId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 2d3443d3-06a9-4418-887b-b4f738ed0ac7
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Mapa de asientos (sin precios)
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatMapResponse'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '410':
+          $ref: '#/components/responses/Problem410'
+        '429':
+          $ref: '#/components/responses/Problem429'
+      description: |
+
+
+        **Nota de implementación (RAM Alliance):** `segmentId` es el id del vuelo (UUID). Un hold no fija asientos: el estado por asiento es `AVAILABLE`, `BOOKED`/`TICKETED`, `CHECKED_IN` o `BOARDED`. Oferta vencida: 410 `OFFER_NO_LONGER_AVAILABLE`.
+  /vuelos/flights/{flightNumber}/status:
+    get:
+      tags:
+        - MS.Vuelos — Búsqueda y Catálogo
+      operationId: getFlightStatus
+      x-microservice: MS.Vuelos
+      summary: Estado operativo de un vuelo en una fecha
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/FlightNumber'
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: '2026-11-20'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Estado del vuelo
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlightStatus'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '429':
+          $ref: '#/components/responses/Problem429'
+      description: |
+
+
+        **Nota de implementación (RAM Alliance):** El parámetro `date` es obligatorio.
+    patch:
+      tags:
+        - MS.Vuelos — Operaciones
+      operationId: updateFlightStatus
+      x-microservice: MS.Vuelos
+      summary: Cambiar el estado operativo de un vuelo (rol OPS / ADMIN)
+      description: |
+        Registra demoras, cambios de puerta, cancelaciones o desvíos. Valida la transición de estados
+        (ej. no se puede pasar de `ARRIVED` a `BOARDING` → 409 `INVALID_STATUS_TRANSITION`).
+        Emite el evento `flight.status_changed`, que consumen Booking, Autos y Alojamientos.
+        Si el nuevo estado es `CANCELLED`, las reservas afectadas pasan a gestión de reembolso.
+
+        **Nota de implementación (RAM Alliance):** Las transiciones válidas son SCHEDULED→{DELAYED,BOARDING,DEPARTED,CANCELLED,DIVERTED}, DELAYED→{SCHEDULED,BOARDING,DEPARTED,CANCELLED,DIVERTED}, BOARDING→{DELAYED,DEPARTED,CANCELLED}, DEPARTED→{ARRIVED,DIVERTED}, DIVERTED→{ARRIVED}; ARRIVED y CANCELLED son finales (409 `INVALID_STATUS_TRANSITION`). DELAYED exige `estimatedDepartureAt`. CANCELLED cancela las reservas con reembolso total.
+      security:
+        - PartnerOAuth2:
+            - flights:ops
+      parameters:
+        - $ref: '#/components/parameters/FlightNumber'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/UserRoles'
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlightStatusUpdateRequest'
+      responses:
+        '200':
+          description: Estado actualizado y evento emitido
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlightStatusUpdateResponse'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/operaciones/vuelos:
+    get:
+      tags:
+        - MS.Vuelos — Operaciones
+      operationId: listFlightOperations
+      x-microservice: MS.Vuelos
+      summary: Panel de ocupación por vuelo y cabina (equivalente al panel de flota de autos)
+      description: |
+        Devuelve, para cada vuelo de la fecha, los asientos por estado (`AVAILABLE`, `HELD`, `BOOKED`, `TICKETED`,
+        `CHECKED_IN`, `BOARDED`), el factor de ocupación, los holds activos con su próximo vencimiento y alertas
+        operativas (sobreventa, demora, check-in abierto).
+
+        **Nota de implementación (RAM Alliance):** `loadFactor` es un porcentaje (0–100, un decimal). Solo hay cabina ECONOMY; `aircraft` es null. El filtro `status` se aplica antes de paginar. En `seatsByStatus`, `BOOKED` es siempre 0 (la emisión es inmediata).
+      security:
+        - PartnerOAuth2:
+            - flights:ops
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/UserRoles'
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: '2026-11-20'
+        - name: origin
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^[A-Z]{3}$
+          example: UIO
+        - name: destination
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^[A-Z]{3}$
+          example: GYE
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/FlightOperationalStatus'
+        - name: limit
+          in: query
+          required: false
+          description: Tamaño de página (por defecto 20, máximo 100).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          description: 'Cursor opaco: use `nextCursor` de la página anterior.'
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        '200':
+          description: Ocupación de los vuelos solicitados
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlightOperationsResponse'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '429':
+          $ref: '#/components/responses/Problem429'
+        '500':
+          $ref: '#/components/responses/Problem500'
+  /vuelos/offers/hold:
+    post:
+      tags:
+        - MS.Reservas — Bloqueo de Cupos (Hold)
+      operationId: createHold
+      x-microservice: MS.Reservas
+      summary: Bloquear asientos con precio congelado
+      description: |
+        Retiene inventario de la oferta y congela el precio durante `ttlMinutes` (15 min por defecto, 5–30).
+        Los asientos pasan a `HELD`, se emite `hold.created` y se envía `StockChangeEvent` (delta negativo) por gRPC.
+        Al vencer, los asientos vuelven a `AVAILABLE` y se emite `hold.expired`.
+        **Compensación Saga:** `DELETE /vuelos/offers/hold/{holdId}`.
+
+        **Nota de implementación (RAM Alliance):** `ttlMinutes` 5–30 (15 por defecto). Precio congelado en `lockedPrice`. Oferta vencida: 410 `OFFER_NO_LONGER_AVAILABLE`; sin cupo: 409 `SEAT_TAKEN`. Se emite `hold.created`.
+      security:
+        - PartnerOAuth2:
+            - flights:hold
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/DeviceFingerprintOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HoldRequest'
+      responses:
+        '200':
+          description: Reintento con la misma `Idempotency-Key` — devuelve el hold original
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/Idempotent-Replayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldResponse'
+        '201':
+          description: Inventario retenido
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldResponse'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '410':
+          $ref: '#/components/responses/Problem410'
+        '422':
+          $ref: '#/components/responses/Problem422'
+        '429':
+          $ref: '#/components/responses/Problem429'
+        '503':
+          $ref: '#/components/responses/Problem503'
+  /vuelos/offers/hold/{holdId}:
+    get:
+      tags:
+        - MS.Reservas — Bloqueo de Cupos (Hold)
+      operationId: getHold
+      x-microservice: MS.Reservas
+      summary: Consultar el estado y el tiempo restante de un hold
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/HoldId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Estado del hold
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoldStatusResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '429':
+          $ref: '#/components/responses/Problem429'
+      description: |
+
+
+        **Nota de implementación (RAM Alliance):** Un hold ajeno responde 403; uno inexistente 404.
+    delete:
+      tags:
+        - MS.Reservas — Bloqueo de Cupos (Hold)
+      operationId: releaseHold
+      x-microservice: MS.Reservas
+      summary: Liberar un hold (compensación Saga)
+      description: |
+        Devuelve los asientos a `AVAILABLE` y envía `StockChangeEvent` (delta positivo).
+        Es idempotente: liberar un hold ya liberado o vencido responde 204.
+        Un hold `CONSUMED` (ya convertido en reserva) responde 409 `HOLD_ALREADY_CONSUMED`; en ese caso se compensa con `cancel`.
+
+        **Nota de implementación (RAM Alliance):** Idempotente: liberar un hold ya liberado o vencido responde 204; uno ya consumido, 409 `HOLD_ALREADY_CONSUMED`.
+      security:
+        - PartnerOAuth2:
+            - flights:hold
+      parameters:
+        - $ref: '#/components/parameters/HoldId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Hold liberado
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/bookings:
+    get:
+      tags:
+        - MS.Reservas — Reservas y Emisión
+      operationId: listBookings
+      x-microservice: MS.Reservas
+      summary: Listar reservas del usuario (paginado por cursor)
+      description: |
+        El dueño se toma de `X-User-Id` (reenviado por Booking) o del `sub` del token. Nunca del body.
+
+        **Nota de implementación (RAM Alliance):** Cada item incluye `_links`. Solo se listan las reservas del usuario (`X-User-Id`).
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/DeviceFingerprintOptional'
+        - name: pnr
+          in: query
+          schema:
+            type: string
+          example: XK7P2Q
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/BookingStatus'
+        - name: createdFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: createdTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Lista resumida
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingListResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '429':
+          $ref: '#/components/responses/Problem429'
+    post:
+      tags:
+        - MS.Reservas — Reservas y Emisión
+      operationId: createBooking
+      x-microservice: MS.Reservas
+      summary: Crear reserva a partir de un hold (con paymentReference de Booking)
+      description: |
+        Convierte el hold en reserva (`HELD → CONSUMED`), registra pasajeros y genera el PNR.
+        **Pagos:** el cobro lo hizo Booking; aquí solo llega `payment.paymentReference`. La aerolínea **no cobra** y solo valida
+        la referencia (`PAYMENT_REFERENCE_INVALID`, `AMOUNT_MISMATCH`).
+        Emisión: si es inmediata responde **201** (`CONFIRMED`); si continúa en segundo plano responde **202**
+        (`TICKET_ISSUING`) y el resultado llega por el evento `booking.ticket_issued` / `booking.ticket_failed`.
+        Emite `booking.confirmed`. **Compensación Saga:** `POST /vuelos/bookings/{bookingId}/cancel`.
+
+        **Nota de implementación (RAM Alliance):** Siempre **201** con la reserva ya `CONFIRMED` y los boletos emitidos (nunca 202). `payment.amount`, si viene, debe coincidir con el precio retenido (422 `AMOUNT_MISMATCH`); una `paymentReference` ya usada responde 422 `PAYMENT_REFERENCE_INVALID`. En viajes internacionales todos los pasajeros necesitan pasaporte (422 `PASSPORT_REQUIRED_INTERNATIONAL`). Pasajeros: hasta `MAX_PASSENGERS_PER_ORDER` (9). Responde `Location`.
+
+        **Sin 202:** este nodo emite y confirma de forma síncrona, así que responde siempre el código de éxito inmediato (nunca 202).
+      security:
+        - PartnerOAuth2:
+            - flights:book
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/DeviceFingerprintOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+      responses:
+        '200':
+          description: Reintento con la misma `Idempotency-Key` — devuelve la reserva original
+          headers:
+            Idempotent-Replayed:
+              $ref: '#/components/headers/Idempotent-Replayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetail'
+        '201':
+          description: Reserva creada y boletos emitidos
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetail'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '410':
+          $ref: '#/components/responses/Problem410'
+        '422':
+          $ref: '#/components/responses/Problem422'
+        '429':
+          $ref: '#/components/responses/Problem429'
+        '503':
+          $ref: '#/components/responses/Problem503'
+  /vuelos/bookings/{bookingId}:
+    get:
+      tags:
+        - MS.Reservas — Reservas y Emisión
+      operationId: getBooking
+      x-microservice: MS.Reservas
+      summary: Detalle completo de una reserva
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/DeviceFingerprintOptional'
+      responses:
+        '200':
+          description: Itinerarios, pasajeros, boletos, historial y enlaces HATEOAS
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetail'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '429':
+          $ref: '#/components/responses/Problem429'
+      description: |
+
+
+        **Nota de implementación (RAM Alliance):** El detalle no incluye `itineraries` ni `passengers`.
+  /vuelos/bookings/{bookingId}/tickets:
+    post:
+      tags:
+        - MS.Reservas — Reservas y Emisión
+      operationId: issueTickets
+      x-microservice: MS.Reservas
+      summary: Emitir los boletos de una reserva
+      description: |
+        Emite un boleto por pasajero con un cupón por segmento. Asientos `BOOKED → TICKETED`.
+        **Idempotente por construcción:** si ya estaban emitidos responde 200 con `issued: 0`, por eso
+        `Idempotency-Key` es opcional. Emite `booking.ticket_issued` (lo consume Facturación).
+        Booking la invoca tras confirmar el pago, o la aerolínea la ejecuta al consumir `payment.confirmed`.
+
+        **Nota de implementación (RAM Alliance):** La reserva ya sale emitida: si todos los boletos existen responde 200 con `issued: 0`.
+      security:
+        - PartnerOAuth2:
+            - flights:book
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+        - $ref: '#/components/parameters/DeviceFingerprintOptional'
+      responses:
+        '200':
+          description: Boletos emitidos (o ya emitidos)
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketIssuanceResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '422':
+          $ref: '#/components/responses/Problem422'
+        '429':
+          $ref: '#/components/responses/Problem429'
+    get:
+      tags:
+        - MS.Reservas — Reservas y Emisión
+      operationId: listTickets
+      x-microservice: MS.Reservas
+      summary: Consultar los boletos de una reserva
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Boletos de la reserva
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketListResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '429':
+          $ref: '#/components/responses/Problem429'
+      description: |
+
+
+        **Nota de implementación (RAM Alliance):** Responde `{ bookingId, tickets }`. `ticketId` es un UUID.
+  /vuelos/bookings/{bookingId}/tickets/{ticketId}:
+    get:
+      tags:
+        - MS.Reservas — Reservas y Emisión
+      operationId: getTicket
+      x-microservice: MS.Reservas
+      summary: Consultar un boleto
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - name: ticketId
+          in: path
+          required: true
+          description: Identificador de negocio del boleto (no es UUID).
+          schema:
+            type: string
+            format: uuid
+          example: 3d815358-7911-465a-8c5f-6afc0daf4a59
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Detalle del boleto
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '429':
+          $ref: '#/components/responses/Problem429'
+      description: |
+
+
+        **Nota de implementación (RAM Alliance):** `ticketId` es el UUID del boleto.
+  /vuelos/bookings/{bookingId}/seats:
+    put:
+      tags:
+        - MS.Reservas — Asientos
+        - Check-in y Boarding Pass
+      operationId: changeSeats
+      x-microservice: MS.Reservas
+      summary: Asignar o cambiar asientos de los pasajeros
+      description: |
+        Cambia asientos dentro de la misma cabina. El asiento anterior vuelve a `AVAILABLE` y el nuevo pasa al estado
+        del pasajero (`BOOKED` o `TICKETED`). Si el asiento tiene costo, Booking cobra antes y envía `payment`.
+        No permitido después del check-in del segmento (409 `CUTOFF_PASSED`), para infantes sin asiento
+        (422 `INFANT_SEAT_NOT_ALLOWED`) ni en otra cabina (422 `SEAT_CABIN_MISMATCH`).
+        Emite `booking.seat_changed`. Es una operación atómica: o se cambian todos los asientos o ninguno.
+
+        **Nota de implementación (RAM Alliance):** Los asientos no tienen costo: `payment` se acepta pero no se usa y `amountCharged` es `0.00`. El cambio es atómico y se puede intercambiar asientos entre pasajeros de la misma reserva. `status` por asiento: `TICKETED` o `BOOKED` según el boleto del pasajero.
+      security:
+        - PartnerOAuth2:
+            - flights:book
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeatChangeRequest'
+      responses:
+        '200':
+          description: Asientos asignados
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatChangeResponse'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '422':
+          $ref: '#/components/responses/Problem422'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/bookings/{bookingId}/check-in:
+    post:
+      tags:
+        - MS.Reservas — Asientos
+        - Check-in y Boarding Pass
+      operationId: checkIn
+      x-microservice: MS.Reservas
+      summary: Check-in en línea de la reserva
+      description: |
+        Disponible desde **48 h** antes de la salida hasta la salida. Requiere boletos emitidos.
+        Asientos `TICKETED → CHECKED_IN`. Un segundo intento responde 409 (no se duplica), por eso `Idempotency-Key` es opcional.
+        Emite `booking.checked_in`.
+
+        **Nota de implementación (RAM Alliance):** Repetirlo responde 200 sin cambios (no 409). Abre 48 h antes de la salida; el cierre lo fija `CHECKIN_CLOSES_HOURS` (0 = a la hora de salida).
+      security:
+        - PartnerOAuth2:
+            - flights:book
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+        - $ref: '#/components/parameters/DeviceFingerprintOptional'
+      responses:
+        '200':
+          description: Check-in realizado
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '422':
+          $ref: '#/components/responses/Problem422'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/bookings/{bookingId}/boarding-passes:
+    get:
+      tags:
+        - MS.Reservas — Asientos
+        - Check-in y Boarding Pass
+      operationId: listBoardingPasses
+      x-microservice: MS.Reservas
+      summary: Pases de abordar (datos para QR / código de barras)
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Pases de abordar
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardingPassListResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '429':
+          $ref: '#/components/responses/Problem429'
+      description: |
+
+
+        **Nota de implementación (RAM Alliance):** `gate` es la puerta de embarque cargada por operaciones (puede ser null). Antes del check-in: 404 `BOARDING_PASS_NOT_AVAILABLE`.
+  /vuelos/bookings/{bookingId}/baggage-options:
+    get:
+      tags:
+        - MS.Postventa
+      operationId: getBaggageOptions
+      x-microservice: MS.Postventa
+      summary: Opciones de equipaje extra por pasajero e itinerario
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Precios y límites de maletas
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaggageOptionsResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/bookings/{bookingId}/baggage:
+    post:
+      tags:
+        - MS.Postventa
+      operationId: addBaggage
+      x-microservice: MS.Postventa
+      summary: Agregar maletas extra (con paymentReference de Booking)
+      description: |
+        Emite `booking.baggage_added` (Facturación factura la diferencia).
+
+        **Nota de implementación (RAM Alliance):** Hasta 3 h antes de la salida, máximo 2 maletas extra por pasajero y tramo. La `paymentReference` es de un solo uso.
+
+        **Sin 202:** este nodo emite y confirma de forma síncrona, así que responde siempre el código de éxito inmediato (nunca 202).
+      security:
+        - PartnerOAuth2:
+            - flights:book
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddBaggageRequest'
+      responses:
+        '200':
+          description: Maletas agregadas
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaggageAddedResponse'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '422':
+          $ref: '#/components/responses/Problem422'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/bookings/{bookingId}/date-change/search:
+    post:
+      tags:
+        - MS.Postventa
+      operationId: searchDateChange
+      x-microservice: MS.Postventa
+      summary: Buscar alternativas para cambio de fecha (con diferencia de tarifa)
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DateChangeSearchRequest'
+      responses:
+        '200':
+          description: Ofertas de cambio (cada una con vencimiento)
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DateChangeSearchResponse'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '429':
+          $ref: '#/components/responses/Problem429'
+      description: |
+
+
+        **Nota de implementación (RAM Alliance):** Solo tarifas que permiten cambios; cada opción vive 15 minutos.
+  /vuelos/bookings/{bookingId}/date-change:
+    post:
+      tags:
+        - MS.Postventa
+      operationId: confirmDateChange
+      x-microservice: MS.Postventa
+      summary: Confirmar el cambio de fecha
+      description: |
+        Libera los asientos del vuelo original y ocupa los del nuevo (dos `StockChangeEvent` por gRPC).
+        Si hay diferencia a pagar, Booking cobra antes y envía `payment`. Emite `booking.changed`.
+
+        **Nota de implementación (RAM Alliance):** Si hay algo que pagar, envíe `payment.paymentReference` (de un solo uso). Responde el detalle de la reserva ya cambiada.
+
+        **Sin 202:** este nodo emite y confirma de forma síncrona, así que responde siempre el código de éxito inmediato (nunca 202).
+      security:
+        - PartnerOAuth2:
+            - flights:book
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DateChangeRequest'
+      responses:
+        '200':
+          description: Cambio confirmado
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingDetail'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '410':
+          $ref: '#/components/responses/Problem410'
+        '422':
+          $ref: '#/components/responses/Problem422'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/bookings/{bookingId}/cancellation-quote:
+    get:
+      tags:
+        - MS.Postventa
+      operationId: getCancellationQuote
+      x-microservice: MS.Postventa
+      summary: Cotizar penalidad y reembolso antes de cancelar
+      description: |
+        No cambia el estado de la reserva. El `quoteId` devuelto es obligatorio en `cancel` y vence en `expiresAt`.
+
+        **Nota de implementación (RAM Alliance):** La cotización vive 15 minutos. Tarifa reembolsable: total menos 10 % de penalidad; no reembolsable: solo impuestos; el equipaje extra se devuelve completo. No se cancela a menos de 3 h de la salida.
+      security:
+        - PartnerOAuth2:
+            - flights:read
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Cotización vigente
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancellationQuoteResponse'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/bookings/{bookingId}/cancel:
+    post:
+      tags:
+        - MS.Postventa
+      operationId: cancelBooking
+      x-microservice: MS.Postventa
+      summary: Cancelar una reserva (compensación Saga)
+      description: |
+        Anula los boletos, devuelve los asientos a `AVAILABLE` (StockChangeEvent con delta positivo) y calcula el reembolso
+        según la cotización (`quoteId`). **Booking ejecuta el reembolso** al cliente con su pasarela; la aerolínea solo informa
+        el monto (`refund.status = CALCULATED`). Emite `booking.cancelled`.
+        Usado por Booking como paso de compensación LIFO cuando falla otra parte de un combo; en ese caso envía
+        `reasonCode = SAGA_COMPENSATION` y la penalidad no aplica si así lo permite el acuerdo B2B.
+
+        **Nota de implementación (RAM Alliance):** `quoteId` es opcional en todos los motivos: sin él se cotiza y aplica en el acto. `FLIGHT_CANCELLED` reembolsa el total. `refund.percentage` es un entero.
+
+        **Sin 202:** este nodo emite y confirma de forma síncrona, así que responde siempre el código de éxito inmediato (nunca 202).
+      security:
+        - PartnerOAuth2:
+            - flights:cancel
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+      responses:
+        '200':
+          description: Reserva cancelada, inventario restaurado y reembolso calculado
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelBookingResponse'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '409':
+          $ref: '#/components/responses/Problem409'
+        '410':
+          $ref: '#/components/responses/Problem410'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/webhooks:
+    get:
+      tags:
+        - MS.Clientes — Webhooks
+      operationId: listWebhooks
+      x-microservice: MS.Clientes
+      summary: Listar suscripciones de webhooks del partner
+      security:
+        - PartnerOAuth2:
+            - flights:webhooks
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Suscripciones activas
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WebhookSubscription'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '429':
+          $ref: '#/components/responses/Problem429'
+    post:
+      tags:
+        - MS.Clientes — Webhooks
+      operationId: createWebhook
+      x-microservice: MS.Clientes
+      summary: Registrar un webhook para recibir eventos CloudEvents
+      description: |
+        La aerolínea hará `POST` a `url` con cada evento suscrito, en formato CloudEvents estructurado
+        (`application/cloudevents+json`), firmado con `X-Webhook-Signature: sha256=<HMAC-SHA256(secret, body)>`.
+        Reintentos con backoff exponencial (1 min, 5 min, 30 min, 2 h, 6 h) hasta recibir 2xx. Los eventos no entregados
+        siguen disponibles en `GET /vuelos/eventos`.
+
+        **Nota de implementación (RAM Alliance):** Máximo 10 suscripciones por usuario. La respuesta no incluye el `secret`. Cada entrega se describe en la sección *callbacks* de esta operación y en §4.
+      security:
+        - PartnerOAuth2:
+            - flights:webhooks
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKeyOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSubscription'
+      callbacks:
+        vuelosEvent:
+          '{$request.body#/url}':
+            post:
+              summary: Entrega de un evento de vuelos al suscriptor
+              parameters:
+                - name: X-Webhook-Signature
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+                  example: sha256=5d41402abc4b2a76b9719d911017c592
+                - name: X-Correlation-Id
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+              requestBody:
+                required: true
+                content:
+                  application/cloudevents+json:
+                    schema:
+                      $ref: '#/components/schemas/VuelosCloudEvent'
+              responses:
+                '200':
+                  description: Recibido
+                '204':
+                  description: Recibido
+        eventDelivery:
+          '{$request.body#/url}':
+            post:
+              summary: Entrega de un evento (CloudEvent estructurado) a la URL registrada
+              description: Se envía por cada evento suscrito. Responda 2xx; si no, se reintenta (1 min, 5 min, 30 min, 2 h, 6 h) y después queda `DEAD`.
+              parameters:
+                - name: X-Webhook-Id
+                  in: header
+                  required: true
+                  description: Id de la entrega.
+                  schema:
+                    type: string
+                    format: uuid
+                - name: X-Webhook-Event
+                  in: header
+                  required: true
+                  schema:
+                    $ref: '#/components/schemas/VuelosEventName'
+                - name: X-Webhook-Timestamp
+                  in: header
+                  required: true
+                  description: Epoch en segundos. No forma parte de la firma.
+                  schema:
+                    type: integer
+                - name: X-Webhook-Signature
+                  in: header
+                  required: true
+                  description: '`sha256=` + HMAC-SHA256(secret, cuerpo crudo) en hexadecimal.'
+                  schema:
+                    type: string
+                    pattern: ^sha256=[0-9a-f]{64}$
+                - name: X-Correlation-Id
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+              requestBody:
+                required: true
+                content:
+                  application/cloudevents+json:
+                    schema:
+                      $ref: '#/components/schemas/VuelosCloudEvent'
+              responses:
+                2XX:
+                  description: Entrega aceptada
+                default:
+                  description: Cualquier otra respuesta (o un tiempo de espera de 5 s) se reintenta
+      responses:
+        '201':
+          description: Webhook registrado
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/X-Correlation-Id'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSubscription'
+        '400':
+          $ref: '#/components/responses/Problem400'
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /vuelos/webhooks/{id}:
+    delete:
+      tags:
+        - MS.Clientes — Webhooks
+      operationId: deleteWebhook
+      x-microservice: MS.Clientes
+      summary: Eliminar una suscripción
+      security:
+        - PartnerOAuth2:
+            - flights:webhooks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '204':
+          description: Eliminada
+        '401':
+          $ref: '#/components/responses/Problem401'
+        '403':
+          $ref: '#/components/responses/Problem403'
+        '404':
+          $ref: '#/components/responses/Problem404'
+        '429':
+          $ref: '#/components/responses/Problem429'
+  /oauth2/token:
+    post:
+      tags:
+        - MS.Clientes — OAuth2
+      operationId: issueToken
+      x-microservice: MS.Clientes
+      summary: Token de servicio (OAuth2 client_credentials)
+      description: |
+        Booking prueba quién es con su `client_id` y `client_secret` y recibe un token Bearer limitado a los scopes que pida (o a todos los que tiene permitidos).
+        Acepta `application/x-www-form-urlencoded` (el estándar), JSON o la cabecera HTTP Basic (`client_id:client_secret` en base64). Solo existe el flujo `client_credentials`.
+        Los errores usan el cuerpo de RFC 6749 (`error`, `error_description`), no `problem+json`. La respuesta lleva `Cache-Control: no-store`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OAuthTokenRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthTokenRequest'
+      responses:
+        '200':
+          description: Token emitido
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthTokenResponse'
+        '400':
+          description: '`unsupported_grant_type` o `invalid_scope` (se pidió un scope que el cliente no tiene)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '401':
+          description: '`invalid_client` — cliente desconocido, inactivo o secreto incorrecto'
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+                example: Basic realm="vuelos"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '429':
+          $ref: '#/components/responses/Problem429'
+components:
+  securitySchemes:
+    PartnerOAuth2:
+      type: oauth2
+      description: |
+        Token de servicio que este nodo emite a Booking Prototipo en `POST /api/v2/oauth2/token` (`client_credentials`).
+        Booking reenvía la identidad del usuario final en `X-User-Id` (y opcionalmente `X-User-Roles`).
+      flows:
+        clientCredentials:
+          tokenUrl: /api/v2/oauth2/token
+          scopes:
+            flights:read: Leer ofertas, holds, reservas, boletos y eventos
+            flights:hold: Bloquear y liberar inventario
+            flights:book: Crear reservas, emitir, cambiar asientos, postventa y check-in
+            flights:cancel: Cancelar reservas
+            flights:webhooks: Gestionar suscripciones de webhooks
+            flights:ops: Operaciones de aeropuerto (panel de ocupación y estado de vuelo)
+            flights:admin: Administración del acuerdo B2B y todas las operaciones
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'Alternativa para desarrollo: un JWT de la plataforma (sus roles se traducen en scopes; ADMIN = todos).'
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: |
+        Identificador del proceso de negocio completo. Si no llega, el primer servicio lo genera. Se propaga sin cambios
+        y se devuelve en la respuesta.
+      schema:
+        type: string
+        maxLength: 100
+      example: corr-vuelos-7f3a9c
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Identificador de esta llamada HTTP concreta (un salto).
+      schema:
+        type: string
+      example: req-8d2e41
+    UserId:
+      name: X-User-Id
+      in: header
+      required: false
+      description: Usuario final autenticado por el gateway de Booking. Solo se confía en él con un token de partner válido.
+      schema:
+        type: string
+      example: usr-4f9a2c
+    UserRoles:
+      name: X-User-Roles
+      in: header
+      required: false
+      description: Roles del usuario separados por coma.
+      schema:
+        type: string
+      example: OPS,ADMIN
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        UUID v4 que identifica la operación. Un reintento con la misma clave y el mismo body devuelve la respuesta original
+        (`Idempotent-Replayed: true`); con un body distinto responde 409 `IDEMPOTENCY_KEY_REUSED`. Se conserva 24 h.
+      schema:
+        type: string
+        format: uuid
+      example: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+    IdempotencyKeyOptional:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Opcional — la operación ya es idempotente por construcción.
+      schema:
+        type: string
+        format: uuid
+      example: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+    DeviceFingerprint:
+      name: X-Device-Fingerprint
+      in: header
+      required: true
+      description: Huella del dispositivo para el límite de peticiones y la propiedad de reservas anónimas.
+      schema:
+        type: string
+      example: fp-3a7c9e21
+    DeviceFingerprintOptional:
+      name: X-Device-Fingerprint
+      in: header
+      required: false
+      description: Huella del dispositivo (respaldo de propiedad cuando no hay `X-User-Id`).
+      schema:
+        type: string
+      example: fp-3a7c9e21
+    OfferId:
+      name: offerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 35c9650e-f055-4b92-88ff-6b8d34739c47
+    HoldId:
+      name: holdId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 3f1c2a9e-8b7d-4c21-9f0a-6e5d4c3b2a10
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+    FlightNumber:
+      name: flightNumber
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[A-Z0-9]{2}[0-9]{1,4}$
+      example: AV1632
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Cursor opaco devuelto en `nextCursor`.
+      schema:
+        type: string
+  headers:
+    X-Correlation-Id:
+      description: Mismo valor recibido (o el generado si no llegó).
+      schema:
+        type: string
+      example: corr-vuelos-7f3a9c
+    Location:
+      description: URL del recurso creado.
+      schema:
+        type: string
+      example: /api/v2/vuelos/bookings/7c9e6679-7425-40de-944b-e07fc1f90ae7
+    Idempotent-Replayed:
+      description: '`true` cuando la respuesta proviene de un reintento con la misma Idempotency-Key.'
+      schema:
+        type: boolean
+      example: true
+    Retry-After:
+      description: Segundos a esperar antes de reintentar.
+      schema:
+        type: integer
+      example: 30
+  responses:
+    Problem400:
+      description: Petición inválida (formato, campos obligatorios, fechas)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://api.booking.local/errors/validation-failed
+            title: Petición inválida
+            status: 400
+            detail: El campo itineraries[0].origin debe ser un código IATA de 3 letras.
+            instance: /api/v2/vuelos/search
+            code: VALIDATION_FAILED
+            correlation_id: corr-vuelos-7f3a9c
+            timestamp: '2026-10-23T10:00:00Z'
+            invalidParams:
+              - name: itineraries[0].origin
+                reason: pattern ^[A-Z]{3}$
+    Problem401:
+      description: Token de partner ausente, vencido o inválido
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Problem403:
+      description: Scope o rol insuficiente (ej. falta `flights:ops`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Problem404:
+      description: Recurso no encontrado (oferta, hold, reserva, boleto o vuelo)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Problem409:
+      description: |
+        Conflicto de estado: `SEAT_TAKEN`, `HOLD_ALREADY_CONSUMED`, `IDEMPOTENCY_KEY_REUSED`, `ALREADY_CANCELLED`,
+        `BOOKING_NOT_CANCELLABLE`, `CHECK_IN_NOT_AVAILABLE`, `CUTOFF_PASSED`, `INVALID_STATUS_TRANSITION`, `FLIGHT_CANCELLED`, etc.
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://api.booking.local/errors/seat-taken
+            title: Asiento no disponible
+            status: 409
+            detail: El asiento 12A del segmento 2d3443d3-06a9-4418-887b-b4f738ed0ac7 ya fue tomado.
+            instance: /api/v2/vuelos/bookings/7c9e6679-7425-40de-944b-e07fc1f90ae7/seats
+            code: SEAT_TAKEN
+            correlation_id: corr-vuelos-7f3a9c
+            timestamp: '2026-10-23T10:05:00Z'
+    Problem410:
+      description: Recurso vencido (`HOLD_EXPIRED`, `QUOTE_EXPIRED`, `CHANGE_OFFER_EXPIRED`, `OFFER_NO_LONGER_AVAILABLE`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://api.booking.local/errors/hold-expired
+            title: Hold vencido
+            status: 410
+            detail: El bloqueo de asientos venció a las 10:15 UTC. Realice una nueva búsqueda.
+            instance: /api/v2/vuelos/bookings
+            code: HOLD_EXPIRED
+            correlation_id: corr-vuelos-7f3a9c
+            timestamp: '2026-10-23T10:16:02Z'
+    Problem422:
+      description: |
+        Regla de negocio incumplida: `INFANT_WITHOUT_ADULT`, `INFANT_SEAT_NOT_ALLOWED`, `DOCUMENT_EXPIRED`,
+        `PASSPORT_REQUIRED_INTERNATIONAL`, `PASSENGER_COUNT_MISMATCH`, `PAYMENT_REFERENCE_INVALID`, `AMOUNT_MISMATCH`,
+        `SEAT_CABIN_MISMATCH`, `BAGGAGE_LIMIT_EXCEEDED`, `PROMOTION_DISCOUNT_OUT_OF_RANGE`, etc.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://api.booking.local/errors/infant-without-adult
+            title: Infante sin adulto asociado
+            status: 422
+            detail: El pasajero PAX-3 (INFANT) debe indicar associatedAdultId de un ADULT de la misma reserva.
+            instance: /api/v2/vuelos/bookings
+            code: INFANT_WITHOUT_ADULT
+            correlation_id: corr-vuelos-7f3a9c
+            timestamp: '2026-10-23T10:06:00Z'
+    Problem429:
+      description: Demasiadas peticiones (`RATE_LIMIT_EXCEEDED`)
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Problem500:
+      description: Error interno (`INTERNAL_ERROR`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Problem503:
+      description: Sistema interno de la aerolínea no disponible o circuit breaker abierto (`PROVIDER_UNAVAILABLE`)
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/Retry-After'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+  schemas:
+    FlightOperationalStatus:
+      type: string
+      enum:
+        - SCHEDULED
+        - BOARDING
+        - DEPARTED
+        - DELAYED
+        - ARRIVED
+        - CANCELLED
+        - DIVERTED
+      example: SCHEDULED
+    CabinClass:
+      type: string
+      enum:
+        - ECONOMY
+        - PREMIUM_ECONOMY
+        - BUSINESS
+        - FIRST
+      example: ECONOMY
+    PassengerType:
+      type: string
+      enum:
+        - ADULT
+        - YOUTH
+        - CHILD
+        - INFANT
+      example: ADULT
+    DocumentType:
+      type: string
+      enum:
+        - PASSPORT
+        - NATIONAL_ID
+      example: NATIONAL_ID
+    Gender:
+      type: string
+      enum:
+        - M
+        - F
+        - X
+      example: F
+    SeatCharacteristic:
+      type: string
+      enum:
+        - WINDOW
+        - AISLE
+        - EXTRA_LEGROOM
+        - EMERGENCY_EXIT
+    SeatStatus:
+      type: string
+      description: |
+        Máquina de estados del asiento:
+        `AVAILABLE` (disponible) → `HELD` (bloqueado por un hold) → `BOOKED` (reservado) → `TICKETED` (boleto emitido)
+        → `CHECKED_IN` → `BOARDED` (abordado). Hold vencido/liberado o cancelación → `AVAILABLE`.
+      enum:
+        - AVAILABLE
+        - HELD
+        - BOOKED
+        - TICKETED
+        - CHECKED_IN
+        - BOARDED
+      example: AVAILABLE
+    HoldStatus:
+      type: string
+      enum:
+        - HELD
+        - RELEASED
+        - EXPIRED
+        - CONSUMED
+      example: HELD
+    BookingStatus:
+      type: string
+      enum:
+        - PENDING
+        - PENDING_PAYMENT
+        - TICKET_ISSUING
+        - CONFIRMED
+        - FAILED
+        - CHANGE_PENDING
+        - CANCELLATION_PENDING
+        - CANCELLED
+      example: CONFIRMED
+    TicketStatus:
+      type: string
+      enum:
+        - PENDING
+        - ISSUING
+        - ISSUED
+        - FAILED
+        - VOIDED
+        - REFUNDED
+      example: ISSUED
+    TicketSegmentStatus:
+      type: string
+      enum:
+        - PENDING
+        - ISSUED
+        - FAILED
+      example: ISSUED
+    CheckInStatus:
+      type: string
+      enum:
+        - NOT_ELIGIBLE
+        - AVAILABLE
+        - IN_PROGRESS
+        - COMPLETED
+        - FAILED
+      example: COMPLETED
+    PassengerCheckInStatus:
+      type: string
+      enum:
+        - CHECKED_IN
+        - NOT_CHECKED_IN
+        - FAILED
+      example: CHECKED_IN
+    MoneyAmount:
+      type: object
+      description: Importes como string decimal para evitar errores de punto flotante.
+      required:
+        - currency
+        - total
+      properties:
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          example: USD
+        baseFare:
+          type: string
+          example: '98.00'
+        taxes:
+          type: string
+          example: '21.50'
+        total:
+          type: string
+          example: '119.50'
+    Link:
+      type: object
+      required:
+        - href
+      properties:
+        href:
+          type: string
+          example: /api/v2/vuelos/bookings/7c9e6679-7425-40de-944b-e07fc1f90ae7
+        method:
+          type: string
+          enum:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+          example: GET
+    Links:
+      type: object
+      description: Enlaces HATEOAS a las acciones disponibles según el estado actual del recurso.
+      additionalProperties:
+        $ref: '#/components/schemas/Link'
+      example:
+        self:
+          href: /api/v2/vuelos/bookings/7c9e6679-7425-40de-944b-e07fc1f90ae7
+          method: GET
+        tickets:
+          href: /api/v2/vuelos/bookings/7c9e6679-7425-40de-944b-e07fc1f90ae7/tickets
+          method: GET
+        seats:
+          href: /api/v2/vuelos/bookings/7c9e6679-7425-40de-944b-e07fc1f90ae7/seats
+          method: PUT
+        check-in:
+          href: /api/v2/vuelos/bookings/7c9e6679-7425-40de-944b-e07fc1f90ae7/check-in
+          method: POST
+        cancellation-quote:
+          href: /api/v2/vuelos/bookings/7c9e6679-7425-40de-944b-e07fc1f90ae7/cancellation-quote
+          method: GET
+    PaymentReference:
+      type: object
+      description: |
+        Referencia a un pago **ya cobrado por Booking**. La aerolínea no procesa tarjetas, 3DS, autorización ni captura;
+        solo valida la referencia y, si llega, que `amount` coincida con el precio congelado (`AMOUNT_MISMATCH`).
+      additionalProperties: false
+      required:
+        - paymentReference
+      properties:
+        paymentReference:
+          type: string
+          description: Identificador del pago generado por la pasarela de Booking.
+          example: PAY-BKP-20261023-000981
+        amount:
+          $ref: '#/components/schemas/MoneyAmount'
+        provider:
+          type: string
+          description: Quién realizó el cobro.
+          enum:
+            - BOOKING_PROTOTIPO
+            - AIRLINE_DIRECT
+          default: BOOKING_PROTOTIPO
+    SalesChannel:
+      type: object
+      description: Canal de venta. Permite a la aerolínea saltar el cobro y relacionar la reserva con el carrito o combo de Booking.
+      properties:
+        partnerId:
+          type: string
+          example: BOOKING_PROTOTIPO
+        partnerOrderId:
+          type: string
+          description: Id de la orden o carrito en Booking.
+          example: ORD-BKP-55120
+        packageId:
+          type: string
+          nullable: true
+          description: Id del combo (vuelo + auto + hotel) cuando la reserva forma parte de uno.
+          example: PKG-UIO-GYE-0091
+        promotionApplied:
+          type: boolean
+          default: false
+        discountPercentage:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Debe ser ≤ `porcentaje_descuento_maximo` del acuerdo B2B.
+          example: 10
+    SearchRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - itineraries
+        - passengers
+      properties:
+        itineraries:
+          type: array
+          minItems: 1
+          maxItems: 6
+          description: 1 tramo = solo ida, 2 = ida y vuelta, 3 a 6 = multidestino.
+          items:
+            type: object
+            required:
+              - origin
+              - destination
+              - departureDate
+            properties:
+              origin:
+                type: string
+                pattern: ^[A-Z]{3}$
+                example: UIO
+              destination:
+                type: string
+                pattern: ^[A-Z]{3}$
+                example: GYE
+              departureDate:
+                type: string
+                format: date
+                example: '2026-11-20'
+        passengers:
+          $ref: '#/components/schemas/PassengerBreakdown'
+    PassengerBreakdown:
+      type: object
+      description: Máximo 9 pasajeros con asiento; infantes ≤ adultos (`INFANT_WITHOUT_ADULT`).
+      properties:
+        adults:
+          type: integer
+          minimum: 1
+          default: 1
+          example: 2
+        youths:
+          type: integer
+          minimum: 0
+          default: 0
+        children:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 1
+        infants:
+          type: integer
+          minimum: 0
+          default: 0
+    SearchResponse:
+      type: object
+      required:
+        - totalOffers
+        - offers
+      properties:
+        totalOffers:
+          type: integer
+          example: 1
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlightOffer'
+    FlightOffer:
+      type: object
+      required:
+        - offerId
+        - airline
+        - itineraries
+        - grandTotal
+      properties:
+        offerId:
+          type: string
+          example: 35c9650e-f055-4b92-88ff-6b8d34739c47
+          format: uuid
+        airline:
+          type: object
+          properties:
+            code:
+              type: string
+              example: AV
+            name:
+              type: string
+              example: Avianca Ecuador
+        itineraries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItineraryOption'
+        grandTotal:
+          $ref: '#/components/schemas/MoneyAmount'
+    ItineraryOption:
+      type: object
+      required:
+        - itineraryId
+        - totalDurationMinutes
+        - stopsCount
+        - segments
+        - pricingOptions
+      properties:
+        itineraryId:
+          type: string
+          example: 6abfd0a8-d419-485a-80ec-177d0c108884
+          format: uuid
+        totalDurationMinutes:
+          type: integer
+          example: 55
+        stopsCount:
+          type: integer
+          example: 0
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlightSegment'
+        pricingOptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CabinPricing'
+    FlightSegment:
+      type: object
+      required:
+        - segmentId
+        - flightNumber
+        - departure
+        - arrival
+        - marketingCarrier
+        - operatingCarrier
+      properties:
+        segmentId:
+          type: string
+          example: 2d3443d3-06a9-4418-887b-b4f738ed0ac7
+          format: uuid
+        flightNumber:
+          type: string
+          example: AV1632
+        departure:
+          $ref: '#/components/schemas/FlightEndpoint'
+        arrival:
+          $ref: '#/components/schemas/FlightEndpoint'
+        layoverMinutes:
+          type: integer
+          nullable: true
+        marketingCarrier:
+          type: string
+          description: Código IATA de la aerolínea comercial.
+          example: AV
+        operatingCarrier:
+          type: string
+          description: Código IATA de la aerolínea que opera el vuelo.
+          example: AV
+        aircraft:
+          type: string
+          nullable: true
+          example: Airbus A320
+        durationMinutes:
+          type: integer
+          minimum: 0
+          nullable: true
+          example: 55
+        status:
+          type: string
+          nullable: true
+          enum:
+            - SCHEDULED
+            - BOARDING
+            - DEPARTED
+            - DELAYED
+            - ARRIVED
+            - CANCELLED
+            - DIVERTED
+            - null
+    FlightEndpoint:
+      type: object
+      required:
+        - iataCode
+        - at
+      properties:
+        iataCode:
+          type: string
+          pattern: ^[A-Z]{3}$
+          example: UIO
+        at:
+          type: string
+          format: date-time
+          example: '2026-11-20T08:30:00-05:00'
+        terminal:
+          type: string
+          nullable: true
+          example: Nacional
+    CabinPricing:
+      type: object
+      required:
+        - cabinClass
+        - fareBrand
+        - availableSeats
+        - fareRules
+        - baggageAllowance
+        - pricePerPassengerType
+      properties:
+        cabinClass:
+          $ref: '#/components/schemas/CabinClass'
+        fareBrand:
+          type: string
+          example: BASIC
+        availableSeats:
+          type: integer
+          description: Asientos en estado AVAILABLE (mismo valor que se envía por gRPC).
+          example: 42
+        fareRules:
+          type: object
+          required:
+            - isRefundable
+            - isChangeable
+          properties:
+            isRefundable:
+              type: boolean
+              example: false
+            isChangeable:
+              type: boolean
+              example: true
+        baggageAllowance:
+          type: object
+          properties:
+            personalItemIncluded:
+              type: boolean
+              example: true
+            carryOnIncluded:
+              type: integer
+              example: 1
+            checkedBaggageIncluded:
+              type: integer
+              example: 0
+        extraCheckedBaggagePrice:
+          $ref: '#/components/schemas/MoneyAmount'
+        pricePerPassengerType:
+          type: array
+          items:
+            type: object
+            properties:
+              passengerType:
+                $ref: '#/components/schemas/PassengerType'
+              price:
+                $ref: '#/components/schemas/MoneyAmount'
+    SeatMapResponse:
+      type: object
+      description: Mapa de asientos sin precios. Los asientos seleccionables deben corresponder a la cabina adquirida.
+      properties:
+        segmentId:
+          type: string
+          example: 2d3443d3-06a9-4418-887b-b4f738ed0ac7
+          format: uuid
+        cabins:
+          type: array
+          items:
+            type: object
+            properties:
+              cabinClass:
+                $ref: '#/components/schemas/CabinClass'
+              rows:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    rowNumber:
+                      type: integer
+                      example: 12
+                    seats:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          seatNumber:
+                            type: string
+                            example: 12A
+                          isAvailable:
+                            type: boolean
+                            description: Atajo de v1 — equivale a `status == AVAILABLE`.
+                            example: true
+                          status:
+                            $ref: '#/components/schemas/SeatStatus'
+                          characteristics:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/SeatCharacteristic'
+    HoldRequest:
+      type: object
+      required:
+        - offerId
+        - itinerarySelections
+        - passengersBreakdown
+      properties:
+        offerId:
+          type: string
+          example: 35c9650e-f055-4b92-88ff-6b8d34739c47
+          format: uuid
+        itinerarySelections:
+          type: array
+          items:
+            type: object
+            required:
+              - itineraryId
+              - cabinClass
+              - fareBrand
+            properties:
+              itineraryId:
+                type: string
+                example: 6abfd0a8-d419-485a-80ec-177d0c108884
+                format: uuid
+              cabinClass:
+                $ref: '#/components/schemas/CabinClass'
+              fareBrand:
+                type: string
+                example: BASIC
+        passengersBreakdown:
+          $ref: '#/components/schemas/PassengerBreakdown'
+        ttlMinutes:
+          type: integer
+          minimum: 5
+          maximum: 30
+          default: 15
+          description: Minutos que el hold permanece vivo.
+    HoldResponse:
+      type: object
+      required:
+        - holdId
+        - status
+        - expiresAt
+        - ttlMinutes
+        - lockedPrice
+      properties:
+        holdId:
+          type: string
+          format: uuid
+          example: 3f1c2a9e-8b7d-4c21-9f0a-6e5d4c3b2a10
+        status:
+          type: string
+          enum:
+            - HELD
+          example: HELD
+        expiresAt:
+          type: string
+          format: date-time
+          example: '2026-10-23T10:15:00Z'
+        ttlMinutes:
+          type: integer
+          example: 15
+        lockedPrice:
+          $ref: '#/components/schemas/MoneyAmount'
+        _links:
+          $ref: '#/components/schemas/Links'
+    HoldStatusResponse:
+      type: object
+      required:
+        - status
+        - remainingSeconds
+        - lockedPrice
+      properties:
+        holdId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/HoldStatus'
+        expiresAt:
+          type: string
+          format: date-time
+        remainingSeconds:
+          type: integer
+          example: 540
+        lockedPrice:
+          $ref: '#/components/schemas/MoneyAmount'
+        _links:
+          $ref: '#/components/schemas/Links'
+    BookingRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - holdId
+        - passengers
+        - payment
+      properties:
+        holdId:
+          type: string
+          format: uuid
+          example: 3f1c2a9e-8b7d-4c21-9f0a-6e5d4c3b2a10
+        passengers:
+          type: array
+          minItems: 1
+          maxItems: 9
+          description: Debe coincidir con `passengersBreakdown` del hold (`PASSENGER_COUNT_MISMATCH`).
+          items:
+            $ref: '#/components/schemas/PassengerItem'
+        payment:
+          $ref: '#/components/schemas/PaymentReference'
+        salesChannel:
+          $ref: '#/components/schemas/SalesChannel'
+    PassengerItem:
+      type: object
+      required:
+        - passengerId
+        - passengerType
+        - firstName
+        - lastName
+        - documentType
+        - documentNumber
+        - nationality
+        - birthDate
+        - gender
+        - contact
+      properties:
+        passengerId:
+          type: string
+          example: PAX-1
+        passengerType:
+          $ref: '#/components/schemas/PassengerType'
+        associatedAdultId:
+          type: string
+          description: Obligatorio para INFANT (`INFANT_WITHOUT_ADULT`).
+          example: PAX-1
+        firstName:
+          type: string
+          example: María José
+        lastName:
+          type: string
+          example: Andrade Vera
+        documentType:
+          $ref: '#/components/schemas/DocumentType'
+        documentNumber:
+          type: string
+          example: '1723456789'
+        nationality:
+          type: string
+          example: EC
+        documentExpiryDate:
+          type: string
+          format: date
+          description: Debe estar vigente a la fecha del viaje (`DOCUMENT_EXPIRED`). Vuelos internacionales exigen PASSPORT (`PASSPORT_REQUIRED_INTERNATIONAL`).
+          example: '2030-05-31'
+        birthDate:
+          type: string
+          format: date
+          example: '1995-03-14'
+        gender:
+          $ref: '#/components/schemas/Gender'
+        contact:
+          type: object
+          required:
+            - email
+            - phone
+          properties:
+            email:
+              type: string
+              format: email
+              example: maria.andrade@example.com
+            phone:
+              type: string
+              example: '+593987654321'
+        assignedSeats:
+          type: array
+          items:
+            type: object
+            required:
+              - segmentId
+              - seatNumber
+            properties:
+              segmentId:
+                type: string
+                example: 2d3443d3-06a9-4418-887b-b4f738ed0ac7
+                format: uuid
+              seatNumber:
+                type: string
+                example: 12A
+        extraBaggage:
+          type: array
+          items:
+            type: object
+            required:
+              - itineraryId
+              - quantity
+            properties:
+              itineraryId:
+                type: string
+                example: 6abfd0a8-d419-485a-80ec-177d0c108884
+                format: uuid
+              quantity:
+                type: integer
+                example: 1
+    BookingListResponse:
+      type: object
+      properties:
+        nextCursor:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              bookingId:
+                type: string
+                format: uuid
+              pnr:
+                type: string
+                example: XK7P2Q
+              status:
+                $ref: '#/components/schemas/BookingStatus'
+              origin:
+                type: string
+                example: UIO
+              destination:
+                type: string
+                example: GYE
+              departureDate:
+                type: string
+                format: date
+              grandTotal:
+                $ref: '#/components/schemas/MoneyAmount'
+              _links:
+                $ref: '#/components/schemas/Links'
+    BookingDetail:
+      type: object
+      required:
+        - bookingId
+        - pnr
+        - status
+        - grandTotal
+        - createdAt
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+          example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        pnr:
+          type: string
+          example: XK7P2Q
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        grandTotal:
+          $ref: '#/components/schemas/MoneyAmount'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        holdId:
+          type: string
+          format: uuid
+        paymentReference:
+          type: string
+          example: PAY-BKP-20261023-000981
+        salesChannel:
+          $ref: '#/components/schemas/SalesChannel'
+        itineraries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItineraryOption'
+        passengers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PassengerItem'
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              changedAt:
+                type: string
+                format: date-time
+              description:
+                type: string
+        _links:
+          $ref: '#/components/schemas/Links'
+    TicketSegment:
+      type: object
+      required:
+        - segmentId
+        - status
+      properties:
+        segmentId:
+          type: string
+          example: 2d3443d3-06a9-4418-887b-b4f738ed0ac7
+          format: uuid
+        status:
+          $ref: '#/components/schemas/TicketSegmentStatus'
+        couponNumber:
+          type: string
+          nullable: true
+          example: '1'
+        flightNumber:
+          type: string
+          example: AV1632
+        departureIataCode:
+          type: string
+          example: UIO
+        arrivalIataCode:
+          type: string
+          example: GYE
+        departureAt:
+          type: string
+          format: date-time
+        arrivalAt:
+          type: string
+          format: date-time
+        seatNumber:
+          type: string
+          nullable: true
+          example: 12A
+    Ticket:
+      type: object
+      required:
+        - ticketId
+        - bookingId
+        - passengerId
+        - status
+      properties:
+        ticketId:
+          type: string
+          readOnly: true
+          example: 3d815358-7911-465a-8c5f-6afc0daf4a59
+          format: uuid
+        bookingId:
+          type: string
+          format: uuid
+          readOnly: true
+        passengerId:
+          type: string
+          example: PAX-1
+        passengerName:
+          type: string
+          example: María José Andrade Vera
+        eTicketNumber:
+          type: string
+          nullable: true
+          readOnly: true
+          example: '1342400012345'
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        issuedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketSegment'
+        failureReason:
+          type: string
+          nullable: true
+          readOnly: true
+    TicketListResponse:
+      type: object
+      required:
+        - bookingId
+        - tickets
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+    TicketIssuanceResponse:
+      type: object
+      required:
+        - bookingId
+        - pnr
+        - status
+        - tickets
+        - issued
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        pnr:
+          type: string
+          example: XK7P2Q
+        status:
+          type: string
+          enum:
+            - CONFIRMED
+            - TICKET_ISSUING
+          example: CONFIRMED
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+        issued:
+          type: integer
+          description: Boletos emitidos en esta llamada (0 si ya estaban todos emitidos).
+          example: 2
+        _links:
+          $ref: '#/components/schemas/Links'
+    SeatChangeRequest:
+      type: object
+      required:
+        - seats
+      properties:
+        seats:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+              - passengerId
+              - segmentId
+              - seatNumber
+            properties:
+              passengerId:
+                type: string
+                example: PAX-1
+              segmentId:
+                type: string
+                example: 2d3443d3-06a9-4418-887b-b4f738ed0ac7
+                format: uuid
+              seatNumber:
+                type: string
+                example: 14C
+        payment:
+          $ref: '#/components/schemas/PaymentReference'
+    SeatChangeResponse:
+      type: object
+      required:
+        - bookingId
+        - seats
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        seats:
+          type: array
+          items:
+            type: object
+            properties:
+              passengerId:
+                type: string
+                example: PAX-1
+              segmentId:
+                type: string
+                example: 2d3443d3-06a9-4418-887b-b4f738ed0ac7
+                format: uuid
+              previousSeatNumber:
+                type: string
+                nullable: true
+                example: 12A
+              seatNumber:
+                type: string
+                example: 14C
+              status:
+                $ref: '#/components/schemas/SeatStatus'
+        amountCharged:
+          $ref: '#/components/schemas/MoneyAmount'
+        _links:
+          $ref: '#/components/schemas/Links'
+    CheckInResponse:
+      type: object
+      required:
+        - bookingId
+        - status
+        - checkedInPassengers
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/CheckInStatus'
+        checkedInPassengers:
+          type: array
+          items:
+            type: object
+            required:
+              - passengerId
+              - status
+            properties:
+              passengerId:
+                type: string
+                example: PAX-1
+              status:
+                $ref: '#/components/schemas/PassengerCheckInStatus'
+              segments:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - segmentId
+                    - status
+                  properties:
+                    segmentId:
+                      type: string
+                      format: uuid
+                    seat:
+                      type: string
+                      nullable: true
+                      example: 14C
+                    status:
+                      $ref: '#/components/schemas/PassengerCheckInStatus'
+        _links:
+          $ref: '#/components/schemas/Links'
+    BoardingPass:
+      type: object
+      required:
+        - passengerId
+        - segmentId
+        - seat
+        - barcode
+        - barcodeType
+      properties:
+        passengerId:
+          type: string
+          example: PAX-1
+        segmentId:
+          type: string
+          example: 2d3443d3-06a9-4418-887b-b4f738ed0ac7
+          format: uuid
+        seat:
+          type: string
+          example: 14C
+        boardingGroup:
+          type: string
+          nullable: true
+          example: B
+        boardingPosition:
+          type: string
+          nullable: true
+          example: '23'
+        gate:
+          type: string
+          nullable: true
+          example: A4
+        barcode:
+          type: string
+          example: M1ANDRADE/MARIA       EXK7P2Q UIOGYEAV 1632 324Y014C0023 100
+        barcodeType:
+          type: string
+          enum:
+            - AZTEC
+            - PDF417
+            - QR
+          example: PDF417
+    BoardingPassListResponse:
+      type: object
+      required:
+        - bookingId
+        - boardingPasses
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        boardingPasses:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardingPass'
+    BaggageOptionsResponse:
+      type: array
+      items:
+        type: object
+        properties:
+          passengerId:
+            type: string
+            example: PAX-1
+          itineraryId:
+            type: string
+            example: 6abfd0a8-d419-485a-80ec-177d0c108884
+            format: uuid
+          price:
+            $ref: '#/components/schemas/MoneyAmount'
+          maxAllowed:
+            type: integer
+            example: 3
+          alreadyPurchased:
+            type: integer
+            example: 0
+    AddBaggageRequest:
+      type: object
+      required:
+        - passengerId
+        - itineraryId
+        - quantity
+        - payment
+      properties:
+        passengerId:
+          type: string
+          example: PAX-1
+        itineraryId:
+          type: string
+          example: 6abfd0a8-d419-485a-80ec-177d0c108884
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+          example: 1
+        payment:
+          $ref: '#/components/schemas/PaymentReference'
+    BaggageAddedResponse:
+      type: object
+      properties:
+        passengerId:
+          type: string
+        itineraryId:
+          type: string
+          format: uuid
+        totalBaggage:
+          type: integer
+          example: 1
+    DateChangeSearchRequest:
+      type: object
+      required:
+        - changes
+      properties:
+        changes:
+          type: array
+          items:
+            type: object
+            required:
+              - itineraryId
+              - newDepartureDate
+            properties:
+              itineraryId:
+                type: string
+                example: 6abfd0a8-d419-485a-80ec-177d0c108884
+                format: uuid
+              newDepartureDate:
+                type: string
+                format: date
+                example: '2026-11-22'
+    DateChangeSearchResponse:
+      type: array
+      items:
+        type: object
+        properties:
+          changeOfferId:
+            type: string
+            example: 7456fe25-3b2b-4d66-8833-3fb62a10ea0b
+            format: uuid
+          expiresAt:
+            type: string
+            format: date-time
+          segments:
+            type: array
+            items:
+              $ref: '#/components/schemas/FlightSegment'
+          priceDifference:
+            type: object
+            properties:
+              fareDifference:
+                type: string
+                example: '15.00'
+              taxDifference:
+                type: string
+                example: '1.80'
+              changeFee:
+                type: string
+                example: '25.00'
+              totalToPay:
+                type: string
+                example: '41.80'
+    DateChangeRequest:
+      type: object
+      required:
+        - changeOfferId
+      properties:
+        changeOfferId:
+          type: string
+          example: 7456fe25-3b2b-4d66-8833-3fb62a10ea0b
+          format: uuid
+        payment:
+          $ref: '#/components/schemas/PaymentReference'
+        assignedSeats:
+          type: array
+          items:
+            type: object
+            properties:
+              segmentId:
+                type: string
+                format: uuid
+              seatNumber:
+                type: string
+    CancellationQuoteResponse:
+      type: object
+      required:
+        - quoteId
+        - isRefundable
+        - refundAmount
+        - penaltyAmount
+        - currency
+        - expiresAt
+      properties:
+        quoteId:
+          type: string
+          example: ce495cf8-d60c-465a-8089-0fc54a50faf1
+          format: uuid
+        isRefundable:
+          type: boolean
+          example: true
+        refundAmount:
+          type: string
+          example: '94.50'
+        penaltyAmount:
+          type: string
+          example: '25.00'
+        currency:
+          type: string
+          example: USD
+        expiresAt:
+          type: string
+          format: date-time
+    CancelBookingRequest:
+      type: object
+      properties:
+        quoteId:
+          type: string
+          description: Obligatorio salvo `reasonCode` = `SAGA_COMPENSATION` o `FLIGHT_CANCELLED`.
+          example: ce495cf8-d60c-465a-8089-0fc54a50faf1
+          format: uuid
+        reasonCode:
+          type: string
+          enum:
+            - CUSTOMER_REQUEST
+            - SAGA_COMPENSATION
+            - FLIGHT_CANCELLED
+            - OTHER
+          default: CUSTOMER_REQUEST
+        reason:
+          type: string
+          example: Cancelación solicitada por el cliente
+    CancelBookingResponse:
+      type: object
+      required:
+        - bookingId
+        - pnr
+        - status
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        pnr:
+          type: string
+          example: XK7P2Q
+        status:
+          type: string
+          enum:
+            - CANCELLED
+            - CANCELLATION_PENDING
+          example: CANCELLED
+        cancelledAt:
+          type: string
+          format: date-time
+        reasonCode:
+          type: string
+          example: CUSTOMER_REQUEST
+        refund:
+          type: object
+          description: La aerolínea calcula; Booking ejecuta el reembolso al cliente.
+          properties:
+            refundId:
+              type: string
+              example: 313b13d1-b19e-40f3-8ebd-adeb018933a9
+              format: uuid
+            amount:
+              type: string
+              example: '94.50'
+            penaltyAmount:
+              type: string
+              example: '25.00'
+            currency:
+              type: string
+              example: USD
+            percentage:
+              type: number
+              example: 79.1
+            originalPaymentReference:
+              type: string
+              example: PAY-BKP-20261023-000981
+            status:
+              type: string
+              enum:
+                - CALCULATED
+                - SETTLED
+                - NOT_REFUNDABLE
+              example: CALCULATED
+        ticketsVoided:
+          type: array
+          items:
+            type: string
+          example:
+            - 3d815358-7911-465a-8c5f-6afc0daf4a59
+        inventoryRestoration:
+          type: object
+          properties:
+            status:
+              type: string
+              enum:
+                - RESTORED
+                - PENDING
+              example: RESTORED
+            seatsReleased:
+              type: integer
+              example: 2
+            newSeatStatus:
+              type: string
+              example: AVAILABLE
+        message:
+          type: string
+          example: Reserva cancelada. Asientos liberados y reembolso calculado.
+        _links:
+          $ref: '#/components/schemas/Links'
+    FlightStatus:
+      type: object
+      required:
+        - flightNumber
+        - date
+        - marketingCarrier
+        - operatingCarrier
+        - departure
+        - arrival
+        - status
+      properties:
+        flightNumber:
+          type: string
+          example: AV1632
+        date:
+          type: string
+          format: date
+          example: '2026-11-20'
+        marketingCarrier:
+          type: string
+          example: AV
+        operatingCarrier:
+          type: string
+          example: AV
+        departure:
+          $ref: '#/components/schemas/FlightStatusEndpoint'
+        arrival:
+          $ref: '#/components/schemas/FlightStatusEndpoint'
+        aircraft:
+          type: string
+          nullable: true
+          example: Airbus A320
+        status:
+          $ref: '#/components/schemas/FlightOperationalStatus'
+        delayMinutes:
+          type: integer
+          nullable: true
+          example: 0
+        updatedAt:
+          type: string
+          format: date-time
+    FlightStatusEndpoint:
+      type: object
+      required:
+        - iataCode
+        - scheduledAt
+      properties:
+        iataCode:
+          type: string
+          pattern: ^[A-Z]{3}$
+          example: UIO
+        terminal:
+          type: string
+          nullable: true
+        gate:
+          type: string
+          nullable: true
+          example: A4
+        scheduledAt:
+          type: string
+          format: date-time
+        estimatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        actualAt:
+          type: string
+          format: date-time
+          nullable: true
+    FlightStatusUpdateRequest:
+      type: object
+      required:
+        - date
+        - status
+      properties:
+        date:
+          type: string
+          format: date
+          example: '2026-11-20'
+        status:
+          $ref: '#/components/schemas/FlightOperationalStatus'
+        estimatedDepartureAt:
+          type: string
+          format: date-time
+          example: '2026-11-20T09:15:00-05:00'
+        estimatedArrivalAt:
+          type: string
+          format: date-time
+        departureGate:
+          type: string
+          example: A6
+        reason:
+          type: string
+          example: Condiciones meteorológicas en GYE
+    FlightStatusUpdateResponse:
+      type: object
+      properties:
+        previousStatus:
+          $ref: '#/components/schemas/FlightOperationalStatus'
+        flight:
+          $ref: '#/components/schemas/FlightStatus'
+        affectedBookings:
+          type: integer
+          example: 87
+        eventId:
+          type: string
+          example: evt-vue-000131
+    FlightInventoryItem:
+      type: object
+      properties:
+        flightNumber:
+          type: string
+          example: AV1632
+        date:
+          type: string
+          format: date
+        origin:
+          type: string
+          example: UIO
+        destination:
+          type: string
+          example: GYE
+        departureAt:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/FlightOperationalStatus'
+        aircraft:
+          type: string
+          example: Airbus A320
+          nullable: true
+          description: Modelo de aeronave. Este nodo no lo conoce y devuelve null.
+        totalSeats:
+          type: integer
+          example: 180
+        loadFactor:
+          type: number
+          description: Porcentaje de ocupación (asientos no AVAILABLE / total).
+          example: 76.7
+        cabins:
+          type: array
+          items:
+            type: object
+            properties:
+              cabinClass:
+                $ref: '#/components/schemas/CabinClass'
+              totalSeats:
+                type: integer
+                example: 168
+              seatsByStatus:
+                type: object
+                properties:
+                  AVAILABLE:
+                    type: integer
+                    example: 40
+                  HELD:
+                    type: integer
+                    example: 6
+                  BOOKED:
+                    type: integer
+                    example: 30
+                  TICKETED:
+                    type: integer
+                    example: 70
+                  CHECKED_IN:
+                    type: integer
+                    example: 22
+                  BOARDED:
+                    type: integer
+                    example: 0
+        activeHolds:
+          type: integer
+          example: 3
+        nextHoldExpiryAt:
+          type: string
+          format: date-time
+          nullable: true
+        checkInOpen:
+          type: boolean
+          example: true
+        alerts:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+                enum:
+                  - OVERBOOKING_RISK
+                  - LOW_AVAILABILITY
+                  - DELAYED
+                  - CHECKIN_OPEN
+                  - CANCELLED
+              severity:
+                type: string
+                enum:
+                  - INFO
+                  - WARNING
+                  - CRITICAL
+              message:
+                type: string
+                example: Quedan menos de 10 asientos en ECONOMY.
+    FlightOperationsResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        totalFlights:
+          type: integer
+          example: 12
+        nextCursor:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlightInventoryItem'
+    VuelosHealthResponse:
+      type: object
+      required:
+        - status
+        - nodo_id
+        - vertical
+        - version
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum:
+            - HEALTHY
+            - DEGRADED
+            - DOWN
+          example: HEALTHY
+        nodo_id:
+          type: string
+          example: NODE_VUE_ECOAIRLINES
+        nombre_proveedor:
+          type: string
+          example: EcoAirlines
+        vertical:
+          type: string
+          enum:
+            - VUELOS
+          example: VUELOS
+        version:
+          type: string
+          example: 2.0.0
+        uptime_seconds:
+          type: integer
+          example: 8420
+        latencia_ms:
+          type: integer
+          example: 32
+        circuit_breaker_estado:
+          type: string
+          enum:
+            - CLOSED
+            - OPEN
+            - HALF_OPEN
+          example: CLOSED
+        holds_activos_count:
+          type: integer
+          example: 4
+        vuelos_programados_hoy:
+          type: integer
+          example: 12
+        dependencias:
+          type: array
+          description: Estado de los componentes internos (BD, bus, ESB, servicios SOAP/gRPC internos).
+          items:
+            type: object
+            properties:
+              nombre:
+                type: string
+                example: postgres
+              status:
+                type: string
+                enum:
+                  - UP
+                  - DOWN
+                  - DEGRADED
+                example: UP
+              latencia_ms:
+                type: integer
+                example: 8
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-10-23T10:00:00Z'
+    ContratoPromocionesRequest:
+      type: object
+      required:
+        - permite_promociones
+        - porcentaje_descuento_maximo
+      properties:
+        permite_promociones:
+          type: boolean
+          description: ¿Acepta participar en promociones y combos con Booking Prototipo?
+          example: true
+        porcentaje_descuento_maximo:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Porcentaje máximo de descuento autorizado sobre la tarifa (`PROMOTION_DISCOUNT_OUT_OF_RANGE` fuera de 0–100).
+          example: 12
+        destinos_habilitados:
+          type: array
+          items:
+            type: string
+          example:
+            - Quito
+            - Guayaquil
+            - Cuenca
+            - Galápagos
+        rutas_habilitadas:
+          type: array
+          description: Pares origen-destino IATA donde aplica (vacío = todas).
+          items:
+            type: string
+            pattern: ^[A-Z]{3}-[A-Z]{3}$
+          example:
+            - UIO-GYE
+            - GYE-UIO
+            - UIO-CUE
+        cabinas_habilitadas:
+          type: array
+          items:
+            $ref: '#/components/schemas/CabinClass'
+          example:
+            - ECONOMY
+        vigencia_hasta:
+          type: string
+          format: date
+          example: '2026-12-31'
+        condiciones_combo:
+          type: string
+          example: Descuento de hasta 12% en combos vuelo + hotel o vuelo + auto; no aplica en feriados.
+    ContratoPromocionesResponse:
+      allOf:
+        - type: object
+          properties:
+            proveedor_codigo:
+              type: string
+              example: NODE_VUE_ECOAIRLINES
+            nombre_socio:
+              type: string
+              example: EcoAirlines
+            vertical:
+              type: string
+              example: VUELOS
+            actualizado_en:
+              type: string
+              format: date-time
+        - $ref: '#/components/schemas/ContratoPromocionesRequest'
+    VuelosEventosResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/VuelosCloudEvent'
+        metadata:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 1
+            next_after:
+              type: string
+              nullable: true
+              example: evt-vue-000121
+            timestamp:
+              type: string
+              format: date-time
+    VuelosEventName:
+      type: string
+      description: |
+        Nombre corto del evento. El `type` CloudEvents es `ec.edu.epn.booking.vuelos.<nombre>`.
+        `flight.schedule_changed`, `flight.cancelled` y `booking.ticket_issuing` se mantienen por compatibilidad con v1
+        (los nuevos suscriptores deben usar `flight.status_changed`).
+      enum:
+        - hold.created
+        - hold.expired
+        - booking.confirmed
+        - booking.failed
+        - booking.changed
+        - booking.cancelled
+        - booking.baggage_added
+        - booking.seat_changed
+        - booking.ticket_issuing
+        - booking.ticket_issued
+        - booking.ticket_failed
+        - booking.checked_in
+        - flight.status_changed
+        - flight.schedule_changed
+        - flight.cancelled
+      example: booking.confirmed
+    WebhookSubscription:
+      type: object
+      required:
+        - url
+        - events
+        - secret
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          example: https://rda1-backend-integracion-sistemas.onrender.com/api/v2/webhooks/vuelos
+        events:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/VuelosEventName'
+        secret:
+          type: string
+          writeOnly: true
+          minLength: 16
+          description: Clave para firmar cada entrega con HMAC-SHA256.
+        active:
+          type: boolean
+          readOnly: true
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+    CloudEventBase:
+      type: object
+      required:
+        - specversion
+        - type
+        - source
+        - id
+        - time
+        - correlationid
+        - data
+      properties:
+        specversion:
+          type: string
+          enum:
+            - '1.0'
+          example: '1.0'
+        type:
+          type: string
+          example: ec.edu.epn.booking.vuelos.booking.confirmed
+        source:
+          type: string
+          example: /aerolineas/ecoairlines/vuelos
+        id:
+          type: string
+          description: Único por evento; los consumidores lo usan para deduplicar.
+          example: evt-vue-000120
+        time:
+          type: string
+          format: date-time
+          example: '2026-10-23T10:05:12Z'
+        subject:
+          type: string
+          description: Recurso afectado (bookingId, holdId o flightNumber/fecha).
+          example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        datacontenttype:
+          type: string
+          example: application/json
+        correlationid:
+          type: string
+          description: Extensión CloudEvents con el X-Correlation-Id del proceso que originó el evento.
+          example: corr-vuelos-7f3a9c
+        data:
+          type: object
+    BookingEventData:
+      type: object
+      required:
+        - bookingId
+        - pnr
+        - status
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        pnr:
+          type: string
+          example: XK7P2Q
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        ownerId:
+          type: string
+          example: usr-4f9a2c
+        partnerOrderId:
+          type: string
+          nullable: true
+          example: ORD-BKP-55120
+        packageId:
+          type: string
+          nullable: true
+        grandTotal:
+          $ref: '#/components/schemas/MoneyAmount'
+    EventHoldCreated:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.hold.created
+            data:
+              type: object
+              properties:
+                holdId:
+                  type: string
+                  format: uuid
+                offerId:
+                  type: string
+                  format: uuid
+                seatsHeld:
+                  type: integer
+                  example: 2
+                expiresAt:
+                  type: string
+                  format: date-time
+    EventHoldExpired:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.hold.expired
+            data:
+              type: object
+              properties:
+                holdId:
+                  type: string
+                  format: uuid
+                seatsReleased:
+                  type: integer
+                  example: 2
+                expiredAt:
+                  type: string
+                  format: date-time
+    EventBookingConfirmed:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.booking.confirmed
+            data:
+              $ref: '#/components/schemas/BookingEventData'
+    EventBookingFailed:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.booking.failed
+            data:
+              type: object
+              required:
+                - holdId
+                - status
+              properties:
+                holdId:
+                  type: string
+                  format: uuid
+                ownerId:
+                  type: string
+                status:
+                  type: string
+                  example: FAILED
+                errorCode:
+                  type: string
+                  example: SEAT_TAKEN
+      description: No se pudo crear la reserva aunque el hold era válido. Todavía no existe la reserva, así que el evento nombra el **hold** (no hay `bookingId` ni `pnr`).
+    EventTicketIssued:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.booking.ticket_issued
+            data:
+              allOf:
+                - $ref: '#/components/schemas/BookingEventData'
+                - type: object
+                  properties:
+                    paymentReference:
+                      type: string
+                      example: PAY-BKP-20261023-000981
+                    tickets:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          ticketId:
+                            type: string
+                            format: uuid
+                          eTicketNumber:
+                            type: string
+                          passengerId:
+                            type: string
+    EventBookingChanged:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.booking.changed
+                - ec.edu.epn.booking.vuelos.booking.baggage_added
+                - ec.edu.epn.booking.vuelos.booking.seat_changed
+            data:
+              allOf:
+                - $ref: '#/components/schemas/BookingEventData'
+                - type: object
+                  properties:
+                    changeType:
+                      type: string
+                      enum:
+                        - DATE_CHANGE
+                        - BAGGAGE
+                        - SEAT
+                    amountCharged:
+                      $ref: '#/components/schemas/MoneyAmount'
+                    paymentReference:
+                      type: string
+                      nullable: true
+    EventBookingCancelled:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.booking.cancelled
+            data:
+              allOf:
+                - $ref: '#/components/schemas/BookingEventData'
+                - type: object
+                  properties:
+                    reasonCode:
+                      type: string
+                      example: SAGA_COMPENSATION
+                    refundId:
+                      type: string
+                      example: 313b13d1-b19e-40f3-8ebd-adeb018933a9
+                      format: uuid
+                    refundAmount:
+                      type: string
+                      example: '94.50'
+                    seatsReleased:
+                      type: integer
+                      example: 2
+    EventCheckedIn:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.booking.checked_in
+            data:
+              allOf:
+                - $ref: '#/components/schemas/BookingEventData'
+                - type: object
+                  properties:
+                    passengersCheckedIn:
+                      type: integer
+                      example: 2
+    EventFlightStatusChanged:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.flight.status_changed
+            data:
+              type: object
+              properties:
+                flightNumber:
+                  type: string
+                  example: AV1632
+                date:
+                  type: string
+                  format: date
+                previousStatus:
+                  $ref: '#/components/schemas/FlightOperationalStatus'
+                newStatus:
+                  $ref: '#/components/schemas/FlightOperationalStatus'
+                estimatedDepartureAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                estimatedArrivalAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                delayMinutes:
+                  type: integer
+                  nullable: true
+                  example: 45
+                destination:
+                  type: string
+                  example: GYE
+                affectedBookingIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+    VuelosCloudEvent:
+      description: Cualquier evento publicado por este nodo (los 15 tipos de `VuelosEventName`).
+      oneOf:
+        - $ref: '#/components/schemas/EventHoldCreated'
+        - $ref: '#/components/schemas/EventHoldExpired'
+        - $ref: '#/components/schemas/EventBookingConfirmed'
+        - $ref: '#/components/schemas/EventBookingFailed'
+        - $ref: '#/components/schemas/EventTicketIssuing'
+        - $ref: '#/components/schemas/EventTicketIssued'
+        - $ref: '#/components/schemas/EventTicketFailed'
+        - $ref: '#/components/schemas/EventBookingChanged'
+        - $ref: '#/components/schemas/EventBookingCancelled'
+        - $ref: '#/components/schemas/EventCheckedIn'
+        - $ref: '#/components/schemas/EventFlightStatusChanged'
+        - $ref: '#/components/schemas/EventFlightScheduleChanged'
+        - $ref: '#/components/schemas/EventFlightCancelled'
+      example:
+        specversion: '1.0'
+        type: ec.edu.epn.booking.vuelos.booking.confirmed
+        source: /aerolineas/ecoairlines/vuelos
+        id: evt-vue-000120
+        time: '2026-10-23T10:05:12Z'
+        subject: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        datacontenttype: application/json
+        correlationid: corr-vuelos-7f3a9c
+        data:
+          bookingId: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+          pnr: XK7P2Q
+          status: CONFIRMED
+          ownerId: usr-4f9a2c
+          partnerOrderId: ORD-BKP-55120
+          packageId: null
+          grandTotal:
+            currency: USD
+            total: '239.00'
+    EventPaymentConfirmed:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          description: Booking → aerolínea. Acción esperada — emitir boletos de `bookingId`.
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.pagos.payment.confirmed
+                - ec.edu.epn.booking.pagos.payment.failed
+            data:
+              type: object
+              properties:
+                paymentReference:
+                  type: string
+                  example: PAY-BKP-20261023-000981
+                bookingId:
+                  type: string
+                  format: uuid
+                amount:
+                  $ref: '#/components/schemas/MoneyAmount'
+                failureReason:
+                  type: string
+                  nullable: true
+    EventPackageCancelled:
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          description: Booking → aerolínea. Acción esperada — cancelar la parte de vuelo del combo (reasonCode SAGA_COMPENSATION).
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.paquetes.package.cancelled
+            data:
+              type: object
+              properties:
+                packageId:
+                  type: string
+                  example: PKG-UIO-GYE-0091
+                bookingId:
+                  type: string
+                  format: uuid
+                reason:
+                  type: string
+                  example: Falló la reserva del hotel
+    ProblemDetails:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - title
+        - status
+        - code
+      properties:
+        type:
+          type: string
+          example: https://api.booking.local/errors/hold-expired
+        title:
+          type: string
+          example: Hold vencido
+        status:
+          type: integer
+          example: 410
+        detail:
+          type: string
+          example: El bloqueo de asientos venció a las 10:15 UTC.
+        instance:
+          type: string
+          example: /api/v2/vuelos/bookings
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - RATE_LIMIT_EXCEEDED
+            - IDEMPOTENCY_KEY_REUSED
+            - INTERNAL_ERROR
+            - PROVIDER_UNAVAILABLE
+            - OFFER_NO_LONGER_AVAILABLE
+            - HOLD_EXPIRED
+            - HOLD_ALREADY_CONSUMED
+            - SEAT_TAKEN
+            - SEAT_CABIN_MISMATCH
+            - INFANT_SEAT_NOT_ALLOWED
+            - INFANT_WITHOUT_ADULT
+            - PASSENGER_COUNT_MISMATCH
+            - DOCUMENT_EXPIRED
+            - PASSPORT_REQUIRED_INTERNATIONAL
+            - PAYMENT_REFERENCE_INVALID
+            - PAYMENT_NOT_AUTHORIZED
+            - AMOUNT_MISMATCH
+            - PNR_CREATION_FAILED
+            - BOOKING_NOT_CONFIRMED
+            - TICKET_ISSUANCE_FAILED
+            - TICKET_ALREADY_ISSUED
+            - BAGGAGE_LIMIT_EXCEEDED
+            - FARE_NOT_CHANGEABLE
+            - CHANGE_OFFER_EXPIRED
+            - QUOTE_EXPIRED
+            - ALREADY_CANCELLED
+            - BOOKING_NOT_CANCELLABLE
+            - CUTOFF_PASSED
+            - CHECK_IN_NOT_AVAILABLE
+            - CHECK_IN_FAILED
+            - BOARDING_PASS_NOT_AVAILABLE
+            - FLIGHT_ALREADY_DEPARTED
+            - FLIGHT_CANCELLED
+            - FLIGHT_STATUS_NOT_AVAILABLE
+            - INVALID_STATUS_TRANSITION
+            - PROMOTION_DISCOUNT_OUT_OF_RANGE
+          example: HOLD_EXPIRED
+        correlation_id:
+          type: string
+          example: corr-vuelos-7f3a9c
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-10-23T10:16:02Z'
+        invalidParams:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              reason:
+                type: string
+    OAuthTokenRequest:
+      type: object
+      required:
+        - grant_type
+      properties:
+        grant_type:
+          type: string
+          enum:
+            - client_credentials
+        client_id:
+          type: string
+          example: booking-prototipo
+          description: Obligatorio si no se envía la cabecera Basic.
+        client_secret:
+          type: string
+          description: Obligatorio si no se envía la cabecera Basic.
+        scope:
+          type: string
+          example: flights:read flights:book
+          description: Scopes pedidos, separados por espacio. Sin él, todos los permitidos al cliente.
+    OAuthTokenResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - expires_in
+        - scope
+      properties:
+        access_token:
+          type: string
+          description: JWT HS256 firmado por el nodo.
+        token_type:
+          type: string
+          enum:
+            - Bearer
+        expires_in:
+          type: integer
+          example: 3600
+        scope:
+          type: string
+          example: flights:read flights:hold flights:book flights:cancel flights:webhooks flights:ops flights:admin
+    OAuthError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_client
+            - invalid_scope
+            - unsupported_grant_type
+            - invalid_request
+        error_description:
+          type: string
+    EventTicketFailed:
+      description: Falló la emisión de boletos. Como en `booking.failed`, nombra el hold.
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.booking.ticket_failed
+            data:
+              type: object
+              required:
+                - holdId
+                - status
+              properties:
+                holdId:
+                  type: string
+                  format: uuid
+                ownerId:
+                  type: string
+                status:
+                  type: string
+                  example: FAILED
+                errorCode:
+                  type: string
+                  example: TICKET_ISSUANCE_FAILED
+    EventTicketIssuing:
+      description: La emisión de boletos empezó (se anuncia junto con `booking.ticket_issued` porque la emisión es inmediata).
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.booking.ticket_issuing
+            data:
+              allOf:
+                - $ref: '#/components/schemas/BookingEventData'
+                - type: object
+                  properties:
+                    paymentReference:
+                      type: string
+                    tickets:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          ticketId:
+                            type: string
+                            format: uuid
+                          eTicketNumber:
+                            type: string
+                          passengerId:
+                            type: string
+    EventFlightScheduleChanged:
+      description: La aerolínea reprogramó la salida de un vuelo (acción administrativa).
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.flight.schedule_changed
+            data:
+              type: object
+              required:
+                - flightNumber
+              properties:
+                flightNumber:
+                  type: string
+                codigoVuelo:
+                  type: string
+                  description: Mismo valor que `flightNumber`.
+                status:
+                  type: string
+                  example: RESCHEDULED
+                newDepartureAt:
+                  type: string
+                  format: date-time
+    EventFlightCancelled:
+      description: La aerolínea canceló un vuelo; las reservas afectadas se cancelan con reembolso total y cada una emite `booking.cancelled`.
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum:
+                - ec.edu.epn.booking.vuelos.flight.cancelled
+            data:
+              type: object
+              required:
+                - flightNumber
+              properties:
+                flightNumber:
+                  type: string
+                codigoVuelo:
+                  type: string
+                status:
+                  type: string
+                  example: CANCELLED
+x-asyncapi-inbound:
+  description: |
+    Eventos que **publica Booking** y consume este nodo. Solo funcionan si el nodo tiene `RABBITMQ_URL`; sin broker, use las operaciones REST equivalentes (`POST /bookings/{id}/tickets`, `POST /bookings/{id}/cancel`).
+    Detalle y esquemas: `contracts/vuelos-eventos-asyncapi.yaml` y `contracts/eventos/pagos.*`, `paquetes.*`.
+  exchange: booking.events (direct, durable)
+  queue: q.vuelos.entrantes (durable; dead-letter booking.dlx; 3 reintentos y luego q.dead_letter)
+  format: CloudEvents v1.0 estructurado (JSON); `type` = `ec.edu.epn.booking.<routing key>`
+  events:
+    - routingKey: pagos.payment.confirmed
+      data: '{ paymentReference, bookingId, amount }'
+      effect: Emite los boletos de la reserva (no hace nada si ya están emitidos).
+    - routingKey: pagos.payment.failed
+      data: '{ paymentReference, bookingId, amount?, failureReason? }'
+      effect: Una reserva que espera pago pasa a FAILED; una confirmada se cancela como compensación (SAGA_COMPENSATION).
+    - routingKey: paquetes.package.cancelled
+      data: '{ packageId, bookingId, reason? }'
+      effect: Cancela la parte de vuelo del combo (SAGA_COMPENSATION) si está confirmada.
+  idempotency: Cada evento se identifica por su `id`; recibirlo dos veces no repite el efecto.
+x-grpc-stock:
+  description: |
+    Este nodo es el **cliente**: empuja a Booking los asientos libres. Contrato `inventory.proto` (paquete `inventory`, servicio `InventoryStockService`), copia en `src/proto/inventory.proto`.
+  activation: Variable `GRPC_STOCK_URL` (host:puerto del servidor de Booking; vacío = desactivado). `GRPC_STOCK_TLS=true` usa TLS.
+  metadata:
+    x-correlation-id: id de correlación de la operación que movió el stock
+    x-api-key: clave de stock que entrega Booking (`BOOKING_STOCK_API_KEY`)
+  rpcs:
+    PushStockUpdate: Stock absoluto de cada vuelo (al arrancar y cada 10 min como resincronización).
+    StreamInventoryChanges: Un `StockChangeEvent` con `delta` por cada vuelo cuyo stock cambió (hold, liberación, venta, cancelación, cambio).
+  fields: service_id = NODE_ID (NODE_VUE_RAM_ALLIANCE); item_id = <número de vuelo>-ECONOMY; date = YYYY-MM-DD; time_slot = HH:mm en UTC
+  timing: Debounce de 500 ms tras el evento, red de seguridad cada 30 s, plazo de 5 s por llamada, horizonte de 45 días.

@@ -152,7 +152,7 @@ export class SearchService {
         'SERVICE_UNAVAILABLE',
         'Pricing unavailable',
         'No fare families are configured, so no price can be quoted. Run the seed (npm run seed:vuelos).',
-      );
+      ).forV2('PROVIDER_UNAVAILABLE');
     }
     return families;
   }

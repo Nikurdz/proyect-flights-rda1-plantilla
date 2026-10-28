@@ -38,3 +38,6 @@ Las 22 operaciones de v1 existen en v2 con el mismo verbo y ruta relativa. 14 es
 
 ## Configuración nueva
 `PARTNER_CLIENT_ID` / `PARTNER_CLIENT_SECRET` (≥ 24 caracteres; el seed crea el cliente), `GRPC_STOCK_URL` (+ `GRPC_STOCK_TLS=true`), `NODE_ID`, `NODE_SOURCE`, `EVENT_SCHEMA_MODE`. Migración: `ContractV2` (aditiva, con `down`).
+
+## Nuestro contrato para Booking (`contracts/vuelos-openapi-v2-ram-alliance.yaml`)
+La plantilla de Booking (`vuelos-openapi-v2.yaml`) no se toca. Nuestro contrato se **genera** con `npm run contract:v2:build` a partir de la plantilla, el parche `contracts/overlay/vuelos-v2-ram-alliance.overlay.yaml` y `scripts/build-contract-v2.js`: ids UUID con ejemplos válidos, sin 202, 403/429 en cada operación, el endpoint `POST /oauth2/token`, servidores (Tailscale), callbacks de webhooks con firma y cabeceras, los 15 CloudEvents, eventos entrantes (`x-asyncapi-inbound`), gRPC (`x-grpc-stock`) y una nota de implementación por operación. Se valida como OpenAPI 3.0.3, se comprueba que está al día y las respuestas reales de la API se validan contra sus esquemas (`testing/contract-v2-*.ts`). Se sirve en `/api/docs-v2`.

@@ -27,7 +27,7 @@ const TRANSITIONS: Record<FlightOperationalStatus, FlightOperationalStatus[]> = 
 };
 
 const LOW_AVAILABILITY_RATIO = 0.1;
-const OVERBOOKING_RISK_RATIO = 0.98;
+const OVERBOOKING_RISK_PERCENT = 98;
 
 @Injectable()
 export class FlightOpsV2Service {
@@ -127,16 +127,42 @@ export class FlightOpsV2Service {
       if (query.destination) qb.andWhere('v."destinoIATA" = :destination', { destination: query.destination });
       return qb;
     };
-    const totalFlights = await base().getCount();
+    const cursor = query.cursor ? Buffer.from(query.cursor, 'base64url').toString('utf8').split('|') : null;
+    const statusOf = new Map<string, FlightOperationalStatus>();
+    let totalFlights: number;
+    let rows: Vuelo[];
+    let hasMore: boolean;
 
-    const page = base().orderBy('v."fechaSalida"', 'ASC').addOrderBy('v.id', 'ASC').take(limit + 1);
-    if (query.cursor) {
-      const [at, id] = Buffer.from(query.cursor, 'base64url').toString('utf8').split('|');
-      page.andWhere(new Brackets((w) => w.where('v."fechaSalida" > :at', { at }).orWhere('v."fechaSalida" = :at AND v.id > :id', { at, id })));
+    if (query.status) {
+      // The operational status follows the clock, so it cannot be filtered in SQL: filter first, then paginate,
+      // so every page is full and `nextCursor` is honest.
+      const matching: Vuelo[] = [];
+      for (const vuelo of await base().orderBy('v."fechaSalida"', 'ASC').addOrderBy('v.id', 'ASC').getMany()) {
+        const status = (await this.flightStatus.getStatus(vuelo.codigoVuelo, query.date)).status as FlightOperationalStatus;
+        if (status !== query.status) continue;
+        statusOf.set(vuelo.id, status);
+        matching.push(vuelo);
+      }
+      totalFlights = matching.length;
+      const remaining = cursor
+        ? matching.filter((v) => {
+            const at = new Date(v.fechaSalida).toISOString();
+            return at > cursor[0] || (at === cursor[0] && v.id > cursor[1]);
+          })
+        : matching;
+      hasMore = remaining.length > limit;
+      rows = remaining.slice(0, limit);
+    } else {
+      totalFlights = await base().getCount();
+      const page = base().orderBy('v."fechaSalida"', 'ASC').addOrderBy('v.id', 'ASC').take(limit + 1);
+      if (cursor) {
+        const [at, id] = cursor;
+        page.andWhere(new Brackets((w) => w.where('v."fechaSalida" > :at', { at }).orWhere('v."fechaSalida" = :at AND v.id > :id', { at, id })));
+      }
+      rows = await page.getMany();
+      hasMore = rows.length > limit;
+      rows = rows.slice(0, limit);
     }
-    let rows = await page.getMany();
-    const hasMore = rows.length > limit;
-    rows = rows.slice(0, limit);
 
     const ids = rows.map((v) => v.id);
     const held = ids.length
@@ -163,19 +189,19 @@ export class FlightOpsV2Service {
 
     const items = [];
     for (const vuelo of rows) {
-      const status = (await this.flightStatus.getStatus(vuelo.codigoVuelo, query.date)).status as FlightOperationalStatus;
-      if (query.status && status !== query.status) continue;
+      const status = statusOf.get(vuelo.id) ?? ((await this.flightStatus.getStatus(vuelo.codigoVuelo, query.date)).status as FlightOperationalStatus);
       const heldRow = held.find((h) => h.vueloId === vuelo.id);
       const heldSeats = Number(heldRow?.seats ?? 0);
       const checked = Number(checkedIn.find((c) => c.vueloId === vuelo.id)?.total ?? 0);
       const sold = Math.max(0, vuelo.capacidadTotal - vuelo.asientosDisponibles - heldSeats);
-      const loadFactor = vuelo.capacidadTotal > 0 ? Math.round(((vuelo.capacidadTotal - vuelo.asientosDisponibles) / vuelo.capacidadTotal) * 100) / 100 : 0;
+      // A percentage (0-100, one decimal), as the contract's example (76.7) shows.
+      const loadFactor = vuelo.capacidadTotal > 0 ? Math.round(((vuelo.capacidadTotal - vuelo.asientosDisponibles) / vuelo.capacidadTotal) * 1000) / 10 : 0;
       const open = checkInWindow(new Date(vuelo.fechaSalida), new Date(), this.config.postSale.checkInOpensHours, this.config.postSale.checkInClosesHours) === 'OPEN';
 
       const alerts: { code: string; severity: 'INFO' | 'WARNING' | 'CRITICAL'; message: string }[] = [];
       if (status === 'CANCELLED') alerts.push({ code: 'CANCELLED', severity: 'CRITICAL', message: `El vuelo ${vuelo.codigoVuelo} está cancelado.` });
       if (status === 'DELAYED') alerts.push({ code: 'DELAYED', severity: 'INFO', message: `Demora de ${vuelo.retrasoMinutos ?? 0} min.` });
-      if (loadFactor >= OVERBOOKING_RISK_RATIO) alerts.push({ code: 'OVERBOOKING_RISK', severity: 'CRITICAL', message: 'Ocupación al límite de la capacidad.' });
+      if (loadFactor >= OVERBOOKING_RISK_PERCENT) alerts.push({ code: 'OVERBOOKING_RISK', severity: 'CRITICAL', message: 'Ocupación al límite de la capacidad.' });
       else if (vuelo.asientosDisponibles / vuelo.capacidadTotal <= LOW_AVAILABILITY_RATIO) alerts.push({ code: 'LOW_AVAILABILITY', severity: 'WARNING', message: `Quedan ${vuelo.asientosDisponibles} asientos.` });
       if (open) alerts.push({ code: 'CHECKIN_OPEN', severity: 'INFO', message: 'El check-in está abierto.' });
 

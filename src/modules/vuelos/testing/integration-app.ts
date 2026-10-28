@@ -27,7 +27,33 @@ export interface IntegrationApp {
  * ValidationPipe). Every suite gets its own schema, so suites can run in parallel workers
  * without clobbering each other, and the schema is dropped on close.
  */
+/**
+ * ConfigService reads process.env before the values given to the test app, and loadDotenv() pulls in the developer's
+ * own `.env` (real Booking keys, CHECKIN_CLOSES_HOURS=0, WEBHOOKS_ALLOW_PRIVATE_HOSTS=true for the Tailscale tests…).
+ * The variables below change what the app does, so a suite starts without them and gets only what it passes in `env`.
+ */
+const ISOLATED_ENV = [
+  'CHECKIN_OPENS_HOURS',
+  'CHECKIN_CLOSES_HOURS',
+  'WEBHOOKS_ALLOW_PRIVATE_HOSTS',
+  'BOOKING_WEBHOOK_URL',
+  'BOOKING_WEBHOOK_SECRET',
+  'BOOKING_STOCK_API_KEY',
+  'BOOKING_PAGOS_API_KEY',
+  'GRPC_STOCK_URL',
+  'NODE_ID',
+  'NODE_SOURCE',
+  'PARTNER_CLIENT_ID',
+  'PARTNER_CLIENT_SECRET',
+];
+
 export async function createIntegrationApp(env: Record<string, string> = {}): Promise<IntegrationApp> {
+  const savedEnv: Record<string, string | undefined> = {};
+  for (const name of ISOLATED_ENV) {
+    savedEnv[name] = process.env[name];
+    if (name in env) process.env[name] = env[name];
+    else delete process.env[name];
+  }
   const schema = `it_${randomBytes(4).toString('hex')}`;
 
   // TypeORM synchronizes tables into a schema but does not create the schema itself.
@@ -80,6 +106,10 @@ export async function createIntegrationApp(env: Record<string, string> = {}): Pr
     close: async () => {
       await dataSource.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await app.close();
+      for (const [name, value] of Object.entries(savedEnv)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
     },
   };
 }

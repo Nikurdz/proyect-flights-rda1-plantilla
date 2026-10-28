@@ -1,10 +1,11 @@
 import { NextFunction, Request, Response } from 'express';
+import { resolveCorrelationId } from '../../common/correlation';
 import { SlidingWindowLimiter } from './rate-limiter';
 
 const DEFAULT_MAX_HITS = 300;
 const DEFAULT_WINDOW_SECONDS = 60;
 // Health checks come from the platform itself and must never be throttled.
-const EXEMPT_PATHS = new Set(['/api/v1/health']);
+const EXEMPT_PATHS = new Set(['/api/v1/health', '/api/v2/vuelos/health']);
 
 function positiveInt(raw: string | undefined, fallback: number): number {
   const value = Number(raw);
@@ -27,18 +28,19 @@ export function createGlobalRateLimit(env: NodeJS.ProcessEnv = process.env) {
     const limit = limiter.consume(req.ip ?? 'unknown');
     if (limit.allowed) return next();
 
-    res
-      .status(429)
-      .set('Retry-After', String(limit.retryAfterSeconds))
-      .type('application/problem+json')
-      .send(
-        JSON.stringify({
-          type: 'about:blank',
-          title: 'Too many requests',
-          status: 429,
-          code: 'RATE_LIMIT_EXCEEDED',
-          detail: `Try again in ${limit.retryAfterSeconds} seconds.`,
-        }),
-      );
+    const body: Record<string, unknown> = {
+      type: 'about:blank',
+      title: 'Too many requests',
+      status: 429,
+      code: 'RATE_LIMIT_EXCEEDED',
+      detail: `Try again in ${limit.retryAfterSeconds} seconds.`,
+    };
+    // Contract v2 ProblemDetails: where it happened, which process it belongs to and when.
+    if (req.path.startsWith('/api/v2/')) {
+      const correlationId = resolveCorrelationId(req);
+      res.set('X-Correlation-Id', correlationId);
+      Object.assign(body, { type: 'https://api.booking.local/errors/rate-limit-exceeded', instance: req.path, correlation_id: correlationId, timestamp: new Date().toISOString() });
+    }
+    res.status(429).set('Retry-After', String(limit.retryAfterSeconds)).type('application/problem+json').send(JSON.stringify(body));
   };
 }

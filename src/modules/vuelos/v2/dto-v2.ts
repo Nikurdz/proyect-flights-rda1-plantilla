@@ -66,6 +66,13 @@ export class SeatChangeRequestDto {
 
 // ------------------------------------------------------------------------------------------------ flights
 
+/** Contract v2: the departure day of the flight is required (v1 let it default to the next departure). */
+export class FlightStatusRequiredDateDto {
+  @ApiProperty({ format: 'date' })
+  @IsDateOnly()
+  date: string;
+}
+
 export class FlightStatusUpdateRequestDto {
   @ApiProperty({ format: 'date' })
   @IsDateOnly()

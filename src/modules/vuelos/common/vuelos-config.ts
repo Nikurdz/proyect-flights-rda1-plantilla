@@ -27,6 +27,18 @@ export interface VuelosConfig {
   nodeSource: string;
   /** Booking's gRPC stock ingestion endpoint (`host:port`); empty = no stock push. */
   stockGrpcUrl: string;
+  /** What Booking Prototipo gave us for the integration; every field is empty when not configured. */
+  booking: BookingConfig;
+}
+
+export interface BookingConfig {
+  /** Where our webhooks (CloudEvents) are delivered, and the secret that signs them. Both or neither. */
+  webhookUrl: string;
+  webhookSecret: string;
+  /** Sent as `x-api-key` on the gRPC stock push. */
+  stockApiKey: string;
+  /** Booking's payments key. Kept for when a call to their payments API exists: Booking charges, we only receive a reference. */
+  pagosApiKey: string;
 }
 
 /** Calls to partner services (providers): bounded in time and size, and private hosts only for the course network and tests. */
@@ -169,6 +181,16 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
     dataEncryptionKey = Buffer.from(hkdfSync('sha256', jwtSecret, '', 'vuelos-data-encryption', 32));
   }
 
+  const booking: BookingConfig = {
+    webhookUrl: config.get<string>('BOOKING_WEBHOOK_URL', '').trim(),
+    webhookSecret: config.get<string>('BOOKING_WEBHOOK_SECRET', '').trim(),
+    stockApiKey: config.get<string>('BOOKING_STOCK_API_KEY', '').trim(),
+    pagosApiKey: config.get<string>('BOOKING_PAGOS_API_KEY', '').trim(),
+  };
+  // A placeholder such as http://<IP-Tailscale>:<puerto>/... is "not configured yet", not an error.
+  if (booking.webhookUrl.includes('<')) booking.webhookUrl = '';
+  if (booking.webhookUrl && booking.webhookSecret.length < 16) errors.push('BOOKING_WEBHOOK_SECRET must have at least 16 characters when BOOKING_WEBHOOK_URL is set');
+
   if (errors.length > 0) {
     throw new Error(`Invalid Vuelos configuration:\n - ${errors.join('\n - ')}`);
   }
@@ -189,5 +211,6 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
     nodeId: config.get<string>('NODE_ID', 'NODE_VUE_RAM_ALLIANCE'),
     nodeSource: config.get<string>('NODE_SOURCE', '/aerolineas/ram-alliance/vuelos'),
     stockGrpcUrl: config.get<string>('GRPC_STOCK_URL', ''),
+    booking,
   };
 }

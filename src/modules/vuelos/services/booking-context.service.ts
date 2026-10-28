@@ -110,7 +110,7 @@ export class BookingContextService {
       (await manager.exists(BaggagePurchase, { where: { paymentReference } })) ||
       (await manager.exists(DateChangeOffer, { where: { paymentReference } }));
     if (used) {
-      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PAYMENT_REFERENCE_INVALID', 'Payment already used', 'This paymentReference is already attached to another operation.');
+      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PAYMENT_REFERENCE_INVALID', 'Payment already used', 'This paymentReference is already attached to another operation.').forV2('PAYMENT_REFERENCE_INVALID', HttpStatus.UNPROCESSABLE_ENTITY);
     }
   }
 

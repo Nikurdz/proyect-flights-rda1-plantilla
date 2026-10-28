@@ -9,6 +9,7 @@ import { seatExists } from '../common/seat-grid';
 import { formatMinorUnits } from '../common/money.util';
 import { CheckIn } from '../entities/check-in.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
+import { Ticket } from '../entities/ticket.entity';
 import { BookingContextService } from '../services/booking-context.service';
 import { IdempotencyService } from '../services/idempotency.service';
 import { SeatChangeRequestDto } from './dto-v2';
@@ -49,6 +50,7 @@ export class SeatChangeV2Service {
           const context = await this.context.load(manager, auth.ownerId, bookingId, { lock: true });
           this.context.assertConfirmed(context.booking);
 
+          const issued = new Set((await manager.find(Ticket, { where: { bookingId, status: 'ISSUED' } })).map((t) => t.passengerId));
           const taken = new Set<string>();
           const changes: SeatChangeResponse['seats'] = [];
           for (const item of request.seats) {
@@ -78,7 +80,7 @@ export class SeatChangeV2Service {
             taken.add(key);
 
             const current = await manager.findOne(SeatAssignment, { where: { bookingId, passengerId: passenger.passengerId, vueloId: leg.vueloId } });
-            changes.push({ passengerId: item.passengerId, segmentId: item.segmentId, previousSeatNumber: current?.seatNumber ?? null, seatNumber: item.seatNumber, status: 'TICKETED' });
+            changes.push({ passengerId: item.passengerId, segmentId: item.segmentId, previousSeatNumber: current?.seatNumber ?? null, seatNumber: item.seatNumber, status: issued.has(passenger.passengerId) ? 'TICKETED' : 'BOOKED' });
           }
 
           // A seat held by another booking is taken; one held by a passenger of this booking is free only if that passenger leaves it in this same request (a swap).
@@ -119,6 +121,7 @@ export class SeatChangeV2Service {
             status: context.booking.status,
             seats: changes.map(({ passengerId, segmentId, previousSeatNumber, seatNumber }) => ({ passengerId, segmentId, previousSeatNumber, seatNumber })),
             amountCharged: response.amountCharged.total,
+            currency: response.amountCharged.currency,
             moved: moving.length,
           };
           return { response, event };

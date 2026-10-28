@@ -176,11 +176,11 @@ export class BookingsService {
         'AMOUNT_MISMATCH',
         'Amount does not match the held price',
         `The payment reports ${paid.total} ${paid.currency} but the hold was priced at ${formatMinorUnits(hold.lockedPriceMinor)} ${hold.currency}.`,
-      );
+      ).forV2('AMOUNT_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     if (await manager.exists(Booking, { where: { paymentReference: request.payment.paymentReference } })) {
-      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PAYMENT_REFERENCE_INVALID', 'Payment already used', 'This paymentReference is already attached to another booking.');
+      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PAYMENT_REFERENCE_INVALID', 'Payment already used', 'This paymentReference is already attached to another booking.').forV2('PAYMENT_REFERENCE_INVALID', HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     const consumed = await manager.update(FlightHold, { holdId: hold.holdId, status: 'HELD' }, { status: 'CONSUMED' });

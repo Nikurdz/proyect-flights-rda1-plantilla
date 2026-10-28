@@ -55,7 +55,9 @@ export function cloudEventData(type: VuelosEventName, payload: Record<string, un
     case 'hold.expired':
       return { ...pick(payload, ['holdId', 'seatsReleased']), expiredAt: occurredAt };
     case 'booking.failed':
-      return { ...bookingData(payload), ...(payload.failureCode ? { errorCode: payload.failureCode } : {}) };
+    case 'booking.ticket_failed':
+      // There is no booking yet when issuance fails: the event names the hold.
+      return { ...pick(payload, ['holdId', 'ownerId', 'status']), ...bookingData(payload), ...(payload.failureCode ? { errorCode: payload.failureCode } : {}) };
     case 'booking.ticket_issued':
       return { ...bookingData(payload), ...pick(payload, ['paymentReference', 'tickets']) };
     case 'booking.changed':
@@ -63,7 +65,12 @@ export function cloudEventData(type: VuelosEventName, payload: Record<string, un
     case 'booking.baggage_added':
       return { ...bookingData(payload), changeType: 'BAGGAGE', ...pick(payload, ['amountCharged', 'paymentReference', 'passengerId', 'quantity', 'totalBaggage']) };
     case 'booking.seat_changed':
-      return { ...bookingData(payload), changeType: 'SEAT', ...pick(payload, ['amountCharged', 'paymentReference', 'seats']) };
+      return {
+        ...bookingData(payload),
+        changeType: 'SEAT',
+        ...pick(payload, ['paymentReference', 'seats']),
+        ...(typeof payload.amountCharged === 'string' ? { amountCharged: { currency: payload.currency ?? 'USD', total: payload.amountCharged } } : {}),
+      };
     case 'booking.cancelled':
       return { ...bookingData(payload), ...pick(payload, ['reasonCode', 'refundId', 'refundAmount', 'seatsReleased']) };
     case 'booking.checked_in':

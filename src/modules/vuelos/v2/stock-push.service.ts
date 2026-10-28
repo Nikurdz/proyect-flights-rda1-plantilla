@@ -175,6 +175,7 @@ export class StockPushService implements OnModuleInit, OnModuleDestroy {
   private metadata(correlationId: string): grpc.Metadata {
     const metadata = new grpc.Metadata();
     metadata.set('x-correlation-id', correlationId);
+    if (this.config.booking.stockApiKey) metadata.set('x-api-key', this.config.booking.stockApiKey);
     return metadata;
   }
 

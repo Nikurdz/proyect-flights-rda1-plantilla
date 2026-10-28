@@ -368,7 +368,7 @@ export class OffersService {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'OFFER_NO_LONGER_AVAILABLE', 'Offer not found', `Offer ${offerId} was not found or has expired.`);
     }
     if (offer.expiresAt.getTime() <= Date.now()) {
-      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Offer expired', `Offer ${offerId} expired at ${toIso(offer.expiresAt)}.`);
+      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Offer expired', `Offer ${offerId} expired at ${toIso(offer.expiresAt)}.`).forV2('OFFER_NO_LONGER_AVAILABLE');
     }
     return offer;
   }

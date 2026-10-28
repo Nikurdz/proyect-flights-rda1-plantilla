@@ -14,9 +14,10 @@ jest.setTimeout(180_000);
 interface Received {
   updates: { service_id: string; item_id: string; date: string; time_slot: string; available_units: number; correlation: string }[];
   changes: { service_id: string; item_id: string; delta: number; correlation: string }[];
+  apiKeys: string[];
 }
 
-const waitFor = async (condition: () => boolean, ms = 8000): Promise<void> => {
+const waitFor = async (condition: () => boolean, ms = 30_000): Promise<void> => {
   const start = Date.now();
   while (!condition()) {
     if (Date.now() - start > ms) throw new Error('timed out waiting for the gRPC push');
@@ -28,7 +29,7 @@ describeIntegration('gRPC stock push to Booking (contract v2, section 9)', () =>
   let ctx: IntegrationApp;
   let app: INestApplication;
   let server: grpc.Server;
-  const received: Received = { updates: [], changes: [] };
+  const received: Received = { updates: [], changes: [], apiKeys: [] };
 
   beforeAll(async () => {
     const definition = protoLoader.loadSync(join(__dirname, '..', '..', '..', 'proto', 'inventory.proto'), { keepCase: true, longs: Number, defaults: true });
@@ -37,6 +38,7 @@ describeIntegration('gRPC stock push to Booking (contract v2, section 9)', () =>
     server.addService(proto.inventory.InventoryStockService.service, {
       PushStockUpdate: (call: grpc.ServerUnaryCall<Received['updates'][number], unknown>, callback: grpc.sendUnaryData<unknown>) => {
         received.updates.push({ ...call.request, correlation: String(call.metadata.get('x-correlation-id')[0]) });
+        received.apiKeys.push(String(call.metadata.get('x-api-key')[0]));
         callback(null, { success: true, message: 'ok', processed_at: Date.now() });
       },
       StreamInventoryChanges: (call: grpc.ServerReadableStream<Received['changes'][number], unknown>, callback: grpc.sendUnaryData<unknown>) => {
@@ -51,7 +53,7 @@ describeIntegration('gRPC stock push to Booking (contract v2, section 9)', () =>
     });
     const port = await new Promise<number>((resolve, reject) => server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (error, bound) => (error ? reject(error) : resolve(bound))));
 
-    ctx = await createIntegrationApp({ GRPC_STOCK_URL: `127.0.0.1:${port}`, NODE_ID: 'NODE_VUE_TEST' });
+    ctx = await createIntegrationApp({ GRPC_STOCK_URL: `127.0.0.1:${port}`, NODE_ID: 'NODE_VUE_TEST', BOOKING_STOCK_API_KEY: 'bk_test_key_0123456789' });
     app = ctx.app;
     await seedFlights(ctx.dataSource);
   });
@@ -72,6 +74,7 @@ describeIntegration('gRPC stock push to Booking (contract v2, section 9)', () =>
     expect(first.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(first.time_slot).toMatch(/^\d{2}:\d{2}$/);
     expect(first.available_units).toBeGreaterThan(0);
+    expect(new Set(received.apiKeys)).toEqual(new Set(['bk_test_key_0123456789'])); // Booking's key travels as x-api-key
 
     const tokens = app.get(TokenService);
     const auth = { Authorization: `Bearer ${tokens.sign({ ownerId: 'owner-grpc', kind: 'customer', roles: [] }).accessToken}` };

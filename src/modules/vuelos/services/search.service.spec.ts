@@ -22,6 +22,7 @@ const config: VuelosConfig = {
   nodeId: 'NODE_TEST',
   nodeSource: '/aerolineas/test/vuelos',
   stockGrpcUrl: '',
+  booking: { webhookUrl: '', webhookSecret: '', stockApiKey: '', pagosApiKey: '' },
 };
 
 const vuelo = (id: string, precioBase: number): Vuelo => ({

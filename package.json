@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "contract:export": "node scripts/export-openapi.js",
+    "contract:v2:build": "node scripts/build-contract-v2.js",
     "seed:vuelos": "ts-node src/modules/vuelos/seed/seed.ts",
     "seed:vuelos:prod": "node dist/modules/vuelos/seed/seed.js",
     "migration:generate:vuelos": "typeorm-ts-node-commonjs migration:generate -d src/modules/vuelos/migrations/data-source.ts",
@@ -76,6 +77,7 @@
     "winston": "^3.19.0"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "^10.1.1",
     "@eslint/js": "^10.0.1",
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",

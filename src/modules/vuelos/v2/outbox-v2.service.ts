@@ -1,11 +1,16 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, Repository } from 'typeorm';
 import { CloudEvent, isVuelosEventName, toCloudEvent } from '../common/cloud-events';
 import { DomainEvent, DomainEventBus } from '../common/domain-event-bus';
+import { ProblemDetailsException } from '../common/problem-details.exception';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { OutboxEvent } from '../entities/outbox-event.entity';
 import { EventsQueryDto } from './dto-v2';
+
+/** A cursor that is neither `evt-vue-<n>` nor a known event id: refused, never silently restarted from the beginning. */
+const unknownCursor = (after: string): ProblemDetailsException =>
+  new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Cursor desconocido', `El cursor "${after}" no corresponde a ningún evento; use metadata.next_after de la respuesta anterior.`, [{ name: 'after', reason: 'unknown cursor' }]);
 
 export const cursorOf = (seq: string): string => `evt-vue-${seq.padStart(6, '0')}`;
 
@@ -47,7 +52,10 @@ export class OutboxV2Service implements OnModuleInit {
       if (match) afterSeq = String(Number(match[1]));
       else if (/^[0-9a-f-]{36}$/i.test(query.after)) {
         const row = await this.outbox.findOne({ where: { eventoId: query.after } });
-        if (row) afterSeq = row.seq;
+        if (!row) throw unknownCursor(query.after);
+        afterSeq = row.seq;
+      } else {
+        throw unknownCursor(query.after);
       }
     }
     const rows = await this.outbox.find({

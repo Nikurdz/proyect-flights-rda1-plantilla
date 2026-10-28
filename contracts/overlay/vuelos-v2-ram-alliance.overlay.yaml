@@ -1,0 +1,497 @@
+# Parche propio (RFC 7386 JSON Merge Patch) sobre la plantilla de Booking. Lo aplica scripts/build-contract-v2.js.
+# `x-operation-notes` no se copia al resultado: cada nota se añade a la descripción de su operación.
+
+info:
+  title: RAM Alliance Vuelos — API de vuelos (contrato v2)
+  version: 2.0.0-ram-alliance
+  license:
+    name: Uso académico — Integración de Sistemas PUCE
+  contact:
+    name: Equipo RAM Alliance Vuelos (PUCE) — David Tapia
+  description: |
+    # RAM Alliance Vuelos — contrato de integración v2
+
+    > **Sistema proveedor:** RAM Alliance Vuelos (categoría *Vuelos*), detrás de una sola URL base.
+    > **Sistema consumidor:** Booking Prototipo (marketplace multimodal).
+    > **Base del contrato:** la plantilla común de Booking (`vuelos-openapi-v2.yaml`), **ajustada a lo que este nodo realmente responde**.
+    > Este documento se genera con `npm run contract:v2:build` y las respuestas reales de la API se validan contra sus esquemas en las pruebas.
+
+    ## 1. Cómo conectarse
+    | Dato | Valor |
+    |---|---|
+    | URL base | `http://{host}:{port}/api/v2` — endpoints en `/vuelos/...` |
+    | Pruebas locales (Tailscale) | `http://100.121.62.72:3000/api/v2/vuelos` |
+    | Token OAuth2 | `POST /api/v2/oauth2/token` |
+    | Salud (sin token) | `GET /api/v2/vuelos/health` |
+    | Documentación navegable | `/api/docs-v2` |
+    | `X-API-Key` | **No se usa.** La autenticación es OAuth2 `client_credentials` (Bearer) |
+
+    ## 2. Autenticación
+    1. Booking pide un token con su `client_id` y `client_secret` (cuerpo `application/x-www-form-urlencoded` o JSON, o cabecera HTTP Basic).
+    2. Envía `Authorization: Bearer <access_token>` en cada llamada. El token dura `expires_in` segundos (3600 por defecto); al vencer se pide otro.
+    3. **Scopes:** `flights:read`, `flights:hold`, `flights:book`, `flights:cancel`, `flights:webhooks`, `flights:ops`, `flights:admin` (este último equivale a todos). Un token sin el scope de la operación recibe **403**; sin token, **401**.
+    4. Booking identifica al cliente final con `X-User-Id` (hasta 50 caracteres `A-Z a-z 0-9 . _ : @ -`): las reservas, holds y suscripciones quedan a nombre de ese usuario y **solo él las ve** (otro `X-User-Id` recibe 403). Sin `X-User-Id` el dueño es el propio socio. Un webhook registrado **sin** `X-User-Id` recibe los eventos de **todos** los usuarios del socio.
+    5. Operaciones públicas (sin token): `search`, `seatmap`, `GET flights/{n}/status`, `health` y el propio `oauth2/token`.
+
+    ## 3. Convenciones
+    * **Ids generados por este nodo son UUID**: `offerId`, `itineraryId`, `segmentId` (= id del vuelo), `holdId`, `bookingId`, `ticketId`, `quoteId`, `changeOfferId`, `refundId`. Use siempre los valores que devuelve la API (los ejemplos con prefijo `OFF-`/`SEG-`… de la plantilla no existen aquí).
+    * **Ids que elige Booking:** `passengerId`, `paymentReference` (8–100 caracteres `A-Za-z0-9._:-`, de un solo uso), `partnerOrderId`, `packageId`.
+    * **Idempotency-Key** (UUID v4) obligatoria en las escrituras que lo indican: se retiene 24 h. Mismo cuerpo → misma respuesta, con `Idempotent-Replayed: true` y código **200**; otro cuerpo con la misma clave → **409 `IDEMPOTENCY_KEY_REUSED`**.
+    * **Trazabilidad:** `X-Correlation-Id` (8–100 caracteres `A-Za-z0-9._-`) se acepta y se devuelve sin cambios; si no viene o es inválido se genera uno. `X-Request-Id` identifica cada llamada. Todo error trae `correlation_id`, `instance` y `timestamp` (RFC 7807).
+    * **Búsqueda:** `X-Device-Fingerprint` obligatorio y no vacío.
+    * **Límite de tasa:** 300 peticiones por 60 s **por dirección IP** del cliente; al excederlo, **429** con `Retry-After`. `health` está exento.
+    * **Paginación:** `limit` y `cursor` opacos (`nextCursor`); `GET /bookings` por defecto 10 (máx. 50), `operaciones/vuelos` por defecto 20 (máx. 100), `eventos` por defecto 20 (máx. 100).
+    * **Dinero:** cadenas con dos decimales y moneda ISO-4217 (`USD`). Solo se vende en **clase ECONÓMICA**, vuelos directos.
+    * **Pagos:** cobra Booking; este nodo solo recibe `payment.paymentReference` (y opcionalmente `amount`: si no coincide con el precio retenido, **422 `AMOUNT_MISMATCH`**). En cancelaciones el nodo **calcula** el reembolso y Booking lo ejecuta.
+
+    ## 4. Eventos que publica este nodo (webhooks CloudEvents)
+    Se registran con `POST /vuelos/webhooks` (la `url` debe ser **https** a una IP pública; en las pruebas locales por Tailscale el nodo se arranca con `WEBHOOKS_ALLOW_PRIVATE_HOSTS=true`). Cada entrega es un `POST` con el CloudEvent v1.0 estructurado:
+
+    | Cabecera | Valor |
+    |---|---|
+    | `Content-Type` | `application/cloudevents+json` |
+    | `X-Webhook-Id` | id de la entrega |
+    | `X-Webhook-Event` | tipo corto (`booking.confirmed`…) |
+    | `X-Webhook-Timestamp` | epoch en segundos (**no** forma parte de la firma) |
+    | `X-Webhook-Signature` | `sha256=` + HMAC-SHA256(secret, **cuerpo crudo**) en hexadecimal |
+    | `X-Correlation-Id` | `correlationid` del evento |
+
+    Responda **2xx**; cualquier otra respuesta se reintenta a 1 min, 5 min, 30 min, 2 h y 6 h y luego la entrega queda `DEAD` (el evento sigue en `GET /vuelos/eventos`). Los 15 tipos y su `data` están en los esquemas `Event*`. `type` = `ec.edu.epn.booking.vuelos.<evento>`, `source` = `/aerolineas/ram-alliance/vuelos`.
+
+    ## 5. Eventos que consume este nodo (publica Booking) — ver `x-asyncapi-inbound`
+    ## 6. Stock por gRPC (este nodo es el cliente) — ver `x-grpc-stock`
+
+    ## 7. Diferencias respecto a la plantilla de Booking
+    | Tema | Plantilla | Este nodo |
+    |---|---|---|
+    | Ids | ejemplos `OFF-…`, `SEG-…`, `TKT-…`… | UUID (ver §3) |
+    | 202 (`TICKET_ISSUING`, `CHANGE_PENDING`, `CANCELLATION_PENDING`) | posible | **nunca**: la emisión, el equipaje, el cambio de fecha y la cancelación son síncronos |
+    | `BookingDetail.itineraries` / `passengers` | opcionales | **no se devuelven** (no se exponen datos personales) |
+    | Check-in repetido | 409 | **200 idempotente** (no cambia nada). Cierra a la hora de salida si el nodo corre con `CHECKIN_CLOSES_HOURS=0` |
+    | Cancelación sin `quoteId` | solo SAGA/FLIGHT | también `CUSTOMER_REQUEST`: se cotiza y aplica en el acto |
+    | Límite de tasa de `search` | por `X-Device-Fingerprint` | por IP |
+    | `health.circuit_breaker_estado` | real | siempre `CLOSED` |
+    | `aircraft` en operaciones | modelo | `null` |
+    | Mapa de asientos | `HELD` por asiento | un hold no fija asientos concretos: `AVAILABLE`, `BOOKED`/`TICKETED`, `CHECKED_IN`, `BOARDED` |
+    | Asientos | con costo opcional | gratis; `payment` se acepta pero no se usa |
+
+    ## 8. Máquinas de estado
+    **Asiento:** `AVAILABLE → BOOKED/TICKETED → CHECKED_IN → BOARDED`. **Hold:** `HELD → CONSUMED | RELEASED | EXPIRED` (TTL 5–30 min, 15 por defecto; vencido = **410 `HOLD_EXPIRED`**). **Reserva:** `CONFIRMED`, `CANCELLED`, `FAILED` (y los estados transitorios del contrato). **Vuelo:** `SCHEDULED → BOARDING → DEPARTED → ARRIVED`, con `DELAYED`, `CANCELLED`, `DIVERTED`. **Check-in:** abre 48 h antes de la salida.
+
+servers:
+  - url: http://{host}:{port}/api/v2
+    description: Este nodo. Por defecto, la laptop del equipo en la red Tailscale (pruebas de integración).
+    variables:
+      host:
+        default: 100.121.62.72
+        description: IP de Tailscale (o nombre de host) donde corre el nodo
+      port:
+        default: '3000'
+        description: Puerto del nodo
+  - url: /api/v2
+    description: Ruta relativa canónica (detrás del gateway del nodo)
+
+tags:
+  - name: MS.Vuelos — Búsqueda y Catálogo
+    description: Búsqueda multidestino, mapa de asientos y estado público de vuelos.
+  - name: MS.Vuelos — Operaciones
+    description: Panel de ocupación por vuelo y cabina y cambio de estado operativo (scope flights:ops).
+  - name: MS.Vuelos — Promociones B2B
+    description: Acuerdo comercial de promociones y combos con Booking Prototipo.
+  - name: MS.Vuelos — Telemetría
+    description: Salud del nodo y feed outbox de eventos.
+  - name: MS.Reservas — Bloqueo de Cupos (Hold)
+    description: Retención temporal de asientos con precio congelado y TTL.
+  - name: MS.Reservas — Reservas y Emisión
+    description: Creación de reservas con paymentReference, consulta y emisión de boletos.
+  - name: MS.Reservas — Asientos, Check-in y Boarding Pass
+    description: Cambio de asiento, check-in en línea y pases de abordar.
+  - name: MS.Postventa
+    description: Equipaje extra, cambio de fecha, cotización y cancelación.
+  - name: MS.Clientes — Webhooks
+    description: Suscripciones para recibir eventos CloudEvents firmados.
+  - name: MS.Clientes — OAuth2
+    description: Token de servicio (client_credentials) para Booking Prototipo.
+
+x-tagGroups:
+  - name: MS.Vuelos
+    tags:
+      - MS.Vuelos — Búsqueda y Catálogo
+      - MS.Vuelos — Operaciones
+      - MS.Vuelos — Promociones B2B
+      - MS.Vuelos — Telemetría
+  - name: MS.Reservas
+    tags:
+      - MS.Reservas — Bloqueo de Cupos (Hold)
+      - MS.Reservas — Reservas y Emisión
+      - MS.Reservas — Asientos, Check-in y Boarding Pass
+  - name: MS.Postventa
+    tags:
+      - MS.Postventa
+  - name: MS.Clientes
+    tags:
+      - MS.Clientes — Webhooks
+      - MS.Clientes — OAuth2
+
+paths:
+  /oauth2/token:
+    post:
+      tags: [MS.Clientes — OAuth2]
+      operationId: issueToken
+      x-microservice: MS.Clientes
+      summary: Token de servicio (OAuth2 client_credentials)
+      description: |
+        Booking prueba quién es con su `client_id` y `client_secret` y recibe un token Bearer limitado a los scopes que pida (o a todos los que tiene permitidos).
+        Acepta `application/x-www-form-urlencoded` (el estándar), JSON o la cabecera HTTP Basic (`client_id:client_secret` en base64). Solo existe el flujo `client_credentials`.
+        Los errores usan el cuerpo de RFC 6749 (`error`, `error_description`), no `problem+json`. La respuesta lleva `Cache-Control: no-store`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OAuthTokenRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthTokenRequest'
+      responses:
+        '200':
+          description: Token emitido
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthTokenResponse'
+        '400':
+          description: '`unsupported_grant_type` o `invalid_scope` (se pidió un scope que el cliente no tiene)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '401':
+          description: '`invalid_client` — cliente desconocido, inactivo o secreto incorrecto'
+          headers:
+            WWW-Authenticate:
+              schema:
+                type: string
+                example: Basic realm="vuelos"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '429':
+          $ref: '#/components/responses/Problem429'
+
+  /vuelos/webhooks:
+    post:
+      callbacks:
+        eventDelivery:
+          '{$request.body#/url}':
+            post:
+              summary: Entrega de un evento (CloudEvent estructurado) a la URL registrada
+              description: Se envía por cada evento suscrito. Responda 2xx; si no, se reintenta (1 min, 5 min, 30 min, 2 h, 6 h) y después queda `DEAD`.
+              parameters:
+                - name: X-Webhook-Id
+                  in: header
+                  required: true
+                  description: Id de la entrega.
+                  schema:
+                    type: string
+                    format: uuid
+                - name: X-Webhook-Event
+                  in: header
+                  required: true
+                  schema:
+                    $ref: '#/components/schemas/VuelosEventName'
+                - name: X-Webhook-Timestamp
+                  in: header
+                  required: true
+                  description: Epoch en segundos. No forma parte de la firma.
+                  schema:
+                    type: integer
+                - name: X-Webhook-Signature
+                  in: header
+                  required: true
+                  description: '`sha256=` + HMAC-SHA256(secret, cuerpo crudo) en hexadecimal.'
+                  schema:
+                    type: string
+                    pattern: '^sha256=[0-9a-f]{64}$'
+                - name: X-Correlation-Id
+                  in: header
+                  required: true
+                  schema:
+                    type: string
+              requestBody:
+                required: true
+                content:
+                  application/cloudevents+json:
+                    schema:
+                      $ref: '#/components/schemas/VuelosCloudEvent'
+              responses:
+                '2XX':
+                  description: Entrega aceptada
+                default:
+                  description: Cualquier otra respuesta (o un tiempo de espera de 5 s) se reintenta
+
+components:
+  securitySchemes:
+    PartnerOAuth2:
+      description: |
+        Token de servicio que este nodo emite a Booking Prototipo en `POST /api/v2/oauth2/token` (`client_credentials`).
+        Booking reenvía la identidad del usuario final en `X-User-Id` (y opcionalmente `X-User-Roles`).
+      flows:
+        clientCredentials:
+          tokenUrl: /api/v2/oauth2/token
+    BearerAuth:
+      description: 'Alternativa para desarrollo: un JWT de la plataforma (sus roles se traducen en scopes; ADMIN = todos).'
+  schemas:
+    OAuthTokenRequest:
+      type: object
+      required: [grant_type]
+      properties:
+        grant_type:
+          type: string
+          enum: [client_credentials]
+        client_id:
+          type: string
+          example: booking-prototipo
+          description: Obligatorio si no se envía la cabecera Basic.
+        client_secret:
+          type: string
+          description: Obligatorio si no se envía la cabecera Basic.
+        scope:
+          type: string
+          example: flights:read flights:book
+          description: Scopes pedidos, separados por espacio. Sin él, todos los permitidos al cliente.
+    OAuthTokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, scope]
+      properties:
+        access_token:
+          type: string
+          description: JWT HS256 firmado por el nodo.
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+          example: 3600
+        scope:
+          type: string
+          example: flights:read flights:hold flights:book flights:cancel flights:webhooks flights:ops flights:admin
+    OAuthError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [invalid_client, invalid_scope, unsupported_grant_type, invalid_request]
+        error_description:
+          type: string
+
+    FlightInventoryItem:
+      properties:
+        aircraft:
+          type: string
+          nullable: true
+          description: Modelo de aeronave. Este nodo no lo conoce y devuelve null.
+    EventBookingFailed:
+      description: No se pudo crear la reserva aunque el hold era válido. Todavía no existe la reserva, así que el evento nombra el **hold** (no hay `bookingId` ni `pnr`).
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [ec.edu.epn.booking.vuelos.booking.failed]
+            data:
+              type: object
+              required: [holdId, status]
+              properties:
+                holdId:
+                  type: string
+                  format: uuid
+                ownerId:
+                  type: string
+                status:
+                  type: string
+                  example: FAILED
+                errorCode:
+                  type: string
+                  example: SEAT_TAKEN
+    EventTicketFailed:
+      description: Falló la emisión de boletos. Como en `booking.failed`, nombra el hold.
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [ec.edu.epn.booking.vuelos.booking.ticket_failed]
+            data:
+              type: object
+              required: [holdId, status]
+              properties:
+                holdId:
+                  type: string
+                  format: uuid
+                ownerId:
+                  type: string
+                status:
+                  type: string
+                  example: FAILED
+                errorCode:
+                  type: string
+                  example: TICKET_ISSUANCE_FAILED
+    EventTicketIssuing:
+      description: La emisión de boletos empezó (se anuncia junto con `booking.ticket_issued` porque la emisión es inmediata).
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [ec.edu.epn.booking.vuelos.booking.ticket_issuing]
+            data:
+              allOf:
+                - $ref: '#/components/schemas/BookingEventData'
+                - type: object
+                  properties:
+                    paymentReference:
+                      type: string
+                    tickets:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          ticketId:
+                            type: string
+                            format: uuid
+                          eTicketNumber:
+                            type: string
+                          passengerId:
+                            type: string
+    EventFlightScheduleChanged:
+      description: La aerolínea reprogramó la salida de un vuelo (acción administrativa).
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [ec.edu.epn.booking.vuelos.flight.schedule_changed]
+            data:
+              type: object
+              required: [flightNumber]
+              properties:
+                flightNumber:
+                  type: string
+                codigoVuelo:
+                  type: string
+                  description: Mismo valor que `flightNumber`.
+                status:
+                  type: string
+                  example: RESCHEDULED
+                newDepartureAt:
+                  type: string
+                  format: date-time
+    EventFlightCancelled:
+      description: La aerolínea canceló un vuelo; las reservas afectadas se cancelan con reembolso total y cada una emite `booking.cancelled`.
+      allOf:
+        - $ref: '#/components/schemas/CloudEventBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [ec.edu.epn.booking.vuelos.flight.cancelled]
+            data:
+              type: object
+              required: [flightNumber]
+              properties:
+                flightNumber:
+                  type: string
+                codigoVuelo:
+                  type: string
+                status:
+                  type: string
+                  example: CANCELLED
+    VuelosCloudEvent:
+      description: Cualquier evento publicado por este nodo (los 15 tipos de `VuelosEventName`).
+      oneOf:
+        - $ref: '#/components/schemas/EventHoldCreated'
+        - $ref: '#/components/schemas/EventHoldExpired'
+        - $ref: '#/components/schemas/EventBookingConfirmed'
+        - $ref: '#/components/schemas/EventBookingFailed'
+        - $ref: '#/components/schemas/EventTicketIssuing'
+        - $ref: '#/components/schemas/EventTicketIssued'
+        - $ref: '#/components/schemas/EventTicketFailed'
+        - $ref: '#/components/schemas/EventBookingChanged'
+        - $ref: '#/components/schemas/EventBookingCancelled'
+        - $ref: '#/components/schemas/EventCheckedIn'
+        - $ref: '#/components/schemas/EventFlightStatusChanged'
+        - $ref: '#/components/schemas/EventFlightScheduleChanged'
+        - $ref: '#/components/schemas/EventFlightCancelled'
+
+x-asyncapi-inbound:
+  description: |
+    Eventos que **publica Booking** y consume este nodo. Solo funcionan si el nodo tiene `RABBITMQ_URL`; sin broker, use las operaciones REST equivalentes (`POST /bookings/{id}/tickets`, `POST /bookings/{id}/cancel`).
+    Detalle y esquemas: `contracts/vuelos-eventos-asyncapi.yaml` y `contracts/eventos/pagos.*`, `paquetes.*`.
+  exchange: booking.events (direct, durable)
+  queue: q.vuelos.entrantes (durable; dead-letter booking.dlx; 3 reintentos y luego q.dead_letter)
+  format: CloudEvents v1.0 estructurado (JSON); `type` = `ec.edu.epn.booking.<routing key>`
+  events:
+    - routingKey: pagos.payment.confirmed
+      data: '{ paymentReference, bookingId, amount }'
+      effect: Emite los boletos de la reserva (no hace nada si ya están emitidos).
+    - routingKey: pagos.payment.failed
+      data: '{ paymentReference, bookingId, amount?, failureReason? }'
+      effect: Una reserva que espera pago pasa a FAILED; una confirmada se cancela como compensación (SAGA_COMPENSATION).
+    - routingKey: paquetes.package.cancelled
+      data: '{ packageId, bookingId, reason? }'
+      effect: Cancela la parte de vuelo del combo (SAGA_COMPENSATION) si está confirmada.
+  idempotency: Cada evento se identifica por su `id`; recibirlo dos veces no repite el efecto.
+
+x-grpc-stock:
+  description: |
+    Este nodo es el **cliente**: empuja a Booking los asientos libres. Contrato `inventory.proto` (paquete `inventory`, servicio `InventoryStockService`), copia en `src/proto/inventory.proto`.
+  activation: Variable `GRPC_STOCK_URL` (host:puerto del servidor de Booking; vacío = desactivado). `GRPC_STOCK_TLS=true` usa TLS.
+  metadata:
+    x-correlation-id: id de correlación de la operación que movió el stock
+    x-api-key: clave de stock que entrega Booking (`BOOKING_STOCK_API_KEY`)
+  rpcs:
+    PushStockUpdate: Stock absoluto de cada vuelo (al arrancar y cada 10 min como resincronización).
+    StreamInventoryChanges: Un `StockChangeEvent` con `delta` por cada vuelo cuyo stock cambió (hold, liberación, venta, cancelación, cambio).
+  fields: 'service_id = NODE_ID (NODE_VUE_RAM_ALLIANCE); item_id = <número de vuelo>-ECONOMY; date = YYYY-MM-DD; time_slot = HH:mm en UTC'
+  timing: Debounce de 500 ms tras el evento, red de seguridad cada 30 s, plazo de 5 s por llamada, horizonte de 45 días.
+
+x-operation-notes:
+  getHealth: '`circuit_breaker_estado` es siempre `CLOSED`. `status` es `DOWN` (503) si la base de datos no responde y `DEGRADED` si tarda más de 1 s.'
+  listOutboxEvents: 'El `id` de cada evento es el UUID del evento (el mismo del webhook). El cursor es `metadata.next_after` (`evt-vue-000120`); un `after` desconocido responde 400 en lugar de reiniciar. `metadata.total` es el tamaño de la página.'
+  putPromotionAgreement: 'Responde el contrato plano (`permite_promociones`, `porcentaje_descuento_maximo`, listas…). Las `rutas_habilitadas` son `AAA-BBB` y los `destinos_habilitados` códigos IATA de 3 letras. Una venta con `salesChannel.promotionApplied` se rechaza con 422 `PROMOTION_DISCOUNT_OUT_OF_RANGE` si supera el máximo o no hay acuerdo vigente.'
+  searchFlights: 'Vuelos directos, clase económica; como máximo `OFFER_MAX_COMBINATIONS` ofertas (5 por defecto), las más baratas primero. El límite de tasa es por IP, no por dispositivo.'
+  getSeatMap: '`segmentId` es el id del vuelo (UUID). Un hold no fija asientos: el estado por asiento es `AVAILABLE`, `BOOKED`/`TICKETED`, `CHECKED_IN` o `BOARDED`. Oferta vencida: 410 `OFFER_NO_LONGER_AVAILABLE`.'
+  getFlightStatus: 'El parámetro `date` es obligatorio.'
+  updateFlightStatus: 'Las transiciones válidas son SCHEDULED→{DELAYED,BOARDING,DEPARTED,CANCELLED,DIVERTED}, DELAYED→{SCHEDULED,BOARDING,DEPARTED,CANCELLED,DIVERTED}, BOARDING→{DELAYED,DEPARTED,CANCELLED}, DEPARTED→{ARRIVED,DIVERTED}, DIVERTED→{ARRIVED}; ARRIVED y CANCELLED son finales (409 `INVALID_STATUS_TRANSITION`). DELAYED exige `estimatedDepartureAt`. CANCELLED cancela las reservas con reembolso total.'
+  listFlightOperations: '`loadFactor` es un porcentaje (0–100, un decimal). Solo hay cabina ECONOMY; `aircraft` es null. El filtro `status` se aplica antes de paginar. En `seatsByStatus`, `BOOKED` es siempre 0 (la emisión es inmediata).'
+  createHold: '`ttlMinutes` 5–30 (15 por defecto). Precio congelado en `lockedPrice`. Oferta vencida: 410 `OFFER_NO_LONGER_AVAILABLE`; sin cupo: 409 `SEAT_TAKEN`. Se emite `hold.created`.'
+  getHold: 'Un hold ajeno responde 403; uno inexistente 404.'
+  releaseHold: 'Idempotente: liberar un hold ya liberado o vencido responde 204; uno ya consumido, 409 `HOLD_ALREADY_CONSUMED`.'
+  listBookings: 'Cada item incluye `_links`. Solo se listan las reservas del usuario (`X-User-Id`).'
+  createBooking: 'Siempre **201** con la reserva ya `CONFIRMED` y los boletos emitidos (nunca 202). `payment.amount`, si viene, debe coincidir con el precio retenido (422 `AMOUNT_MISMATCH`); una `paymentReference` ya usada responde 422 `PAYMENT_REFERENCE_INVALID`. En viajes internacionales todos los pasajeros necesitan pasaporte (422 `PASSPORT_REQUIRED_INTERNATIONAL`). Pasajeros: hasta `MAX_PASSENGERS_PER_ORDER` (9). Responde `Location`.'
+  getBooking: 'El detalle no incluye `itineraries` ni `passengers`.'
+  issueTickets: 'La reserva ya sale emitida: si todos los boletos existen responde 200 con `issued: 0`.'
+  listTickets: 'Responde `{ bookingId, tickets }`. `ticketId` es un UUID.'
+  getTicket: '`ticketId` es el UUID del boleto.'
+  changeSeats: 'Los asientos no tienen costo: `payment` se acepta pero no se usa y `amountCharged` es `0.00`. El cambio es atómico y se puede intercambiar asientos entre pasajeros de la misma reserva. `status` por asiento: `TICKETED` o `BOOKED` según el boleto del pasajero.'
+  checkIn: 'Repetirlo responde 200 sin cambios (no 409). Abre 48 h antes de la salida; el cierre lo fija `CHECKIN_CLOSES_HOURS` (0 = a la hora de salida).'
+  listBoardingPasses: '`gate` es la puerta de embarque cargada por operaciones (puede ser null). Antes del check-in: 404 `BOARDING_PASS_NOT_AVAILABLE`.'
+  addBaggage: 'Hasta 3 h antes de la salida, máximo 2 maletas extra por pasajero y tramo. La `paymentReference` es de un solo uso.'
+  searchDateChange: 'Solo tarifas que permiten cambios; cada opción vive 15 minutos.'
+  confirmDateChange: 'Si hay algo que pagar, envíe `payment.paymentReference` (de un solo uso). Responde el detalle de la reserva ya cambiada.'
+  getCancellationQuote: 'La cotización vive 15 minutos. Tarifa reembolsable: total menos 10 % de penalidad; no reembolsable: solo impuestos; el equipaje extra se devuelve completo. No se cancela a menos de 3 h de la salida.'
+  cancelBooking: '`quoteId` es opcional en todos los motivos: sin él se cotiza y aplica en el acto. `FLIGHT_CANCELLED` reembolsa el total. `refund.percentage` es un entero.'
+  createWebhook: 'Máximo 10 suscripciones por usuario. La respuesta no incluye el `secret`. Cada entrega se describe en la sección *callbacks* de esta operación y en §4.'

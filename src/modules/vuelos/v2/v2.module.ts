@@ -8,6 +8,7 @@ import { VuelosCoreModule } from '../vuelos-core.module';
 import { OAuth2Controller } from './auth/oauth2.controller';
 import { PartnerAuthGuard } from './auth/partner-auth.guard';
 import { PartnerAuthService } from './auth/partner-auth.service';
+import { BookingBootstrapV2Service } from './booking-bootstrap-v2.service';
 import { BookingViewV2Service } from './booking-view-v2.service';
 import { FlightOpsV2Service } from './flight-ops-v2.service';
 import { HealthV2Service } from './health-v2.service';
@@ -23,7 +24,7 @@ import { VuelosV2Controller } from './vuelos-v2.controller';
 @Module({
   imports: [VuelosCoreModule, AdminModule, TypeOrmModule.forFeature([PartnerClient, OutboxEvent, PromocionContrato, PromocionAlcance])],
   controllers: [VuelosV2Controller, OAuth2Controller],
-  providers: [PartnerAuthService, PartnerAuthGuard, BookingViewV2Service, SeatChangeV2Service, TicketsV2Service, FlightOpsV2Service, OutboxV2Service, PromotionsV2Service, HealthV2Service, InboundEventsV2Service, StockPushService],
+  providers: [PartnerAuthService, PartnerAuthGuard, BookingViewV2Service, SeatChangeV2Service, TicketsV2Service, FlightOpsV2Service, OutboxV2Service, PromotionsV2Service, HealthV2Service, InboundEventsV2Service, StockPushService, BookingBootstrapV2Service],
   exports: [PartnerAuthService, PromotionsV2Service, TicketsV2Service, StockPushService],
 })
 export class VuelosV2Module {}

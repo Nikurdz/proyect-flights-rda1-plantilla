@@ -27,7 +27,7 @@ import { SearchService } from '../services/search.service';
 import { WebhooksService, viewV2 } from '../services/webhooks.service';
 import { PartnerAuthGuard, RequiresScope } from './auth/partner-auth.guard';
 import { BookingViewV2Service } from './booking-view-v2.service';
-import { EventsQueryDto, FlightStatusUpdateRequestDto, OperationsQueryDto, PromocionesContratoRequestDto, SeatChangeRequestDto, WebhookSubscriptionV2Dto } from './dto-v2';
+import { EventsQueryDto, FlightStatusRequiredDateDto, FlightStatusUpdateRequestDto, OperationsQueryDto, PromocionesContratoRequestDto, SeatChangeRequestDto, WebhookSubscriptionV2Dto } from './dto-v2';
 import { FlightOpsV2Service } from './flight-ops-v2.service';
 import { HealthV2Service } from './health-v2.service';
 import { OutboxV2Service } from './outbox-v2.service';
@@ -122,8 +122,8 @@ export class VuelosV2Controller {
 
   @Get('flights/:flightNumber/status')
   @ApiOperation({ operationId: 'getFlightStatus', summary: 'Estado público de un vuelo' })
-  getFlightStatus(@Param() params: FlightStatusParamDto, @Query('date') date?: string) {
-    return this.flightStatusService.getStatus(params.flightNumber, date);
+  getFlightStatus(@Param() params: FlightStatusParamDto, @Query() query: FlightStatusRequiredDateDto) {
+    return this.flightStatusService.getStatus(params.flightNumber, query.date);
   }
 
   // --- MS.Vuelos · Operaciones ---
@@ -150,8 +150,9 @@ export class VuelosV2Controller {
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth()
   @ApiOperation({ operationId: 'createHold', summary: 'Bloquear inventario (precio congelado, ttlMinutes 5–30)' })
-  async createHold(@CurrentAuth() auth: AuthClaims, @Headers('idempotency-key') key: string, @Body() body: HoldRequestDto) {
+  async createHold(@CurrentAuth() auth: AuthClaims, @Headers('idempotency-key') key: string, @Body() body: HoldRequestDto, @Res({ passthrough: true }) res: Response) {
     const hold = await this.offersService.createHold(auth, key, body);
+    res.setHeader('Location', `/api/v2/vuelos/offers/hold/${hold.holdId}`);
     return { ...hold, _links: holdLinks(hold.holdId) };
   }
 
@@ -186,7 +187,7 @@ export class VuelosV2Controller {
   @ApiOperation({ operationId: 'listBookings', summary: 'Reservas del usuario (X-User-Id), paginadas' })
   async listBookings(@CurrentAuth() auth: AuthClaims, @Query() query: ListBookingsQueryDto) {
     const page = await this.bookingsService.listBookings(auth.ownerId, query);
-    return { ...page, nextCursor: page.nextCursor ?? null };
+    return { items: page.items.map((item) => ({ ...item, _links: bookingLinks(item.bookingId, 'CONFIRMED') })), nextCursor: page.nextCursor ?? null };
   }
 
   @Post('bookings')
@@ -195,9 +196,10 @@ export class VuelosV2Controller {
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth()
   @ApiOperation({ operationId: 'createBooking', summary: 'Convertir el hold en reserva (Booking ya cobró: llega paymentReference)' })
-  async createBooking(@CurrentAuth() auth: AuthClaims, @Headers('idempotency-key') key: string, @Body() body: BookingRequestDto) {
+  async createBooking(@CurrentAuth() auth: AuthClaims, @Headers('idempotency-key') key: string, @Body() body: BookingRequestDto, @Res({ passthrough: true }) res: Response) {
     if (body.salesChannel?.promotionApplied) await this.promotions.assertDiscountAllowed(body.salesChannel.discountPercentage);
     const created = await this.bookingsService.createBooking(auth, key, body, { passportForInternational: true });
+    res.setHeader('Location', `/api/v2/vuelos/bookings/${created.bookingId}`);
     return this.view.detail(auth.ownerId, created.bookingId);
   }
 
@@ -222,8 +224,8 @@ export class VuelosV2Controller {
   @RequiresScope('flights:read')
   @ApiBearerAuth()
   @ApiOperation({ operationId: 'listTickets', summary: 'Boletos de la reserva' })
-  listTickets(@CurrentAuth() auth: AuthClaims, @Param('bookingId', ParseUUIDPipe) bookingId: string) {
-    return this.view.tickets(auth.ownerId, bookingId);
+  async listTickets(@CurrentAuth() auth: AuthClaims, @Param('bookingId', ParseUUIDPipe) bookingId: string) {
+    return { bookingId, tickets: await this.view.tickets(auth.ownerId, bookingId) };
   }
 
   @Get('bookings/:bookingId/tickets/:ticketId')

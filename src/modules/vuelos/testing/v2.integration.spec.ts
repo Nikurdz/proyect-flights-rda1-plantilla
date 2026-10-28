@@ -11,6 +11,7 @@ import { seedFlights } from '../seed/flights.seed';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { WebhookDispatcherService } from '../services/webhook-dispatcher.service';
 import { PartnerAuthService } from '../v2/auth/partner-auth.service';
+import { ContractV2Validator } from './contract-v2-validator';
 import { IntegrationApp, createIntegrationApp, describeIntegration } from './integration-app';
 
 jest.setTimeout(180_000);
@@ -22,6 +23,7 @@ const SECRET = 'a-partner-secret-of-24-chars!';
 
 describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () => {
   let ctx: IntegrationApp;
+  let contract: ContractV2Validator; // every real answer below is also checked against the schemas of the contract we hand to Booking
   let app: INestApplication;
   let ds: DataSource;
   let server: http.Server;
@@ -86,6 +88,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
   }
 
   beforeAll(async () => {
+    contract = await ContractV2Validator.load();
     server = http.createServer((req, res) => {
       let data = '';
       req.on('data', (c) => (data += c));
@@ -98,7 +101,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     hookUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/hook`;
 
-    ctx = await createIntegrationApp({ WEBHOOKS_ALLOW_PRIVATE_HOSTS: 'true' });
+    ctx = await createIntegrationApp({ WEBHOOKS_ALLOW_PRIVATE_HOSTS: 'true', BOOKING_WEBHOOK_URL: hookUrl, BOOKING_WEBHOOK_SECRET: 'a-secret-of-sixteen-chars' });
     app = ctx.app;
     ds = ctx.dataSource;
     await seedFlights(ds);
@@ -115,11 +118,13 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const wrong = await api().post('/api/v2/oauth2/token').type('form').send({ grant_type: 'client_credentials', client_id: CLIENT, client_secret: 'nope-nope-nope-nope-nope' });
       expect(wrong.status).toBe(401);
       expect(wrong.body.error).toBe('invalid_client');
+      contract.check('post', '/oauth2/token', 401, wrong.body);
       expect((await api().post('/api/v2/oauth2/token').type('form').send({ grant_type: 'password' })).body.error).toBe('unsupported_grant_type');
 
       const ok = await api().post('/api/v2/oauth2/token').type('form').send({ grant_type: 'client_credentials', client_id: CLIENT, client_secret: SECRET, scope: 'flights:read' }).expect(200);
       expect(ok.body).toMatchObject({ token_type: 'Bearer', scope: 'flights:read' });
       expect(ok.headers['cache-control']).toBe('no-store');
+      contract.check('post', '/oauth2/token', 200, ok.body);
 
       // HTTP Basic works too, and asking for a scope the client does not have is refused.
       const basic = `Basic ${Buffer.from(`${CLIENT}:${SECRET}`).toString('base64')}`;
@@ -137,12 +142,14 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       expect(anonymous.headers['x-correlation-id']).toBe(correlation);
       expect(anonymous.headers['x-request-id']).toBeDefined();
       expect(anonymous.body).toMatchObject({ code: 'UNAUTHORIZED', instance: `${V2}/bookings`, correlation_id: correlation });
+      contract.check('get', '/vuelos/bookings', 401, anonymous.body, anonymous.headers['content-type']);
       expect(new Date(anonymous.body.timestamp).toString()).not.toBe('Invalid Date');
 
       const readOnly = await tokenFor('flights:read');
       const forbidden = await api().post(`${V2}/offers/hold`).set(bearer(readOnly, 'u1')).set('Idempotency-Key', randomUUID()).send({});
       expect(forbidden.status).toBe(403);
       expect(forbidden.body).toMatchObject({ code: 'FORBIDDEN', instance: `${V2}/offers/hold` });
+      contract.check('post', '/vuelos/offers/hold', 403, forbidden.body, forbidden.headers['content-type']);
       expect(forbidden.body.correlation_id).toBe(forbidden.headers['x-correlation-id']);
     });
 
@@ -159,17 +166,21 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const created = await hold(token, 'user-1', dayAhead(day++), { ttlMinutes: 10 });
       expect(created.res.status).toBe(201);
       expect(created.res.headers['x-request-id']).toBeDefined();
+      expect(created.res.headers.location).toBe(`${V2}/offers/hold/${created.res.body.holdId}`);
       expect(created.res.body).toMatchObject({ status: 'HELD', ttlMinutes: 10 });
+      contract.check('post', '/vuelos/offers/hold', 201, created.res.body);
       expect(created.res.body._links.release).toMatchObject({ method: 'DELETE' });
 
       const replay = await api().post(`${V2}/offers/hold`).set(bearer(token, 'user-1')).set('Idempotency-Key', created.key).send(created.body);
       expect(replay.status).toBe(200);
       expect(replay.headers['idempotent-replayed']).toBe('true');
       expect(replay.body.holdId).toBe(created.res.body.holdId);
+      contract.check('post', '/vuelos/offers/hold', 200, replay.body);
 
       const reused = await api().post(`${V2}/offers/hold`).set(bearer(token, 'user-1')).set('Idempotency-Key', created.key).send({ ...created.body, passengersBreakdown: { adults: 2 } });
       expect(reused.status).toBe(409);
       expect(reused.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
+      contract.check('post', '/vuelos/offers/hold', 409, reused.body, reused.headers['content-type']);
 
       const tooLong = await hold(token, 'user-1', dayAhead(day++), { ttlMinutes: 90 });
       expect(tooLong.res.status).toBe(400);
@@ -186,8 +197,9 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const holdId = held.res.body.holdId as string;
 
       const wrongAmount = await book(token, 'user-2', holdId, { payment: { paymentReference: `pay_${randomUUID().slice(0, 12)}`, amount: { currency: 'USD', total: '1.00' } } });
-      expect(wrongAmount.status).toBe(409);
+      expect(wrongAmount.status).toBe(422);
       expect(wrongAmount.body.code).toBe('AMOUNT_MISMATCH');
+      contract.check('post', '/vuelos/bookings', 422, wrongAmount.body, wrongAmount.headers['content-type']);
 
       // BOG-SCL crosses a border: v2 wants a passport (v1 does not check it).
       const nationalId = await book(token, 'user-2', holdId, { passengers: [pax('a1', { documentType: 'NATIONAL_ID' })] });
@@ -199,6 +211,8 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
         salesChannel: { partnerId: 'booking', partnerOrderId: 'ORD-9', packageId: null, promotionApplied: false },
       });
       expect(booked.status).toBe(201);
+      expect(booked.headers.location).toBe(`${V2}/bookings/${booked.body.bookingId}`);
+      contract.check('post', '/vuelos/bookings', 201, booked.body);
       expect(booked.body).toMatchObject({ status: 'CONFIRMED', holdId, salesChannel: { partnerOrderId: 'ORD-9', promotionApplied: false } });
       expect(booked.body._links.cancel).toBeDefined();
       const bookingId = booked.body.bookingId as string;
@@ -209,19 +223,25 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const list = await api().get(`${V2}/bookings`).set(bearer(token, 'user-2')).expect(200);
       expect(list.body.items.some((b: { bookingId: string }) => b.bookingId === bookingId)).toBe(true);
       expect(list.body.nextCursor).toBeNull();
+      contract.check('get', '/vuelos/bookings', 200, list.body);
 
-      const tickets = await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-2')).expect(200);
+      const envelope = await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-2')).expect(200);
+      expect(envelope.body.bookingId).toBe(bookingId);
+      contract.check('get', '/vuelos/bookings/{bookingId}/tickets', 200, envelope.body);
+      const tickets = { body: envelope.body.tickets };
       expect(tickets.body).toHaveLength(1);
       expect(tickets.body[0]).toMatchObject({ passengerId: 'a1', passengerName: 'Namea1 Tapia', status: 'ISSUED' });
       expect(tickets.body[0].qrPayload).toBeUndefined();
       expect(tickets.body[0].segments[0]).toMatchObject({ departureIataCode: 'BOG', arrivalIataCode: 'SCL', status: 'ISSUED' });
       const ticket = await api().get(`${V2}/bookings/${bookingId}/tickets/${tickets.body[0].ticketId}`).set(bearer(token, 'user-2')).expect(200);
       expect(ticket.body.eTicketNumber).toBe(tickets.body[0].eTicketNumber);
+      contract.check('get', '/vuelos/bookings/{bookingId}/tickets/{ticketId}', 200, ticket.body);
 
       // Issuing again is a no-op: already issued answers 200 with issued 0.
       const again = await api().post(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-2')).expect(200);
       expect(again.body).toMatchObject({ issued: 0, status: 'CONFIRMED' });
       expect(again.body.tickets).toHaveLength(1);
+      contract.check('post', '/vuelos/bookings/{bookingId}/tickets', 200, again.body);
     });
 
     it('changes seats atomically (swap), shows the status per seat, and refuses infants, other cabins and taken seats', async () => {
@@ -230,15 +250,17 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const held = await hold(token, 'user-4', date);
       const booked = await book(token, 'user-4', held.res.body.holdId);
       const bookingId = booked.body.bookingId as string;
-      const segment = (await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-4'))).body[0].segments[0].segmentId as string;
+      const segment = (await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-4'))).body.tickets[0].segments[0].segmentId as string;
 
       const move = await api().put(`${V2}/bookings/${bookingId}/seats`).set(bearer(token, 'user-4')).set('Idempotency-Key', randomUUID()).send({ seats: [{ passengerId: 'a1', segmentId: segment, seatNumber: '14C' }] });
       expect(move.status).toBe(200);
       expect(move.body.seats[0]).toMatchObject({ seatNumber: '14C', previousSeatNumber: null, status: 'TICKETED' });
       expect(move.body.amountCharged.total).toBe('0.00');
+      contract.check('put', '/vuelos/bookings/{bookingId}/seats', 200, move.body);
 
       const map = await api().get(`${V2}/offers/${held.offer.offerId}/seatmap`).query({ segmentId: segment }).expect(200);
       const seats = map.body.cabins[0].rows.flatMap((r: { seats: { seatNumber: string; status: string; isAvailable: boolean }[] }) => r.seats);
+      contract.check('get', '/vuelos/offers/{offerId}/seatmap', 200, map.body);
       expect(seats.find((s: { seatNumber: string }) => s.seatNumber === '14C')).toMatchObject({ status: 'TICKETED', isAvailable: false });
       expect(seats.find((s: { seatNumber: string }) => s.seatNumber === '14D').status).toBe('AVAILABLE');
 
@@ -258,7 +280,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const taken = await api().put(`${V2}/bookings/${bookingId}/seats`).set(bearer(token, 'user-4')).set('Idempotency-Key', randomUUID()).send({ seats: [{ passengerId: 'a1', segmentId: segment, seatNumber: '14C' }] });
       expect(taken.status).toBe(409);
       expect(taken.body.code).toBe('SEAT_TAKEN');
-      const kept = (await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-4')).expect(200)).body[0].segments[0].seatNumber;
+      const kept = (await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-4')).expect(200)).body.tickets[0].segments[0].seatNumber;
       expect(kept).toBe('14D');
     });
 
@@ -278,6 +300,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       expect(cancelled.body.refund.originalPaymentReference).toBeDefined();
       expect(cancelled.body.inventoryRestoration).toMatchObject({ status: 'RESTORED', seatsReleased: 1, newSeatStatus: 'AVAILABLE' });
       expect(cancelled.body.ticketsVoided).toHaveLength(1);
+      contract.check('post', '/vuelos/bookings/{bookingId}/cancel', 200, cancelled.body);
       expect((await ds.getRepository(Vuelo).findOneByOrFail({ id: vueloId })).asientosDisponibles).toBe(before + 1);
 
       const replay = await api().post(`${V2}/bookings/${bookingId}/cancel`).set(bearer(token, 'user-6')).set('Idempotency-Key', key).send({ reasonCode: 'CUSTOMER_REQUEST' });
@@ -287,6 +310,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const second = await api().post(`${V2}/bookings/${bookingId}/cancel`).set(bearer(token, 'user-6')).set('Idempotency-Key', randomUUID()).send({});
       expect(second.status).toBe(409);
       expect(second.body.code).toBe('ALREADY_CANCELLED');
+      contract.check('post', '/vuelos/bookings/{bookingId}/cancel', 409, second.body, second.headers['content-type']);
     });
   });
 
@@ -304,6 +328,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
         .send({ permite_promociones: true, porcentaje_descuento_maximo: 12.5, rutas_habilitadas: ['BOG-SCL'], cabinas_habilitadas: ['ECONOMY'], destinos_habilitados: ['SCL'] });
       expect(put.status).toBe(200);
       expect(put.body).toMatchObject({ vertical: 'VUELOS', permite_promociones: true, porcentaje_descuento_maximo: 12.5, rutas_habilitadas: ['BOG-SCL'] });
+      contract.check('put', '/vuelos/promociones/contrato', 200, put.body);
       expect((await api().get(`${V2}/promociones/contrato`).set(bearer(readOnly)).expect(200)).body.cabinas_habilitadas).toEqual(['ECONOMY']);
 
       const held = await hold(token, 'user-7', dayAhead(day++));
@@ -334,10 +359,13 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       expect(delayed.body).toMatchObject({ previousStatus: 'SCHEDULED', flight: { status: 'DELAYED', delayMinutes: 45 } });
       expect(delayed.body.flight.departure).toMatchObject({ gate: 'B12', estimatedAt: estimate });
       expect(delayed.body.eventId).toBeDefined();
+      contract.check('patch', '/vuelos/flights/{flightNumber}/status', 200, delayed.body);
 
       // Public status shows it.
+      await api().get(`${V2}/flights/${flight.codigoVuelo}/status`).expect(400); // the date is required in v2
       const publicStatus = await api().get(`${V2}/flights/${flight.codigoVuelo}/status`).query({ date }).expect(200);
       expect(publicStatus.body).toMatchObject({ status: 'DELAYED', delayMinutes: 45 });
+      contract.check('get', '/vuelos/flights/{flightNumber}/status', 200, publicStatus.body);
 
       // A cancelled flight cannot come back.
       await api().patch(`${V2}/flights/${flight.codigoVuelo}/status`).set(bearer(token)).send({ date, status: 'CANCELLED', reason: 'Falla técnica' }).expect(200);
@@ -348,6 +376,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
 
       const ops = await api().get(`${V2}/operaciones/vuelos`).query({ date, origin: flight.origenIATA }).set(bearer(token)).expect(200);
       expect(ops.body.date).toBe(date);
+      contract.check('get', '/vuelos/operaciones/vuelos', 200, ops.body);
       const item = ops.body.items.find((i: { flightNumber: string }) => i.flightNumber === flight.codigoVuelo);
       expect(item).toMatchObject({ status: 'CANCELLED', totalSeats: flight.capacidadTotal });
       expect(item.cabins[0].seatsByStatus).toHaveProperty('AVAILABLE');
@@ -358,7 +387,20 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
     it('reports the node health without a token', async () => {
       const res = await api().get(`${V2}/health`).expect(200);
       expect(res.body).toMatchObject({ status: 'HEALTHY', vertical: 'VUELOS' });
+      contract.check('get', '/vuelos/health', 200, res.body);
       expect(res.body.dependencias[0]).toMatchObject({ nombre: 'postgresql', status: 'UP' });
+    });
+  });
+
+  describe('Booking from the environment', () => {
+    it('registers Booking as a v2 subscriber of every event (BOOKING_WEBHOOK_URL), owned by the partner, once', async () => {
+      const rows = await ds.getRepository(WebhookSubscription).find({ where: { ownerId: `partner:${CLIENT}`, url: hookUrl }, relations: { eventos: true } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].apiVersion).toBe(2);
+      expect(rows[0].events).toHaveLength(15);
+      expect(rows[0].secret).toBe('a-secret-of-sixteen-chars');
+      const raw = await ds.query(`SELECT secret FROM "${ctx.schema}"."vuelos_webhook_subscriptions" WHERE id = $1`, [rows[0].id]);
+      expect(raw[0].secret).not.toContain('a-secret-of-sixteen-chars'); // encrypted at rest
     });
   });
 
@@ -374,7 +416,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const paymentReference = booked.body.paymentReference as string;
 
       expect((await inbound('pagos.payment.confirmed', { paymentReference, bookingId })).fallos).toBe(0);
-      expect((await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-9')).expect(200)).body).toHaveLength(1);
+      expect((await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-9')).expect(200)).body.tickets).toHaveLength(1);
 
       // An invalid payload (no bookingId nor paymentReference named) is refused before it reaches a handler.
       expect((await inbound('pagos.payment.confirmed', { paymentReference: 1 as unknown as string, bookingId })).fallos).toBe(1);
@@ -405,10 +447,13 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       expect(sample.correlationid).toBeDefined();
       expect(sample.data).toMatchObject({ status: 'CONFIRMED' });
       expect(feed.body.metadata.next_after).toMatch(/^evt-vue-\d{6}$/);
+      contract.check('get', '/vuelos/eventos', 200, feed.body);
 
       const page1 = await api().get(`${V2}/eventos`).query({ limit: 2 }).set(bearer(token)).expect(200);
       const page2 = await api().get(`${V2}/eventos`).query({ limit: 2, after: page1.body.metadata.next_after }).set(bearer(token)).expect(200);
       expect(page2.body.events[0].id).not.toBe(page1.body.events[0].id);
+      const badCursor = await api().get(`${V2}/eventos`).query({ after: 'evt-nope' }).set(bearer(token));
+      expect(badCursor.status).toBe(400);
       const filtered = await api().get(`${V2}/eventos`).query({ type: 'hold.created' }).set(bearer(token)).expect(200);
       expect(filtered.body.events.every((e: { type: string }) => e.type.endsWith('hold.created'))).toBe(true);
 
@@ -419,8 +464,12 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const held = await hold(token, 'user-8', dayAhead(day++));
       const booked = await book(token, 'user-8', held.res.body.holdId);
       expect(booked.status).toBe(201);
-      await app.get(WebhookDispatcherService).process();
-      const hit = received.find((r) => r.headers['x-webhook-event'] === 'booking.confirmed');
+      // Earlier bookings of this suite are queued for the partner subscription too: drain the queue in batches.
+      for (let round = 0; round < 15 && !received.some((r) => r.body.includes(booked.body.bookingId) && r.headers['x-webhook-event'] === 'booking.confirmed'); round++) {
+        await app.get(WebhookDispatcherService).process();
+      }
+      // The partner subscription (from the environment) also hears the earlier bookings of this suite: pick this booking's event.
+      const hit = received.find((r) => r.headers['x-webhook-event'] === 'booking.confirmed' && r.body.includes(booked.body.bookingId));
       expect(hit).toBeDefined();
       expect(hit!.headers['content-type']).toBe('application/cloudevents+json');
       expect(hit!.headers['x-webhook-signature']).toBe(signWebhookBodyV2('a-secret-of-sixteen-chars', hit!.body));
@@ -442,10 +491,12 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const created = await api().post(`${V2}/webhooks`).set(bearer(token)).send({ url: hookUrl, events: ['hold.created', 'flight.status_changed', 'booking.seat_changed'], secret }).expect(201);
       expect(created.body).toMatchObject({ url: hookUrl, active: true, events: ['booking.seat_changed', 'flight.status_changed', 'hold.created'] });
       expect(created.body.createdAt).toBeDefined();
+      contract.check('post', '/vuelos/webhooks', 201, created.body);
       expect(JSON.stringify(created.body)).not.toContain(secret);
       const listed = await api().get(`${V2}/webhooks`).set(bearer(token)).expect(200);
       expect(listed.body.some((w: { id: string }) => w.id === created.body.id)).toBe(true);
       expect(JSON.stringify(listed.body)).not.toContain(secret);
+      contract.check('get', '/vuelos/webhooks', 200, listed.body);
       const row = await ds.getRepository(WebhookSubscription).findOneByOrFail({ id: created.body.id });
       expect(row.apiVersion).toBe(2);
       await api().delete(`${V2}/webhooks/${created.body.id}`).set(bearer(token)).expect(204);
