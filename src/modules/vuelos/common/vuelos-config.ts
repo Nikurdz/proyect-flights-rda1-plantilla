@@ -25,8 +25,10 @@ export interface VuelosConfig {
   /** How this node presents itself to Booking (contract v2): health `nodo_id`, CloudEvents `source` and the gRPC stock `service_id`. */
   nodeId: string;
   nodeSource: string;
-  /** Booking's gRPC stock ingestion endpoint (`host:port`); empty = no stock push. */
+  /** Booking's gRPC stock ingestion endpoint (`host:port`); empty = no gRPC push. */
   stockGrpcUrl: string;
+  /** How far ahead and how often the stock is pushed (both transports). */
+  stockPush: StockPushConfig;
   /** What Booking Prototipo gave us for the integration; every field is empty when not configured. */
   booking: BookingConfig;
 }
@@ -35,10 +37,19 @@ export interface BookingConfig {
   /** Where our webhooks (CloudEvents) are delivered, and the secret that signs them. Both or neither. */
   webhookUrl: string;
   webhookSecret: string;
-  /** Sent as `x-api-key` on the gRPC stock push. */
+  /** Booking's HTTP stock endpoint (`POST .../api/v2/inventory/stock`); when set it wins over gRPC. */
+  stockHttpUrl: string;
+  /** Sent as `x-api-key` on the stock push (gRPC metadata or HTTP header) when set. */
   stockApiKey: string;
   /** Booking's payments key. Kept for when a call to their payments API exists: Booking charges, we only receive a reference. */
   pagosApiKey: string;
+}
+
+export interface StockPushConfig {
+  /** Only flights departing within this many days are pushed (the network has hundreds of flights a day). */
+  horizonDays: number;
+  /** Every how many minutes the absolute stock of every flight is sent again (between them, only what changed). */
+  fullResyncMinutes: number;
 }
 
 /** Calls to partner services (providers): bounded in time and size, and private hosts only for the course network and tests. */
@@ -184,12 +195,18 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
   const booking: BookingConfig = {
     webhookUrl: config.get<string>('BOOKING_WEBHOOK_URL', '').trim(),
     webhookSecret: config.get<string>('BOOKING_WEBHOOK_SECRET', '').trim(),
+    stockHttpUrl: config.get<string>('BOOKING_STOCK_URL', '').trim(),
     stockApiKey: config.get<string>('BOOKING_STOCK_API_KEY', '').trim(),
     pagosApiKey: config.get<string>('BOOKING_PAGOS_API_KEY', '').trim(),
   };
   // A placeholder such as http://<IP-Tailscale>:<puerto>/... is "not configured yet", not an error.
   if (booking.webhookUrl.includes('<')) booking.webhookUrl = '';
   if (booking.webhookUrl && booking.webhookSecret.length < 16) errors.push('BOOKING_WEBHOOK_SECRET must have at least 16 characters when BOOKING_WEBHOOK_URL is set');
+  if (booking.stockHttpUrl && !/^https?:\/\/[^\s]+$/.test(booking.stockHttpUrl)) errors.push('BOOKING_STOCK_URL must be an http(s) URL');
+  const stockPush: StockPushConfig = {
+    horizonDays: parseNumber(config, 'STOCK_PUSH_HORIZON_DAYS', '14', errors, (v) => isPositiveInt(v) && v <= 45, 'an integer in 1..45'),
+    fullResyncMinutes: parseNumber(config, 'STOCK_PUSH_FULL_RESYNC_MINUTES', '60', errors, (v) => isPositiveInt(v) && v <= 1440, 'an integer in 1..1440'),
+  };
 
   if (errors.length > 0) {
     throw new Error(`Invalid Vuelos configuration:\n - ${errors.join('\n - ')}`);
@@ -211,6 +228,7 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
     nodeId: config.get<string>('NODE_ID', 'NODE_VUE_RAM_ALLIANCE'),
     nodeSource: config.get<string>('NODE_SOURCE', '/aerolineas/ram-alliance/vuelos'),
     stockGrpcUrl: config.get<string>('GRPC_STOCK_URL', ''),
+    stockPush,
     booking,
   };
 }

@@ -22,6 +22,7 @@ Las 22 operaciones de v1 existen en v2 con el mismo verbo y ruta relativa. 14 es
 | Eventos | CloudEvents v1.0, firma HMAC del cuerpo, 15 tipos, outbox | Hecho: la versión de firma va por suscripción (`apiVersion`): v1 conserva `timestamp.body` |
 | Eventos entrantes | `pagos.payment.confirmed/failed`, `paquetes.package.cancelled` | Hecho por RabbitMQ (`q.vuelos.entrantes`); idempotentes |
 | Stock gRPC | `inventory.proto`: `PushStockUpdate` + `StreamInventoryChanges` | Hecho: `StockPushService`, activo con `GRPC_STOCK_URL` |
+| Stock HTTP (Booking en Azure) | `POST /api/v2/inventory/stock` con `{service_id, item_id, date, time_slot, available_units}` | Hecho: `StockPushService` con `BOOKING_STOCK_URL` (gana sobre gRPC), enviado desde Railway; `service_id` = `NODE_VUE_RAM_ALLIANCE`; horizonte 14 días |
 
 ## Diferencias que conviene saber
 - **Check-in**: v2 lo cierra a la hora de salida; el valor por defecto sigue en 1 h (`CHECKIN_CLOSES_HOURS=1`, como v1). Para v2 pon `CHECKIN_CLOSES_HOURS=0`.

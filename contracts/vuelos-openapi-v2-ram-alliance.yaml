@@ -61,7 +61,7 @@ info:
     Responda **2xx**; cualquier otra respuesta se reintenta a 1 min, 5 min, 30 min, 2 h y 6 h y luego la entrega queda `DEAD` (el evento sigue en `GET /vuelos/eventos`). Los 15 tipos y su `data` están en los esquemas `Event*`. `type` = `ec.edu.epn.booking.vuelos.<evento>`, `source` = `/aerolineas/ram-alliance/vuelos`.
 
     ## 5. Eventos que consume este nodo (publica Booking) — ver `x-asyncapi-inbound`
-    ## 6. Stock por gRPC (este nodo es el cliente) — ver `x-grpc-stock`
+    ## 6. Stock hacia Booking (este nodo es el cliente): HTTP o gRPC — ver `x-stock-push`
 
     ## 7. Diferencias respecto a la plantilla de Booking
     | Tema | Plantilla | Este nodo |
@@ -4373,15 +4373,23 @@ x-asyncapi-inbound:
       data: '{ packageId, bookingId, reason? }'
       effect: Cancela la parte de vuelo del combo (SAGA_COMPENSATION) si está confirmada.
   idempotency: Cada evento se identifica por su `id`; recibirlo dos veces no repite el efecto.
-x-grpc-stock:
+x-stock-push:
   description: |
-    Este nodo es el **cliente**: empuja a Booking los asientos libres. Contrato `inventory.proto` (paquete `inventory`, servicio `InventoryStockService`), copia en `src/proto/inventory.proto`.
-  activation: Variable `GRPC_STOCK_URL` (host:puerto del servidor de Booking; vacío = desactivado). `GRPC_STOCK_TLS=true` usa TLS.
-  metadata:
-    x-correlation-id: id de correlación de la operación que movió el stock
-    x-api-key: clave de stock que entrega Booking (`BOOKING_STOCK_API_KEY`)
-  rpcs:
-    PushStockUpdate: Stock absoluto de cada vuelo (al arrancar y cada 10 min como resincronización).
-    StreamInventoryChanges: Un `StockChangeEvent` con `delta` por cada vuelo cuyo stock cambió (hold, liberación, venta, cancelación, cambio).
-  fields: service_id = NODE_ID (NODE_VUE_RAM_ALLIANCE); item_id = <número de vuelo>-ECONOMY; date = YYYY-MM-DD; time_slot = HH:mm en UTC
-  timing: Debounce de 500 ms tras el evento, red de seguridad cada 30 s, plazo de 5 s por llamada, horizonte de 45 días.
+    Este nodo es el **cliente**: empuja a Booking los asientos libres de cada vuelo. Lee el inventario real (`asientosDisponibles`) después de cada hold, liberación, venta, cancelación o cambio, y nunca lo modifica.
+    Hay dos transportes; si están configurados ambos, gana HTTP.
+  http:
+    activation: Variable `BOOKING_STOCK_URL` (por ejemplo `https://booking-core-api.azurewebsites.net/api/v2/inventory/stock`). Se envía desde el despliegue en la nube (Railway); no necesita Tailscale.
+    request: '`POST` con `Content-Type: application/json`, un vuelo por llamada (8 en paralelo): `{"service_id","item_id","date","time_slot","available_units"}` con el valor **absoluto** de asientos libres. Cabeceras extra: `X-Correlation-Id` siempre y `X-API-Key` solo si el nodo tiene `BOOKING_STOCK_API_KEY`.'
+    success: 'Un vuelo cuenta como enviado solo si la respuesta es 2xx con `"success": true`.'
+    refusals: 'Un 4xx o `success: false` (p. ej. un `item_id` desconocido) se registra y ese vuelo no se reenvía durante 1 h.'
+    errors: 'Errores de red, 429 o 5xx: el vuelo se reintenta en la siguiente sincronización; 5 errores seguidos cortan la ronda.'
+    timing: Envío completo al arrancar y cada `STOCK_PUSH_FULL_RESYNC_MINUTES` (60 por defecto); entre medio solo los vuelos cuyo stock cambió (debounce de 500 ms tras el evento, red de seguridad cada 30 s mientras hay actividad). Horizonte `STOCK_PUSH_HORIZON_DAYS` (14 por defecto). Plazo de 8 s por llamada.
+  grpc:
+    activation: Variable `GRPC_STOCK_URL` (host:puerto del servidor de Booking; vacío = desactivado). `GRPC_STOCK_TLS=true` usa TLS. Contrato `inventory.proto` (paquete `inventory`, servicio `InventoryStockService`), copia en `src/proto/inventory.proto`.
+    metadata:
+      x-correlation-id: id de correlación de la operación que movió el stock
+      x-api-key: clave de stock que entrega Booking (`BOOKING_STOCK_API_KEY`), si existe
+    rpcs:
+      PushStockUpdate: Stock absoluto de cada vuelo (al arrancar y cada 10 min como resincronización).
+      StreamInventoryChanges: Un `StockChangeEvent` con `delta` por cada vuelo cuyo stock cambió.
+  fields: service_id = NODE_ID (NODE_VUE_RAM_ALLIANCE, fijo y único de este nodo); item_id = <número de vuelo>-ECONOMY; date = YYYY-MM-DD; time_slot = HH:mm de la salida en **UTC**; available_units = asientos libres (0 si el vuelo está cancelado).
