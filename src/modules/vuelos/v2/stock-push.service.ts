@@ -265,6 +265,8 @@ export class StockPushService implements OnModuleInit, OnModuleDestroy {
     };
     await Promise.all(Array.from({ length: Math.min(HTTP_CONCURRENCY, pending.length) }, () => worker()));
 
+    // One summary line per round that sent something, so a healthy push is visible in the logs too.
+    this.logger.log(`Stock push round: ${sent.size} sent, ${refused} refused, ${errors} failed, ${pending.length - sent.size - refused - errors} not attempted, of ${pending.length} [${correlationId}]`);
     if (refused > 0) {
       this.counters.refused += refused;
       this.logger.warn(`Booking refused ${refused} stock update(s); they wait 1 h before being sent again (first: ${firstRefusal}) [${correlationId}]`);
