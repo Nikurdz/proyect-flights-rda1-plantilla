@@ -7,7 +7,7 @@ El backend corre como contenedor en **Azure Container Apps** (plan de consumo, s
 - La imagen se construye en GitHub Actions (`.github/workflows/container.yml`) y se publica en GitHub Container Registry. El despliegue a Azure lo haces tú con `az`, sin secretos de Azure en GitHub.
 
 - **Arranque:** el contenedor ejecuta `npm run start:container`: migra, lanza el seed **en segundo plano** y arranca la API sin esperarlo (con la base lejos, el seed puede tardar minutos y la sonda de arranque reiniciaría el contenedor). Las líneas del seed (`Flights: … (N s)`, `Demo scenarios: …`) salen en el log después de `Nest application successfully started`. Railway sigue con `start:render`.
-- **Regiones:** la suscripción Azure for Students solo permite `westus`, `chilecentral`, `francecentral`, `spaincentral` y `brazilsouth` (por defecto `brazilsouth`).
+- **Regiones:** la suscripción Azure for Students solo permite `westus`, `chilecentral`, `francecentral`, `spaincentral` y `brazilsouth` (por defecto `westus`, la más cercana a la base de Aiven, que está en Nueva Jersey: aun así cada consulta tarda ~200 ms y una búsqueda ~1,4 s, frente a ~0,2 s en Railway. Aceptado; la solución real sería un PostgreSQL en Azure en la misma región).
 
 ## Una sola vez
 
