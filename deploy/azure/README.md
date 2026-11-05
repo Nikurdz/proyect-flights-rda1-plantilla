@@ -6,6 +6,9 @@ El backend corre como contenedor en **Azure Container Apps** (plan de consumo, s
 - **Escala a cero** por defecto (`MIN_REPLICAS=0`): coste casi nulo, pero mientras duerme no se envía stock a Booking ni corren la reconciliación y los webhooks, y la primera llamada espera el arranque (migración + seed + Nest, unos 15–30 s). Cada despertar vuelve a enviar todo el stock. Para tenerla siempre encendida: `MIN_REPLICAS=1 ./crear.sh` (≈ 3–10 USD/mes).
 - La imagen se construye en GitHub Actions (`.github/workflows/container.yml`) y se publica en GitHub Container Registry. El despliegue a Azure lo haces tú con `az`, sin secretos de Azure en GitHub.
 
+- **Arranque:** el contenedor ejecuta `npm run start:container`: migra, lanza el seed **en segundo plano** y arranca la API sin esperarlo (con la base lejos, el seed puede tardar minutos y la sonda de arranque reiniciaría el contenedor). Las líneas del seed (`Flights: … (N s)`, `Demo scenarios: …`) salen en el log después de `Nest application successfully started`. Railway sigue con `start:render`.
+- **Regiones:** la suscripción Azure for Students solo permite `westus`, `chilecentral`, `francecentral`, `spaincentral` y `brazilsouth` (por defecto `brazilsouth`).
+
 ## Una sola vez
 
 1. **Crédito:** portal.azure.com → Cost Management → Credits. Crea una alerta de presupuesto de ~5 USD.
@@ -28,9 +31,11 @@ El backend corre como contenedor en **Azure Container Apps** (plan de consumo, s
 Tras un push a `vuelos` y cuando el workflow *Container image* termine:
 
 ```bash
-./desplegar.sh          # última imagen
+./desplegar.sh          # la imagen del commit actual (HEAD)
 ./desplegar.sh <sha>    # una concreta
 ```
+
+Se usa el sha y no `latest` porque, si la etiqueta no cambia, Container Apps no crea revisión nueva.
 
 Si cambias variables, edita `.env.azure` y vuelve a ejecutar `./crear.sh` (actualiza la app).
 

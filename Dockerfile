@@ -24,5 +24,6 @@ COPY --from=build /app/dist ./dist
 COPY contracts ./contracts
 USER node
 EXPOSE 3000
-# Migra el esquema, siembra datos de referencia (idempotente) y arranca la API.
-CMD ["npm", "run", "start:render"]
+# Migra el esquema, lanza el seed (idempotente) EN SEGUNDO PLANO y arranca la API sin esperarlo: con una base
+# lejana el seed puede tardar minutos y la sonda de arranque reiniciaria el contenedor.
+CMD ["npm", "run", "start:container"]

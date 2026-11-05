@@ -24,6 +24,7 @@
     "migration:check:vuelos": "typeorm-ts-node-commonjs migration:generate -d src/modules/vuelos/migrations/data-source.ts --check src/modules/vuelos/migrations/Check",
     "migration:run:vuelos:prod": "typeorm migration:run -d dist/modules/vuelos/migrations/data-source.js",
     "start:render": "npm run migration:run:vuelos:prod && npm run seed:vuelos:prod && npm run start:prod",
+    "start:container": "npm run migration:run:vuelos:prod && (node dist/modules/vuelos/seed/seed.js &) && node dist/main",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

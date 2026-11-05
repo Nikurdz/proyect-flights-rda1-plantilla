@@ -22,19 +22,31 @@ const dataSource = new DataSource({
   entities: [join(__dirname, '..', '**', '*.entity.{ts,js}')],
   ssl: dbSsl(),
   synchronize: false, // the schema comes from `start:dev` (synchronize) or the migrations
+  // The seed is sequential; in a container it runs in the background next to the API, so it must not take the free
+  // database's few connections (Aiven: 20). SEED_POOL_MAX overrides.
+  extra: { max: Number(process.env.SEED_POOL_MAX) || 2 },
 });
 
 async function main(): Promise<void> {
   await dataSource.initialize();
 
+  // Elapsed time of each step: a slow database (far away) shows up here.
+  let mark = Date.now();
+  const took = (): string => {
+    const seconds = ((Date.now() - mark) / 1000).toFixed(1);
+    mark = Date.now();
+    return `${seconds} s`;
+  };
+
   const flights = await seedFlights(dataSource);
-  console.log(`Flights: ${flights.families} fare families; flights created this run: ${flights.flights}.`);
+  console.log(`Flights: ${flights.families} fare families; flights created this run: ${flights.flights} (${took()}).`);
 
   // Flights left full on purpose for the demo; SEED_DEMO_SCENARIOS=false turns it off.
   if (process.env.SEED_DEMO_SCENARIOS !== 'false') {
     // The synthetic passengers are encrypted like real ones, with the same key the application derives at boot.
     FieldCipher.configure(loadVuelosConfig(new ConfigService({ ...process.env })).dataEncryptionKey);
-    console.log(`Demo scenarios: flights left sold out or nearly full this run: ${await seedDemoScenarios(dataSource)}.`);
+    const scenarios = await seedDemoScenarios(dataSource);
+    console.log(`Demo scenarios: flights left sold out or nearly full this run: ${scenarios} (${took()}).`);
   }
 
   // An administrator is created only when explicitly configured; there is no default account.
@@ -47,7 +59,7 @@ async function main(): Promise<void> {
     throw new Error('ADMIN_PASSWORD must have at least 12 characters.');
   }
   const ecommerce = await seedEcommerce(dataSource, adminCorreo && adminContrasena ? { correo: adminCorreo, contrasena: adminContrasena } : undefined);
-  console.log(`E-commerce created this run: ${JSON.stringify(ecommerce)}.`);
+  console.log(`E-commerce created this run: ${JSON.stringify(ecommerce)} (${took()}).`);
 
   // The integrator of contract v2 (Booking Prototipo) signs in with client_credentials: created only when configured, never with a default secret.
   const partnerId = process.env.PARTNER_CLIENT_ID ?? 'booking-prototipo';
