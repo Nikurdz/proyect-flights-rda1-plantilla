@@ -52,3 +52,7 @@ docker-compose.override.yml
 /frontend/playwright-report
 /frontend/test-results
 /frontend/*.tsbuildinfo
+
+# Azure deploy secrets
+/deploy/azure/.env.azure
+/deploy/azure/.app.generada.json
