@@ -49,24 +49,36 @@ export class PassengerTravellers1793932853618 implements MigrationInterface {
     await queryRunner.query(`CREATE INDEX "IDX_vuelos_bookings_partner_order" ON "vuelos_bookings" ("channelPartnerOrderId") `);
     await queryRunner.query(`ALTER TABLE "vuelos_passengers" ADD "travellerId" uuid`);
 
-    // Backfill: a traveller per distinct document, then every passenger row points to its traveller.
+    // Backfill: a traveller per distinct document, then every passenger row points to its traveller. The documents are
+    // decrypted and hashed here (CPU only) and written in a few set-based statements: one query per passenger would take
+    // hours over a distant database (the production one has thousands of passengers).
     const rows: { passengerId: string; documentType: string; nationality: string; documentNumber: string }[] = await queryRunner.query(
       `SELECT "passengerId", "documentType", "nationality", "documentNumber" FROM "vuelos_passengers"`,
     );
     if (rows.length > 0) {
       const key = resolveKey();
       const travellers = new Map<string, { documentType: string; nationality: string }>();
-      const hashOf = new Map<string, string>();
+      const links: { passengerId: string; hash: string }[] = [];
       for (const row of rows) {
         const hash = documentHash(key, row.documentType, row.nationality, decrypt(key, row.documentNumber));
-        hashOf.set(row.passengerId, hash);
+        links.push({ passengerId: row.passengerId, hash });
         travellers.set(hash, { documentType: row.documentType.toUpperCase(), nationality: row.nationality.toUpperCase() });
       }
-      for (const [hash, t] of travellers) {
-        await queryRunner.query(`INSERT INTO "vuelos_travellers" ("documentType", "nationality", "documentHash") VALUES ($1, $2, $3) ON CONFLICT ("documentHash") DO NOTHING`, [t.documentType, t.nationality, hash]);
+      const CHUNK = 2000;
+      const distinct = [...travellers];
+      for (let i = 0; i < distinct.length; i += CHUNK) {
+        const part = distinct.slice(i, i + CHUNK);
+        await queryRunner.query(
+          `INSERT INTO "vuelos_travellers" ("documentType", "nationality", "documentHash") SELECT * FROM unnest($1::text[], $2::text[], $3::text[]) ON CONFLICT ("documentHash") DO NOTHING`,
+          [part.map(([, t]) => t.documentType), part.map(([, t]) => t.nationality), part.map(([hash]) => hash)],
+        );
       }
-      for (const row of rows) {
-        await queryRunner.query(`UPDATE "vuelos_passengers" SET "travellerId" = (SELECT "travellerId" FROM "vuelos_travellers" WHERE "documentHash" = $2) WHERE "passengerId" = $1`, [row.passengerId, hashOf.get(row.passengerId)]);
+      for (let i = 0; i < links.length; i += CHUNK) {
+        const part = links.slice(i, i + CHUNK);
+        await queryRunner.query(
+          `UPDATE "vuelos_passengers" p SET "travellerId" = t."travellerId" FROM unnest($1::uuid[], $2::text[]) AS m(pid, h) JOIN "vuelos_travellers" t ON t."documentHash" = m.h WHERE p."passengerId" = m.pid`,
+          [part.map((l) => l.passengerId), part.map((l) => l.hash)],
+        );
       }
     }
 
