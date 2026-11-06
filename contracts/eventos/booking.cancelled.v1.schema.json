@@ -4,7 +4,7 @@
   "title": "booking.cancelled",
   "description": "Reserva cancelada por el cliente o por la aerolínea; dispara reembolso y cierre de la orden.",
   "x-event-type": "booking.cancelled",
-  "x-schema-version": "1.1.0",
+  "x-schema-version": "1.2.0",
   "type": "object",
   "required": [
     "bookingId",
@@ -60,6 +60,13 @@
     },
     "seatsReleased": {
       "type": "number"
+    },
+    "partnerOrderId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Id de la orden del socio (salesChannel.partnerOrderId), si la reserva vino de un socio."
     }
   }
 }

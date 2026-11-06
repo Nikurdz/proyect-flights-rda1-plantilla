@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { ValueTransformer } from 'typeorm';
 
 const VERSION = 'v1';
@@ -37,11 +37,23 @@ export class FieldCipher {
     return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8');
   }
 
+  /**
+   * A deterministic, keyed fingerprint of a value (HMAC-SHA256, hex) for looking records up without decrypting them: the same
+   * input always gives the same output, which the random-IV ciphertext cannot. Its key is derived (HKDF) from the encryption
+   * key with its own label, so it never shares raw material with the cipher. Not reversible without the key.
+   */
+  static blindIndex(value: string): string {
+    return createHmac('sha256', blindKey(FieldCipher.requireKey())).update(value).digest('hex');
+  }
+
   private static requireKey(): Buffer {
     if (!FieldCipher.key) throw new Error('FieldCipher is not configured: no encryption key was loaded');
     return FieldCipher.key;
   }
 }
+
+/** Same derivation as the migration that built the index of the existing rows (kept in sync there). */
+export const blindKey = (encryptionKey: Buffer): Buffer => Buffer.from(hkdfSync('sha256', encryptionKey, '', 'vuelos-document-index', 32));
 
 /** TypeORM transformer storing a JSON-serialisable value as an encrypted `text` column. */
 export function encryptedJson<T>(): ValueTransformer {

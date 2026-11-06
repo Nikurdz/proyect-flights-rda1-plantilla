@@ -25,6 +25,17 @@ export function formatMinorUnits(minor: number): string {
   return `${sign}${whole}.${fraction}`;
 }
 
+/**
+ * An amount of the contract (`MoneyAmount`): total, plus `baseFare` and `taxes` when the tax part is known
+ * (`baseFare + taxes = total`). Holds created before the taxes were frozen have no tax part: only the total is sent.
+ */
+export function moneyAmount(currency: string, totalMinor: number, taxesMinor?: number | null): { currency: string; total: string; baseFare?: string; taxes?: string } {
+  if (taxesMinor === null || taxesMinor === undefined || taxesMinor < 0 || taxesMinor > totalMinor) {
+    return { currency, total: formatMinorUnits(totalMinor) };
+  }
+  return { currency, baseFare: formatMinorUnits(totalMinor - taxesMinor), taxes: formatMinorUnits(taxesMinor), total: formatMinorUnits(totalMinor) };
+}
+
 /** Multiplies minor units by a rate, rounding half away from zero. */
 export function scaleMinorUnits(minor: number, rate: number): number {
   return Math.round(minor * rate);

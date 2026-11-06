@@ -199,3 +199,41 @@ export function assertInfantAssociations(passengers: { passengerId: string; pass
     }
   }
 }
+
+/**
+ * Ecuadorian cédula (módulo 10): ten digits, province 01-24 (or 30 for Ecuadorians born abroad), third digit below 6, and a
+ * check digit that completes the weighted sum (2-1-2-1-2-1-2-1-2, digits above 9 reduced by 9) to a multiple of ten.
+ */
+export function isValidEcuadorCedula(value: string): boolean {
+  if (!/^\d{10}$/.test(value)) return false;
+  const province = Number(value.slice(0, 2));
+  if (!((province >= 1 && province <= 24) || province === 30)) return false;
+  if (Number(value[2]) >= 6) return false;
+  const sum = [...value.slice(0, 9)].reduce((total, digit, index) => {
+    const product = Number(digit) * (index % 2 === 0 ? 2 : 1);
+    return total + (product > 9 ? product - 9 : product);
+  }, 0);
+  return (10 - (sum % 10)) % 10 === Number(value[9]);
+}
+
+export interface PassengerDocument {
+  documentType: string;
+  documentNumber: string;
+  nationality?: string | null;
+}
+
+/** An Ecuadorian national ID (NATIONAL_ID, nationality EC) must be a real cédula; other documents are not judged here. */
+export function assertValidNationalIds(passengers: PassengerDocument[], field = 'passengers'): void {
+  passengers.forEach((p, index) => {
+    if (p.documentType !== 'NATIONAL_ID' || (p.nationality ?? '').toUpperCase() !== 'EC') return;
+    if (!isValidEcuadorCedula(p.documentNumber.trim())) {
+      throw new ProblemDetailsException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'VALIDATION_FAILED',
+        'Invalid national ID',
+        `The cédula of passenger ${index + 1} is not valid (check the ten digits and the verification digit).`,
+        [{ name: `${field}[${index}].documentNumber`, reason: 'not a valid Ecuadorian cédula' }],
+      );
+    }
+  });
+}

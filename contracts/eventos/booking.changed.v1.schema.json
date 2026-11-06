@@ -4,7 +4,7 @@
   "title": "booking.changed",
   "description": "Cambio de fecha aplicado a una reserva.",
   "x-event-type": "booking.changed",
-  "x-schema-version": "1.0.0",
+  "x-schema-version": "1.1.0",
   "type": "object",
   "required": [
     "bookingId",
@@ -39,6 +39,13 @@
     },
     "totalToPay": {
       "type": "string"
+    },
+    "partnerOrderId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Id de la orden del socio (salesChannel.partnerOrderId), si la reserva vino de un socio."
     }
   }
 }

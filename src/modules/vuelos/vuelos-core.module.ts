@@ -19,6 +19,7 @@ import { FlightOfferItinerary } from './entities/flight-offer-itinerary.entity';
 import { FlightOffer } from './entities/flight-offer.entity';
 import { IdempotencyRecord } from './entities/idempotency-record.entity';
 import { Passenger } from './entities/passenger.entity';
+import { Traveller } from './entities/traveller.entity';
 import { SeatAssignment } from './entities/seat-assignment.entity';
 import { Ticket } from './entities/ticket.entity';
 import { Vuelo } from './entities/vuelo.entity';
@@ -58,6 +59,7 @@ import { WebhooksService } from './services/webhooks.service';
       Booking,
       BookingCambio,
       Passenger,
+      Traveller,
       Ticket,
       SeatAssignment,
       IdempotencyRecord,

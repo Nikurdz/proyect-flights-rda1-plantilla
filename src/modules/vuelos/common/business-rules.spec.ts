@@ -6,6 +6,8 @@ import {
   assertNoDuplicatePassengers,
   assertOriginDestinationDiffer,
   assertPassengerTypeMatchesAge,
+  assertValidNationalIds,
+  isValidEcuadorCedula,
 } from './business-rules';
 
 describe('business-rules', () => {
@@ -126,6 +128,27 @@ describe('business-rules', () => {
           { ...base, passengerId: 'p2', firstName: 'JOSE', documentNumber: 'B654321' },
         ]),
       ).toThrow();
+    });
+  });
+  describe('Ecuadorian cédula', () => {
+    it('accepts a cédula with a correct check digit', () => {
+      expect(isValidEcuadorCedula('1710034065')).toBe(true);
+      expect(isValidEcuadorCedula('0926687856')).toBe(true);
+    });
+
+    it('rejects a wrong check digit, a wrong length, letters, a bad province or a bad third digit', () => {
+      expect(isValidEcuadorCedula('1710034066')).toBe(false);
+      expect(isValidEcuadorCedula('171003406')).toBe(false);
+      expect(isValidEcuadorCedula('17100340A5')).toBe(false);
+      expect(isValidEcuadorCedula('2510034065')).toBe(false);
+      expect(isValidEcuadorCedula('1760034065')).toBe(false);
+    });
+
+    it('judges only a NATIONAL_ID of an Ecuadorian passenger', () => {
+      expect(() => assertValidNationalIds([{ documentType: 'PASSPORT', documentNumber: 'AB1234', nationality: 'EC' }])).not.toThrow();
+      expect(() => assertValidNationalIds([{ documentType: 'NATIONAL_ID', documentNumber: '12345678', nationality: 'CO' }])).not.toThrow();
+      expect(() => assertValidNationalIds([{ documentType: 'NATIONAL_ID', documentNumber: '1710034065', nationality: 'EC' }])).not.toThrow();
+      expect(() => assertValidNationalIds([{ documentType: 'NATIONAL_ID', documentNumber: '1710034066', nationality: 'EC' }])).toThrow();
     });
   });
 });

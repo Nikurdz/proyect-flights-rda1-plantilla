@@ -218,7 +218,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const bookingId = booked.body.bookingId as string;
 
       // Another user of the same partner cannot see it; the same user can.
-      expect((await api().get(`${V2}/bookings/${bookingId}`).set(bearer(token, 'user-3'))).status).toBe(403);
+      expect((await api().get(`${V2}/bookings/${bookingId}`).set(bearer(token, 'user-3'))).status).toBe(404);
       await api().get(`${V2}/bookings/${bookingId}`).set(bearer(token, 'user-2')).expect(200);
       const list = await api().get(`${V2}/bookings`).set(bearer(token, 'user-2')).expect(200);
       expect(list.body.items.some((b: { bookingId: string }) => b.bookingId === bookingId)).toBe(true);
@@ -481,7 +481,8 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       expect(sample.type).toBe('ec.edu.epn.booking.vuelos.booking.confirmed');
       expect(sample.correlationid).toBeDefined();
       expect(sample.data).toMatchObject({ status: 'CONFIRMED' });
-      expect(feed.body.metadata.next_after).toMatch(/^evt-vue-\d{6}$/);
+      // The cursor is the id of the last event of the page (what Booking keeps), not an opaque counter.
+      expect(feed.body.metadata.next_after).toBe(feed.body.events[feed.body.events.length - 1].id);
       contract.check('get', '/vuelos/eventos', 200, feed.body);
 
       const page1 = await api().get(`${V2}/eventos`).query({ limit: 2 }).set(bearer(token)).expect(200);

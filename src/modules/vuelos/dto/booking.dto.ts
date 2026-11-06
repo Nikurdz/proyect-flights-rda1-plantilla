@@ -33,6 +33,17 @@ export class MoneyInputDto {
   @ApiProperty({ example: '120.00', pattern: '^\\d+\\.\\d{2}$' })
   @Matches(/^\d+\.\d{2}$/)
   total: string;
+
+  // A caller may send back the `lockedPrice` of the hold as it received it (with its breakdown); only the total is compared.
+  @ApiPropertyOptional({ example: '100.00', pattern: '^\\d+\\.\\d{2}$' })
+  @IsOptional()
+  @Matches(/^\d+\.\d{2}$/)
+  baseFare?: string;
+
+  @ApiPropertyOptional({ example: '20.00', pattern: '^\\d+\\.\\d{2}$' })
+  @IsOptional()
+  @Matches(/^\d+\.\d{2}$/)
+  taxes?: string;
 }
 
 export class PaymentReferenceDto {

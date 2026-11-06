@@ -3,7 +3,8 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Repository } from 'typeorm';
 import type { AuthClaims } from '../auth/token.service';
-import { assertInfantAssociations, assertNoDuplicatePassengers, assertPassengerTypeMatchesAge } from '../common/business-rules';
+import { documentHashOf, ensureTravellers } from '../common/travellers';
+import { assertInfantAssociations, assertNoDuplicatePassengers, assertPassengerTypeMatchesAge, assertValidNationalIds } from '../common/business-rules';
 import { decodeCursor, encodeCursor } from '../common/cursor.util';
 import { toIso, utcDayRange } from '../common/date.util';
 import { mapBookingUniqueViolation } from '../common/db-errors';
@@ -48,6 +49,8 @@ export interface BookingOptions {
 export interface BookingOutcome {
   response: BookingDetailResponseDto;
   holdId: string;
+  /** The partner's own order id (`salesChannel.partnerOrderId`), carried by the booking's events. */
+  partnerOrderId?: string | null;
 }
 
 @Injectable()
@@ -111,6 +114,7 @@ export class BookingsService {
       pnr: outcome.response.pnr,
       holdId: outcome.holdId,
       ownerId,
+      partnerOrderId: outcome.partnerOrderId,
       grandTotal: outcome.response.grandTotal,
       ticketNumbers: (outcome.response.tickets ?? []).map((t) => t.eTicketNumber),
       tickets: (outcome.response.tickets ?? []).map((t) => ({ ticketId: t.ticketId, eTicketNumber: t.eTicketNumber, passengerId: t.passengerId })),
@@ -167,6 +171,8 @@ export class BookingsService {
 
     this.validatePassengers(request, hold.passengersBreakdown, firstFlight, lastFlight, vuelos, hold.itinerarySelections.map((s) => s.itineraryId));
     if (options.passportForInternational) await this.assertPassportForInternational(manager, request, vuelos);
+    // After the passport rule (an international trip asks for a passport first): an Ecuadorian national ID must be a real cédula.
+    assertValidNationalIds(request.passengers);
 
     // Booking charged the customer: when it says how much, it must be what the hold priced.
     const paid = request.payment.amount;
@@ -197,6 +203,7 @@ export class BookingsService {
         totalMinor: hold.lockedPriceMinor,
         currency: hold.currency,
         paymentReference: request.payment.paymentReference,
+        paymentProvider: request.payment.provider ?? null,
         channelPartnerId: request.salesChannel?.partnerId ?? null,
         channelPartnerOrderId: request.salesChannel?.partnerOrderId ?? null,
         channelPackageId: request.salesChannel?.packageId ?? null,
@@ -205,10 +212,13 @@ export class BookingsService {
       }),
     );
 
+    // One traveller per travel document, however many bookings the person has.
+    const travellers = await ensureTravellers(manager, request.passengers);
     const savedPassengers = await manager.save(
       request.passengers.map((p) =>
         manager.create(Passenger, {
           bookingId: booking.bookingId,
+          travellerId: travellers.get(documentHashOf(p))!,
           clientPassengerId: p.passengerId,
           associatedAdultClientId: p.associatedAdultId ?? null,
           passengerType: p.passengerType as PassengerType,
@@ -276,7 +286,7 @@ export class BookingsService {
       );
     }
 
-    return { response: this.toBookingDetail(booking, issuedTickets, []), holdId: hold.holdId };
+    return { response: this.toBookingDetail(booking, issuedTickets, []), holdId: hold.holdId, partnerOrderId: booking.channelPartnerOrderId };
   }
 
   private assertHoldUsable(hold: FlightHold): void {

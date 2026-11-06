@@ -3,6 +3,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { seedLocalidades } from '../ecommerce/seed/ecommerce.seed';
 import { Aerolinea } from '../entities/aerolinea.entity';
 import { buildSeatGrid } from '../common/seat-grid';
+import { ensureTravellers } from '../common/travellers';
 import { Booking } from '../entities/booking.entity';
 import { Passenger } from '../entities/passenger.entity';
 import { Ticket } from '../entities/ticket.entity';
@@ -383,16 +384,19 @@ async function fillSeats(dataSource: DataSource, vuelo: Vuelo, ocupados: number,
       );
       for (let i = 0; i < size; i++) {
         sequence += 1;
+        const documentNumber = `DEMO${vuelo.id.slice(0, 4).toUpperCase()}${String(sequence).padStart(4, '0')}`;
+        const travellers = await ensureTravellers(manager, [{ documentType: 'PASSPORT', nationality: 'EC', documentNumber }]);
         const passenger = await manager.save(
           manager.create(Passenger, {
             bookingId: booking.bookingId,
+            travellerId: [...travellers.values()][0],
             clientPassengerId: `p${i + 1}`,
             associatedAdultClientId: null,
             passengerType: 'ADULT',
             firstName: FIRST_NAMES[randomInt(FIRST_NAMES.length)],
             lastName: LAST_NAMES[randomInt(LAST_NAMES.length)],
             documentType: 'PASSPORT',
-            documentNumber: `DEMO${vuelo.id.slice(0, 4).toUpperCase()}${String(sequence).padStart(4, '0')}`,
+            documentNumber,
             nationality: 'EC',
             birthDate: `${1960 + randomInt(40)}-0${1 + randomInt(9)}-1${randomInt(10)}`,
             gender: randomInt(2) === 0 ? 'F' : 'M',

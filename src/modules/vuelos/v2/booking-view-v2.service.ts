@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { toIso } from '../common/date.util';
-import { formatMinorUnits } from '../common/money.util';
+import { moneyAmount } from '../common/money.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { buildSeatGrid } from '../common/seat-grid';
 import { BoardingPassListResponseDto, CheckInResponseDto } from '../dto/postventa.dto';
@@ -60,7 +60,7 @@ export class BookingViewV2Service {
       bookingId: booking.bookingId,
       pnr: booking.pnr,
       status: booking.status,
-      grandTotal: { currency: booking.currency, total: formatMinorUnits(booking.totalMinor) },
+      grandTotal: moneyAmount(booking.currency, booking.totalMinor, context.hold.lockedTaxesMinor),
       createdAt: toIso(booking.createdAt),
       updatedAt: toIso(booking.updatedAt),
       holdId: booking.holdId,
@@ -80,7 +80,7 @@ export class BookingViewV2Service {
       bookingId: booking.bookingId,
       pnr: booking.pnr,
       status: booking.status,
-      grandTotal: { currency: booking.currency, total: formatMinorUnits(booking.totalMinor) },
+      grandTotal: moneyAmount(booking.currency, booking.totalMinor, context.hold.lockedTaxesMinor),
       createdAt: toIso(booking.createdAt),
       updatedAt: toIso(booking.updatedAt),
       holdId: booking.holdId,

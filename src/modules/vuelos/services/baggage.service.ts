@@ -126,6 +126,7 @@ export class BaggageService {
         pnr: context.booking.pnr,
         ownerId,
         status: context.booking.status,
+        partnerOrderId: context.booking.channelPartnerOrderId,
         passengerId: request.passengerId,
         itineraryId: leg.itineraryId,
         quantity: request.quantity,

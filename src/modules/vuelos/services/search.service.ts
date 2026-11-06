@@ -137,7 +137,8 @@ export class SearchService {
     return qb
       .andWhere('v."fechaSalida" >= :start AND v."fechaSalida" < :end', { start, end })
       .andWhere('v."fechaSalida" > :now', { now: new Date() })
-      .andWhere("v.estado = 'SCHEDULED'")
+      // A delayed flight still flies: it stays on sale (only a cancelled one, or one that already left, is closed).
+      .andWhere("v.estado IN ('SCHEDULED', 'DELAYED')")
       // The catalogue lists a full flight too (as sold out); every other caller wants only what can be sold.
       .andWhere(options.includeSoldOut ? '1 = 1' : 'v."asientosDisponibles" >= :seatsNeeded', { seatsNeeded })
       .orderBy('v."fechaSalida"', 'ASC')
@@ -218,7 +219,7 @@ export class SearchService {
       operatingCarrier: vuelo.codigoAerolinea,
       aircraft: null,
       durationMinutes: vuelo.durationMinutes,
-      status: vuelo.estado === 'CANCELLED' ? 'CANCELLED' : 'SCHEDULED',
+      status: vuelo.estado === 'CANCELLED' || vuelo.estado === 'DELAYED' ? vuelo.estado : 'SCHEDULED',
     };
   }
 }

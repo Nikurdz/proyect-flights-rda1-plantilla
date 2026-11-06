@@ -203,7 +203,7 @@ describeIntegration('Vuelos core against a real Postgres', () => {
       expect(status.body.remainingSeconds).toBeGreaterThan(800);
 
       const booking = await createBooking('owner-flow', hold.body.holdId, [pax('a1', { assignedSeats: [{ segmentId, seatNumber: '14C' }] })], 'pay_flow_0001').expect(201);
-      expect(booking.body).toMatchObject({ status: 'CONFIRMED', grandTotal: hold.body.lockedPrice });
+      expect(booking.body).toMatchObject({ status: 'CONFIRMED', grandTotal: { currency: hold.body.lockedPrice.currency, total: hold.body.lockedPrice.total } });
       expect(booking.body.tickets).toHaveLength(1);
       expect(booking.body.tickets[0].eTicketNumber).toMatch(/^\d{13}$/);
       expect((await holdRow(hold.body.holdId)).status).toBe('CONSUMED');

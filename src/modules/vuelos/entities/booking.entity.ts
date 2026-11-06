@@ -26,6 +26,7 @@ export const BOOKING_STATUSES: BookingStatus[] = [
 
 @Entity('vuelos_bookings')
 @Index('IDX_vuelos_bookings_owner_created', ['ownerId', 'createdAt', 'bookingId'])
+@Index('IDX_vuelos_bookings_partner_order', ['channelPartnerOrderId'])
 export class Booking {
   @PrimaryGeneratedColumn('uuid')
   bookingId: string;
@@ -58,6 +59,10 @@ export class Booking {
   // One payment can back at most one booking.
   @Column({ type: 'varchar', length: 100, unique: true })
   paymentReference: string;
+
+  // Who processed the payment (`payment.provider` of contract v2, e.g. BOOKING_PROTOTIPO); null when the caller did not say.
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  paymentProvider?: string | null;
 
   // Sales channel of contract v2 (who sold it: the partner, its order, a package, the promotion applied). All optional.
   @Column({ type: 'varchar', length: 100, nullable: true })

@@ -199,6 +199,7 @@ export class DateChangeService {
         pnr: context.booking.pnr,
         ownerId,
         status: context.booking.status,
+        partnerOrderId: context.booking.channelPartnerOrderId,
         itineraryId: offer.itineraryId,
         fromVueloId: offer.fromVueloId,
         toVueloId: newVuelo.id,

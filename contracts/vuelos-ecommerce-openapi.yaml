@@ -950,6 +950,309 @@ paths:
       summary: 📥 Sincronizar el catálogo del proveedor (ADMIN)
       tags:
         - E-commerce · Proveedores
+  /admin/reservas:
+    get:
+      description: >-
+        Busca por localizador, orden del socio (ORD-BKP-…), referencia de pago (PAY-BKP-…), canal o documento del pasajero (cédula o
+        pasaporte, por índice ciego). El documento sale enmascarado.
+      operationId: ReservasAdminController_list
+      parameters:
+        - description: Localizador (PNR).
+          in: query
+          name: pnr
+          required: false
+          schema:
+            example: ABC123
+            type: string
+        - description: Orden del socio (salesChannel.partnerOrderId).
+          in: query
+          name: partnerOrderId
+          required: false
+          schema:
+            example: ORD-BKP-20261104-000123
+            type: string
+        - description: Referencia del pago.
+          in: query
+          name: paymentReference
+          required: false
+          schema:
+            example: PAY-BKP-20261104-000123
+            type: string
+        - description: 'SOCIO: vendida por un socio (Booking) con OAuth2; DIRECTO: vendida por la web de la aerolínea.'
+          in: query
+          name: canal
+          required: false
+          schema:
+            enum:
+              - SOCIO
+              - DIRECTO
+            type: string
+        - description: Documento del pasajero (cédula o pasaporte); se busca por su índice ciego, sin descifrar.
+          in: query
+          name: documento
+          required: false
+          schema:
+            example: '1710034065'
+            type: string
+        - in: query
+          name: tipoDocumento
+          required: false
+          schema:
+            default: NATIONAL_ID
+            enum:
+              - NATIONAL_ID
+              - PASSPORT
+            type: string
+        - description: Nacionalidad del documento (2 letras).
+          in: query
+          name: nacionalidad
+          required: false
+          schema:
+            default: EC
+            example: EC
+            type: string
+        - in: query
+          name: pagina
+          required: false
+          schema:
+            default: 1
+            minimum: 1
+            type: number
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 20
+            maximum: 100
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          description: Página de reservas con canal, pago, vuelos, pasajeros (travellerId), asientos y check-in.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Reservas de todos los canales (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/reservas/{bookingId}:
+    get:
+      operationId: ReservasAdminController_detail
+      parameters:
+        - in: path
+          name: bookingId
+          required: false
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          description: La reserva con su historial de cambios.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Detalle de una reserva (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/reservas/{bookingId}/cancelar:
+    post:
+      description: >-
+        Misma penalidad y reembolso que la cancelación del viajero; libera los asientos y publica booking.cancelled al dueño de la reserva
+        (el feed del socio). Requiere Idempotency-Key.
+      operationId: ReservasAdminController_cancel
+      parameters:
+        - in: header
+          name: idempotency-key
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: bookingId
+          required: false
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequestDto'
+        required: true
+      responses:
+        '200':
+          description: Resultado de la cancelación.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Cancelación de mostrador (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/reservas/{bookingId}/check-in:
+    post:
+      description: Mismas reglas y ventana que el check-in del viajero (409 fuera de ella). Booking lo ve en el feed de eventos.
+      operationId: ReservasAdminController_checkIn
+      parameters:
+        - in: path
+          name: bookingId
+          required: false
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          description: Pasajeros con check-in hecho.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Check-in de mostrador (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/reservas/{bookingId}/cotizacion-cancelacion:
+    get:
+      operationId: ReservasAdminController_quote
+      parameters:
+        - in: path
+          name: bookingId
+          required: false
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          description: Reembolso y penalidad de la reserva.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Cotización de cancelación de mostrador (ADMIN)
+      tags:
+        - E-commerce · Back-office
   /admin/usuarios:
     get:
       description: Más recientes primero, con búsqueda por correo o nombre y filtro por rol. Nunca incluye contraseñas ni tokens.
@@ -1513,6 +1816,61 @@ paths:
       security:
         - bearer: []
       summary: Cancelar un vuelo (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/vuelos/{vueloId}/estado:
+    patch:
+      description: Transiciones válidas como en la API v2; un vuelo DELAYED exige la salida estimada. Publica flight.status_changed.
+      operationId: AdminEstadoVueloController_cambiarEstado
+      parameters:
+        - in: path
+          name: vueloId
+          required: true
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminEstadoVueloDto'
+        required: true
+      responses:
+        '200':
+          description: Estado del vuelo tras el cambio.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: 'Estado operativo de un vuelo: retraso, puerta, embarque... (ADMIN)'
       tags:
         - E-commerce · Back-office
   /admin/vuelos/{vueloId}/reprogramar:
@@ -4941,6 +5299,34 @@ components:
         - duracionMinutos
         - precioBaseUsd
       type: object
+    AdminEstadoVueloDto:
+      properties:
+        departureGate:
+          description: Puerta de embarque.
+          example: B12
+          type: string
+        estimatedArrivalAt:
+          format: date-time
+          type: string
+        estimatedDepartureAt:
+          description: Obligatoria si el vuelo queda DELAYED.
+          format: date-time
+          type: string
+        reason:
+          type: string
+        status:
+          enum:
+            - SCHEDULED
+            - BOARDING
+            - DEPARTED
+            - DELAYED
+            - ARRIVED
+            - CANCELLED
+            - DIVERTED
+          type: string
+      required:
+        - status
+      type: object
     AdminFacturaDetalleDto:
       properties:
         cantidad:
@@ -5522,6 +5908,8 @@ components:
           type: array
         payment:
           $ref: '#/components/schemas/PaymentReferenceDto'
+        salesChannel:
+          $ref: '#/components/schemas/SalesChannelDto'
       required:
         - holdId
         - passengers
@@ -5561,13 +5949,21 @@ components:
     CancelBookingRequestDto:
       properties:
         quoteId:
-          description: quoteId of a live cancellation quote of this booking.
+          description: >-
+            quoteId of a live cancellation quote of this booking. Optional: without it the cancellation is quoted and applied at once
+            (contract v2).
           format: uuid
           type: string
         reason:
           type: string
-      required:
-        - quoteId
+        reasonCode:
+          default: CUSTOMER_REQUEST
+          enum:
+            - CUSTOMER_REQUEST
+            - SAGA_COMPENSATION
+            - FLIGHT_CANCELLED
+            - OTHER
+          type: string
       type: object
     CancelBookingResponseDto:
       properties:
@@ -6140,6 +6536,12 @@ components:
           type: string
         passengersBreakdown:
           $ref: '#/components/schemas/PassengerBreakdownDto'
+        ttlMinutes:
+          default: 15
+          description: Minutos que dura el bloqueo (contrato v2). Sin él, HOLD_TTL_MINUTES.
+          maximum: 30
+          minimum: 5
+          type: number
       required:
         - offerId
         - itinerarySelections
@@ -6593,6 +6995,28 @@ components:
         - currency
         - total
       type: object
+    MoneyInputDto:
+      properties:
+        baseFare:
+          example: '100.00'
+          pattern: ^\d+\.\d{2}$
+          type: string
+        currency:
+          example: USD
+          pattern: ^[A-Z]{3}$
+          type: string
+        taxes:
+          example: '20.00'
+          pattern: ^\d+\.\d{2}$
+          type: string
+        total:
+          example: '120.00'
+          pattern: ^\d+\.\d{2}$
+          type: string
+      required:
+        - currency
+        - total
+      type: object
     MontoDto:
       properties:
         moneda:
@@ -6982,9 +7406,19 @@ components:
       type: object
     PaymentReferenceDto:
       properties:
+        amount:
+          allOf:
+            - $ref: '#/components/schemas/MoneyInputDto'
+          description: Monto cobrado por Booking; si viene y no coincide con el precio retenido, 409 AMOUNT_MISMATCH (contrato v2).
         paymentReference:
           description: Referencia a un pago gestionado por la Payment API
           pattern: ^[A-Za-z0-9._:-]{8,100}$
+          type: string
+        provider:
+          default: BOOKING_PROTOTIPO
+          enum:
+            - BOOKING_PROTOTIPO
+            - AIRLINE_DIRECT
           type: string
       required:
         - paymentReference
@@ -7313,6 +7747,23 @@ components:
         - precioAnterior
         - precioNuevo
         - venceEn
+      type: object
+    SalesChannelDto:
+      properties:
+        discountPercentage:
+          maximum: 100
+          minimum: 0
+          type: number
+        packageId:
+          nullable: true
+          type: string
+        partnerId:
+          type: string
+        partnerOrderId:
+          type: string
+        promotionApplied:
+          default: false
+          type: boolean
       type: object
     SaludViewDto:
       properties:

@@ -2,7 +2,7 @@
 
 > Generado por `npm run docs:modelo` desde las entidades TypeORM: no se edita a mano.
 
-Esquema **real** de PostgreSQL (61 tablas, 82 llaves foráneas) versionado con migraciones (`src/modules/vuelos/migrations/`). Está en **tercera forma normal**: cada dato vive en una sola tabla, los arreglos y documentos se modelan como tablas hijas y toda relación es una `FOREIGN KEY` real.
+Esquema **real** de PostgreSQL (66 tablas, 84 llaves foráneas) versionado con migraciones (`src/modules/vuelos/migrations/`). Está en **tercera forma normal**: cada dato vive en una sola tabla, los arreglos y documentos se modelan como tablas hijas y toda relación es una `FOREIGN KEY` real.
 
 Reglas del modelo:
 
@@ -42,6 +42,8 @@ erDiagram
     vuelos_flight_offers ||--o{ vuelos_flight_offer_itineraries : "offerId"
     vuelos ||--o{ vuelos_flight_offer_itineraries : "vueloId"
     vuelos_bookings ||--o{ vuelos_passengers : "bookingId"
+    vuelos_travellers ||--o{ vuelos_passengers : "travellerId"
+    vuelos_promocion_contrato ||--o{ vuelos_promocion_alcance : "contratoId"
     vuelos ||--o{ vuelos_seat_assignments : "vueloId"
     vuelos_bookings ||--o{ vuelos_seat_assignments : "bookingId"
     vuelos_passengers ||--o{ vuelos_seat_assignments : "passengerId"
@@ -128,11 +130,11 @@ erDiagram
 
 | Tabla | Para qué sirve | Clave | Columnas | Llaves foráneas (borrado) |
 |---|---|---|---|---|
-| `vuelos` | Vuelo programado: número, ruta, horario, tarifa base e inventario de asientos | `id` | `codigoAerolinea`, `codigoVuelo`, `origenIATA`, `destinoIATA`, `fechaSalida`, `fechaLlegada`, `precioBase`, `asientosDisponibles`, `capacidadTotal`, `durationMinutes`, `estado` | `codigoAerolinea` → `vuelos_aerolineas` (restringe); `origenIATA` → `ecom_localidades` (restringe); `destinoIATA` → `ecom_localidades` (restringe) |
+| `vuelos` | Vuelo programado: número, ruta, horario, tarifa base e inventario de asientos | `id` | `codigoAerolinea`, `codigoVuelo`, `origenIATA`, `destinoIATA`, `fechaSalida`, `fechaLlegada`, `precioBase`, `asientosDisponibles`, `capacidadTotal`, `durationMinutes`, `estado`, `retrasoMinutos`, `salidaEstimada`, `llegadaEstimada`, `puertaSalida`, `estadoActualizadoEn` | `codigoAerolinea` → `vuelos_aerolineas` (restringe); `origenIATA` → `ecom_localidades` (restringe); `destinoIATA` → `ecom_localidades` (restringe) |
 | `vuelos_aerolineas` | Aerolíneas por código IATA | `codigo` | `nombre` | — |
 | `vuelos_baggage_purchases` | Equipaje extra comprado por pasajero y tramo | `id` | `bookingId`, `passengerId`, `itineraryId`, `vueloId`, `quantity`, `unitPriceMinor`, `totalMinor`, `currency`, `paymentReference`, `createdAt` | `bookingId` → `vuelos_bookings` (cascada); `passengerId` → `vuelos_passengers` (cascada); `vueloId` → `vuelos` (restringe) |
 | `vuelos_booking_cambios` | Historial de cambios de una reserva (cambio de fecha, reprogramación, cancelación) | `id` | `bookingId`, `cambiadoEn`, `descripcion` | `bookingId` → `vuelos_bookings` (cascada) |
-| `vuelos_bookings` | Reserva emitida (PNR) con estado y total | `bookingId` | `pnr`, `holdId`, `status`, `ownerId`, `totalMinor`, `currency`, `paymentReference`, `createdAt`, `updatedAt` | `holdId` → `vuelos_flight_holds` (restringe) |
+| `vuelos_bookings` | Reserva emitida (PNR) con estado y total | `bookingId` | `pnr`, `holdId`, `status`, `ownerId`, `totalMinor`, `currency`, `paymentReference`, `paymentProvider`, `channelPartnerId`, `channelPartnerOrderId`, `channelPackageId`, `channelPromotionApplied`, `channelDiscountPercentage`, `createdAt`, `updatedAt` | `holdId` → `vuelos_flight_holds` (restringe) |
 | `vuelos_cancellation_quotes` | Cotizaciones de cancelación (reembolso y penalidad) | `quoteId` | `bookingId`, `ownerId`, `isRefundable`, `refundMinor`, `penaltyMinor`, `currency`, `status`, `expiresAt`, `createdAt` | `bookingId` → `vuelos_bookings` (cascada) |
 | `vuelos_check_ins` | Check-in por pasajero y vuelo con grupo y posición de abordaje | `id` | `bookingId`, `passengerId`, `vueloId`, `seat`, `boardingGroup`, `boardingPosition`, `createdAt` | `bookingId` → `vuelos_bookings` (cascada); `passengerId` → `vuelos_passengers` (cascada); `vueloId` → `vuelos` (restringe) |
 | `vuelos_date_change_offers` | Opciones cotizadas de cambio de fecha | `changeOfferId` | `bookingId`, `ownerId`, `itineraryId`, `fromVueloId`, `toVueloId`, `fareDifferenceMinor`, `taxDifferenceMinor`, `changeFeeMinor`, `totalToPayMinor`, `currency`, `status`, `paymentReference`, `expiresAt`, `createdAt` | `bookingId` → `vuelos_bookings` (cascada); `fromVueloId` → `vuelos` (restringe); `toVueloId` → `vuelos` (restringe) |
@@ -142,12 +144,17 @@ erDiagram
 | `vuelos_flight_offer_itineraries` | Tramos de cada oferta de búsqueda (id de itinerario → vuelo) | `id` | `offerId`, `orden`, `itineraryId`, `vueloId` | `offerId` → `vuelos_flight_offers` (cascada); `vueloId` → `vuelos` (cascada) |
 | `vuelos_flight_offers` | Oferta de búsqueda con precio total y composición del grupo | `offerId` | `grandTotalMinor`, `currency`, `adults`, `youths`, `children`, `infants`, `createdAt`, `expiresAt` | — |
 | `vuelos_idempotency_records` | Respuestas guardadas por clave de idempotencia (documento opaco) | `idempotencyKey + route + ownerId` | `requestHash`, `state`, `responseStatus`, `responseBody`, `createdAt` | — |
-| `vuelos_passengers` | Pasajeros de la reserva (datos personales cifrados) | `passengerId` | `bookingId`, `clientPassengerId`, `associatedAdultClientId`, `passengerType`, `firstName`, `lastName`, `documentType`, `documentNumber`, `nationality`, `birthDate`, `gender`, `contactEmail`, `contactPhone` | `bookingId` → `vuelos_bookings` (cascada) |
+| `vuelos_outbox` | Bitácora ordenada de eventos del contrato v2 (CloudEvents) que Booking lee en GET /eventos | `seq` | `eventoId`, `type`, `subject`, `correlationId`, `occurredAt`, `cloudEvent`, `createdAt` | — |
+| `vuelos_partner_clients` | Clientes OAuth2 de los socios (client_credentials): secreto con hash y alcances | `clientId` | `secretHash`, `scopes`, `activo`, `createdAt` | — |
+| `vuelos_passengers` | Pasajeros de la reserva (datos personales cifrados) | `passengerId` | `bookingId`, `travellerId`, `clientPassengerId`, `associatedAdultClientId`, `passengerType`, `firstName`, `lastName`, `documentType`, `documentNumber`, `nationality`, `birthDate`, `gender`, `contactEmail`, `contactPhone` | `bookingId` → `vuelos_bookings` (cascada); `travellerId` → `vuelos_travellers` (restringe) |
+| `vuelos_promocion_alcance` | Alcances (vuelos, rutas) a los que aplica el contrato de promociones | `contratoId + tipo + valor` | — | `contratoId` → `vuelos_promocion_contrato` (cascada) |
+| `vuelos_promocion_contrato` | Contrato de promociones acordado con el socio (porcentaje máximo) | `id` | `permitePromociones`, `porcentajeDescuentoMaximo`, `vigenciaHasta`, `condicionesCombo`, `actualizadoEn` | — |
 | `vuelos_seat_assignments` | Asientos asignados; la clave única (vuelo, asiento) impide venderlo dos veces | `id` | `vueloId`, `seatNumber`, `bookingId`, `passengerId` | `vueloId` → `vuelos` (restringe); `bookingId` → `vuelos_bookings` (cascada); `passengerId` → `vuelos_passengers` (cascada) |
 | `vuelos_tickets` | Billete electrónico por pasajero | `ticketId` | `bookingId`, `passengerId`, `eTicketNumber`, `status`, `issuedAt` | `bookingId` → `vuelos_bookings` (cascada); `passengerId` → `vuelos_passengers` (cascada) |
+| `vuelos_travellers` | Persona única por documento de viaje (índice ciego HMAC, sin datos legibles); los pasajeros de varias reservas apuntan a ella | `travellerId` | `documentType`, `nationality`, `documentHash`, `createdAt` | — |
 | `vuelos_webhook_deliveries` | Cola de entregas de webhooks con reintentos | `deliveryId` | `subscriptionId`, `eventId`, `eventType`, `payload`, `status`, `attempts`, `nextAttemptAt`, `lastStatusCode`, `lastError`, `createdAt`, `deliveredAt` | `subscriptionId` → `vuelos_webhook_subscriptions` (cascada) |
 | `vuelos_webhook_subscription_events` | Tipos de evento que recibe cada suscripción | `subscriptionId + evento` | — | `subscriptionId` → `vuelos_webhook_subscriptions` (cascada) |
-| `vuelos_webhook_subscriptions` | Suscriptores de eventos de reserva (secreto cifrado) | `id` | `ownerId`, `url`, `secret`, `active`, `createdAt` | — |
+| `vuelos_webhook_subscriptions` | Suscriptores de eventos de reserva (secreto cifrado) | `id` | `ownerId`, `url`, `secret`, `active`, `apiVersion`, `createdAt` | — |
 
 ### E-commerce R1
 

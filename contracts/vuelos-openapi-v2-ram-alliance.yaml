@@ -178,7 +178,7 @@ paths:
         Expone en orden cronológico los eventos registrados por el patrón Transactional Outbox. Booking lo usa para
         reconciliar eventos que no llegaron por webhook. Paginación por cursor con `after` (id del último evento leído).
 
-        **Nota de implementación (RAM Alliance):** El `id` de cada evento es el UUID del evento (el mismo del webhook). El cursor es `metadata.next_after` (`evt-vue-000120`); un `after` desconocido responde 400 en lugar de reiniciar. `metadata.total` es el tamaño de la página.
+        **Nota de implementación (RAM Alliance):** El `id` de cada evento es el UUID del evento (el mismo del webhook). El cursor es `metadata.next_after`, el `id` del último evento de la página (se acepta también el formato antiguo `evt-vue-000120`); un `after` desconocido responde 400 en lugar de reiniciar. Los eventos de reserva incluyen `partnerOrderId` cuando la reserva vino de un socio. `metadata.total` es el tamaño de la página.
       security:
         - PartnerOAuth2:
             - flights:read
@@ -1476,7 +1476,7 @@ paths:
           '{$request.body#/url}':
             post:
               summary: Entrega de un evento (CloudEvent estructurado) a la URL registrada
-              description: Se envía por cada evento suscrito. Responda 2xx; si no, se reintenta (1 min, 5 min, 30 min, 2 h, 6 h) y después queda `DEAD`.
+              description: Se envía por cada evento suscrito. Responda 2xx (por ejemplo 202); si no, se reintenta (1 min, 5 min, 30 min, 2 h, 6 h) y después queda `DEAD`.
               parameters:
                 - name: X-Webhook-Id
                   in: header
@@ -2059,7 +2059,7 @@ components:
       example: CHECKED_IN
     MoneyAmount:
       type: object
-      description: Importes como string decimal para evitar errores de punto flotante.
+      description: Monto con su desglose. `lockedPrice` (hold) y `grandTotal` (reserva) traen `baseFare` e `taxes` cuando se conocen, igual que la búsqueda (`baseFare + taxes = total`).
       required:
         - currency
         - total
@@ -2595,9 +2595,12 @@ components:
         documentNumber:
           type: string
           example: '1723456789'
+          description: Con `documentType` NATIONAL_ID y `nationality` EC se valida la cédula ecuatoriana (10 dígitos y dígito verificador); si no, 422 `VALIDATION_FAILED` con `invalidParams` `passengers[i].documentNumber`.
         nationality:
           type: string
           example: EC
+          description: País en ISO 3166-1 alfa-2, dos letras (`EC`, no `ECU`); si no, 400 con `invalidParams` que nombra el campo.
+          pattern: ^[A-Z]{2}$
         documentExpiryDate:
           type: string
           format: date

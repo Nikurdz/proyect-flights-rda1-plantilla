@@ -8,6 +8,7 @@ import {
   assertInfantRatio,
   assertNoDuplicatePassengers,
   assertPassengerTypeMatchesAge,
+  assertValidNationalIds,
 } from '../../common/business-rules';
 import { toIso } from '../../common/date.util';
 import { DomainEventBus } from '../../common/domain-event-bus';
@@ -334,6 +335,7 @@ export class OfertasService implements OnModuleInit {
       };
     });
 
+    assertValidNationalIds(pasajeros.map((p) => ({ documentType: p.documento.tipo, documentNumber: p.documento.numero, nationality: p.nacionalidad })), 'pasajeros');
     assertNoDuplicatePassengers(pasajeros.map((p) => ({ passengerId: p.id, firstName: p.nombres, lastName: p.apellidos, birthDate: p.fechaNacimiento, documentNumber: p.documento.numero })));
     assertInfantAssociations(pasajeros.map((p) => ({ passengerId: p.id, passengerType: p.tipo, associatedAdultId: p.asociadoA })));
 

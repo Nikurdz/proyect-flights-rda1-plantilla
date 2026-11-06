@@ -4,7 +4,7 @@
   "title": "booking.ticket_issued",
   "description": "Billetes emitidos.",
   "x-event-type": "booking.ticket_issued",
-  "x-schema-version": "1.1.0",
+  "x-schema-version": "1.2.0",
   "type": "object",
   "required": [
     "bookingId",
@@ -69,6 +69,13 @@
     },
     "paymentReference": {
       "type": "string"
+    },
+    "partnerOrderId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Id de la orden del socio (salesChannel.partnerOrderId), si la reserva vino de un socio."
     }
   }
 }

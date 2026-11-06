@@ -31,9 +31,9 @@ export class CheckInService {
     @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
   ) {}
 
-  async checkIn(auth: AuthClaims, bookingId: string): Promise<CheckInResponseDto> {
+  async checkIn(auth: AuthClaims, bookingId: string, options: { asAdmin?: boolean } = {}): Promise<CheckInResponseDto> {
     const result = await this.dataSource.transaction(async (manager) => {
-      const context = await this.context.load(manager, auth.ownerId, bookingId, { lock: true });
+      const context = await this.context.load(manager, auth.ownerId, bookingId, { lock: true, asAdmin: options.asAdmin });
       this.context.assertConfirmed(context.booking);
 
       const now = new Date();
@@ -78,8 +78,9 @@ export class CheckInService {
       await this.events.publish('booking.checked_in', bookingId, {
         bookingId,
         pnr: result.context.booking.pnr,
-        ownerId: auth.ownerId,
+        ownerId: result.context.booking.ownerId,
         status: result.context.booking.status,
+        partnerOrderId: result.context.booking.channelPartnerOrderId,
         checkedInPassengers: result.created,
       });
     }

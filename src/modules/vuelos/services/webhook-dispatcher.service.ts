@@ -8,8 +8,9 @@ import { WebhookDelivery } from '../entities/webhook-delivery.entity';
 import { activityGate } from '../common/activity-gate';
 import { WebhookSubscription } from '../entities/webhook-subscription.entity';
 
-// The shortest retry delay is 1 minute, so polling faster than that only wakes the database; override with WEBHOOK_POLL_INTERVAL_MS.
-const POLL_INTERVAL_MS = Math.max(15_000, Number(process.env.WEBHOOK_POLL_INTERVAL_MS) || 60_000);
+// Every 15 s so a partner hears an event soon after it happens (the activity gate skips idle ticks, so an idle database is not woken);
+// override with WEBHOOK_POLL_INTERVAL_MS (never faster than 15 s).
+const POLL_INTERVAL_MS = Math.max(15_000, Number(process.env.WEBHOOK_POLL_INTERVAL_MS) || 15_000);
 const BATCH = 10;
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_RESPONSE_BYTES = 4_096;

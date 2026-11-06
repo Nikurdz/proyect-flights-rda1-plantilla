@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, FindOptionsWhere, Like, Repository } from 'typeorm';
 import { DomainEvent, DomainEventBus } from '../common/domain-event-bus';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { resolveSafeTarget, UnsafeUrlError } from '../common/safe-http';
@@ -35,6 +35,13 @@ export const viewV2 = (s: WebhookSubscription): WebhookSubscriptionViewV2 => ({ 
  * Subscriptions belong to the account that created them and only receive events about that account's own
  * bookings. The delivery itself (signing, SSRF defence, retries) is WebhookDispatcherService's job.
  */
+/**
+ * The account a webhook belongs to. A partner's subscriptions belong to the partner (`partner:<id>`) whatever user the
+ * call was made for (`partner:<id>:user:<u>`): it registers one webhook for all of its users, and must see it again
+ * whichever `X-User-Id` it lists with.
+ */
+const accountOf = (ownerId: string): string => (ownerId.startsWith('partner:') ? ownerId.split(':').slice(0, 2).join(':') : ownerId);
+
 @Injectable()
 export class WebhooksService implements OnModuleInit {
   private readonly logger = new Logger(WebhooksService.name);
@@ -68,6 +75,7 @@ export class WebhooksService implements OnModuleInit {
       }
       throw error;
     }
+    ownerId = accountOf(ownerId);
     const existing = await this.subscriptions.count({ where: { ownerId, active: true } });
     if (existing >= this.config.webhooks.maxPerOwner) {
       throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', 'Too many webhooks', `An account can have at most ${this.config.webhooks.maxPerOwner} webhooks; delete one first.`);
@@ -88,17 +96,23 @@ export class WebhooksService implements OnModuleInit {
   }
 
   async listRows(ownerId: string): Promise<WebhookSubscription[]> {
-    return this.subscriptions.find({ where: { ownerId, active: true }, relations: { eventos: true }, order: { createdAt: 'ASC' } });
+    return this.subscriptions.find({ where: this.ownedBy(ownerId), relations: { eventos: true }, order: { createdAt: 'ASC' } });
   }
 
   async remove(ownerId: string, id: string): Promise<void> {
-    const subscription = await this.subscriptions.findOne({ where: { id, ownerId, active: true } });
+    const subscription = await this.subscriptions.findOne({ where: this.ownedBy(ownerId).map((w) => ({ ...w, id })) });
     if (!subscription) {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'NOT_FOUND', 'Webhook not found', `Webhook ${id} was not found.`);
     }
     await this.subscriptions.update({ id }, { active: false });
     // Whatever was still waiting for this subscription is dropped with it.
     await this.deliveries.delete({ subscriptionId: id, status: 'PENDING' });
+  }
+
+  /** Active subscriptions of an account; a partner's include the ones registered for one of its users before they were unified. */
+  private ownedBy(ownerId: string): FindOptionsWhere<WebhookSubscription>[] {
+    const account = accountOf(ownerId);
+    return account.startsWith('partner:') ? [{ ownerId: account, active: true }, { ownerId: Like(`${account}:%`), active: true }] : [{ ownerId: account, active: true }];
   }
 
   /** Queues one delivery per matching subscription of the account(s) the event is about; announcing twice queues once. */
@@ -109,10 +123,17 @@ export class WebhooksService implements OnModuleInit {
     // A booking made by a partner for one of its users (`partner:<id>:user:<u>`) is also heard by the partner's own webhooks (`partner:<id>`).
     const owners = [...new Set(eventOwners.flatMap((o) => (o.startsWith('partner:') ? [o, o.split(':').slice(0, 2).join(':')] : [o])))];
 
+    // A partner's webhook also hears the events of the users it was (mis)registered under.
+    const partners = [...new Set(owners.filter((o) => o.startsWith('partner:')).map(accountOf))];
     const subscribers = await this.subscriptions
       .createQueryBuilder('s')
       .innerJoin('s.eventos', 'e', 'e.evento = :tipo', { tipo: event.type })
-      .where('s."ownerId" IN (:...owners)', { owners })
+      .where(
+        new Brackets((qb) => {
+          qb.where('s."ownerId" IN (:...owners)', { owners });
+          partners.forEach((account, i) => qb.orWhere(`s."ownerId" LIKE :account${i}`, { [`account${i}`]: `${account}:%` }));
+        }),
+      )
       .andWhere('s.active = true')
       .getMany();
     if (subscribers.length === 0) return;

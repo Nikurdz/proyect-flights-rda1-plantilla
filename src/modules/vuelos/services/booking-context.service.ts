@@ -36,13 +36,15 @@ export interface BookingContext {
  */
 @Injectable()
 export class BookingContextService {
-  async load(manager: EntityManager, ownerId: string, bookingId: string, options: { lock?: boolean } = {}): Promise<BookingContext> {
+  /** `asAdmin`: the back office acts at the counter on a booking of any owner (the caller must already be an ADMIN). */
+  async load(manager: EntityManager, ownerId: string, bookingId: string, options: { lock?: boolean; asAdmin?: boolean } = {}): Promise<BookingContext> {
     const booking = await manager.findOne(Booking, { where: { bookingId }, ...(options.lock ? { lock: { mode: 'pessimistic_write' as const } } : {}) });
     if (!booking) {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'BOOKING_NOT_CONFIRMED', 'Booking not found', `Booking ${bookingId} was not found.`);
     }
-    if (booking.ownerId !== ownerId) {
-      throw new ProblemDetailsException(HttpStatus.FORBIDDEN, 'FORBIDDEN', 'Booking belongs to another user', 'You do not have access to this booking.');
+    if (!options.asAdmin && booking.ownerId !== ownerId) {
+      // v1 answers 403 (unchanged); contract v2 answers 404 so a partner's user cannot tell that someone else's booking exists.
+      throw new ProblemDetailsException(HttpStatus.FORBIDDEN, 'FORBIDDEN', 'Booking belongs to another user', 'You do not have access to this booking.').forV2('NOT_FOUND', HttpStatus.NOT_FOUND);
     }
     return this.complete(manager, booking);
   }

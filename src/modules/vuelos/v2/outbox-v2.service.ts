@@ -12,8 +12,6 @@ import { EventsQueryDto } from './dto-v2';
 const unknownCursor = (after: string): ProblemDetailsException =>
   new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Cursor desconocido', `El cursor "${after}" no corresponde a ningún evento; use metadata.next_after de la respuesta anterior.`, [{ name: 'after', reason: 'unknown cursor' }]);
 
-export const cursorOf = (seq: string): string => `evt-vue-${seq.padStart(6, '0')}`;
-
 /**
  * The event feed (GET /eventos): every contract event is kept in order as the CloudEvent subscribers receive, so a
  * partner that missed a webhook can catch up. It is written when the event is announced (after the operation
@@ -43,7 +41,7 @@ export class OutboxV2Service implements OnModuleInit {
       .execute();
   }
 
-  /** `after` is the cursor of the last event read (`evt-vue-000120`) or its event id. */
+  /** `after` is the id of the last event read (what `metadata.next_after` returns) or its older cursor form (`evt-vue-000120`). */
   async list(query: EventsQueryDto): Promise<{ events: CloudEvent[]; metadata: { total: number; next_after: string | null; timestamp: string } }> {
     const limit = query.limit ?? 20;
     let afterSeq = '0';
@@ -65,7 +63,8 @@ export class OutboxV2Service implements OnModuleInit {
     });
     return {
       events: rows.map((r) => r.cloudEvent as unknown as CloudEvent),
-      metadata: { total: rows.length, next_after: rows.length ? cursorOf(rows[rows.length - 1].seq) : (query.after ?? null), timestamp: new Date().toISOString() },
+      // The id of the last event read, which is what a partner keeps as its cursor (the `evt-vue-<n>` form is still accepted in `after`).
+      metadata: { total: rows.length, next_after: rows.length ? rows[rows.length - 1].eventoId : (query.after ?? null), timestamp: new Date().toISOString() },
     };
   }
 }

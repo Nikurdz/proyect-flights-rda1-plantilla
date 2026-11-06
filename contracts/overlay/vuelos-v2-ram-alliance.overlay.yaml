@@ -193,7 +193,7 @@ paths:
           '{$request.body#/url}':
             post:
               summary: Entrega de un evento (CloudEvent estructurado) a la URL registrada
-              description: Se envía por cada evento suscrito. Responda 2xx; si no, se reintenta (1 min, 5 min, 30 min, 2 h, 6 h) y después queda `DEAD`.
+              description: Se envía por cada evento suscrito. Responda 2xx (por ejemplo 202); si no, se reintenta (1 min, 5 min, 30 min, 2 h, 6 h) y después queda `DEAD`.
               parameters:
                 - name: X-Webhook-Id
                   in: header
@@ -293,6 +293,15 @@ components:
     BearerAuth:
       description: 'Alternativa para desarrollo: un JWT de la plataforma (sus roles se traducen en scopes; ADMIN = todos).'
   schemas:
+    PassengerItem:
+      properties:
+        nationality:
+          description: País en ISO 3166-1 alfa-2, dos letras (`EC`, no `ECU`); si no, 400 con `invalidParams` que nombra el campo.
+          pattern: '^[A-Z]{2}$'
+        documentNumber:
+          description: Con `documentType` NATIONAL_ID y `nationality` EC se valida la cédula ecuatoriana (10 dígitos y dígito verificador); si no, 422 `VALIDATION_FAILED` con `invalidParams` `passengers[i].documentNumber`.
+    MoneyAmount:
+      description: Monto con su desglose. `lockedPrice` (hold) y `grandTotal` (reserva) traen `baseFare` e `taxes` cuando se conocen, igual que la búsqueda (`baseFare + taxes = total`).
     OAuthTokenRequest:
       type: object
       required: [grant_type]
@@ -550,7 +559,7 @@ x-stock-push:
 
 x-operation-notes:
   getHealth: '`circuit_breaker_estado` es siempre `CLOSED`. `status` es `DOWN` (503) si la base de datos no responde y `DEGRADED` si tarda más de 1 s.'
-  listOutboxEvents: 'El `id` de cada evento es el UUID del evento (el mismo del webhook). El cursor es `metadata.next_after` (`evt-vue-000120`); un `after` desconocido responde 400 en lugar de reiniciar. `metadata.total` es el tamaño de la página.'
+  listOutboxEvents: 'El `id` de cada evento es el UUID del evento (el mismo del webhook). El cursor es `metadata.next_after`, el `id` del último evento de la página (se acepta también el formato antiguo `evt-vue-000120`); un `after` desconocido responde 400 en lugar de reiniciar. Los eventos de reserva incluyen `partnerOrderId` cuando la reserva vino de un socio. `metadata.total` es el tamaño de la página.'
   putPromotionAgreement: 'Responde el contrato plano (`permite_promociones`, `porcentaje_descuento_maximo`, listas…). Las `rutas_habilitadas` son `AAA-BBB` y los `destinos_habilitados` códigos IATA de 3 letras. Una venta con `salesChannel.promotionApplied` se rechaza con 422 `PROMOTION_DISCOUNT_OUT_OF_RANGE` si supera el máximo o no hay acuerdo vigente.'
   searchFlights: 'Vuelos directos, clase económica; como máximo `OFFER_MAX_COMBINATIONS` ofertas (5 por defecto), las más baratas primero. El límite de tasa es por IP, no por dispositivo.'
   getSeatMap: '`segmentId` es el id del vuelo (UUID). Un hold no fija asientos: el estado por asiento es `AVAILABLE`, `BOOKED`/`TICKETED`, `CHECKED_IN` o `BOARDED`. Oferta vencida: 410 `OFFER_NO_LONGER_AVAILABLE`.'

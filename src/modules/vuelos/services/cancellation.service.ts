@@ -36,9 +36,9 @@ export class CancellationService {
     @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
   ) {}
 
-  async quote(ownerId: string, bookingId: string): Promise<CancellationQuoteResponseDto> {
+  async quote(ownerId: string, bookingId: string, options: { asAdmin?: boolean } = {}): Promise<CancellationQuoteResponseDto> {
     const manager = this.dataSource.manager;
-    const context = await this.context.load(manager, ownerId, bookingId);
+    const context = await this.context.load(manager, ownerId, bookingId, options);
     this.context.assertConfirmed(context.booking);
     this.assertCancellable(context);
 
@@ -70,17 +70,17 @@ export class CancellationService {
     };
   }
 
-  async cancel(auth: AuthClaims, idempotencyKey: string, bookingId: string, request: CancelBookingRequestDto): Promise<CancelBookingResponseDto> {
-    return (await this.cancelWithEvent(auth, idempotencyKey, bookingId, request)).response;
+  async cancel(auth: AuthClaims, idempotencyKey: string, bookingId: string, request: CancelBookingRequestDto, options: { asAdmin?: boolean } = {}): Promise<CancelBookingResponseDto> {
+    return (await this.cancelWithEvent(auth, idempotencyKey, bookingId, request, options)).response;
   }
 
   /** The cancellation with the event it announced (contract v2 builds its richer answer from both). */
-  async cancelWithEvent(auth: AuthClaims, idempotencyKey: string, bookingId: string, request: CancelBookingRequestDto): Promise<CancelOutcome> {
+  async cancelWithEvent(auth: AuthClaims, idempotencyKey: string, bookingId: string, request: CancelBookingRequestDto, options: { asAdmin?: boolean } = {}): Promise<CancelOutcome> {
     const outcome = await this.idempotency.execute<CancelOutcome>(
       { key: idempotencyKey, route: `POST /bookings/${bookingId}/cancel`, ownerId: auth.ownerId, body: request },
       HttpStatus.OK,
       async (manager) => {
-        const context = await this.context.load(manager, auth.ownerId, bookingId, { lock: true });
+        const context = await this.context.load(manager, auth.ownerId, bookingId, { lock: true, asAdmin: options.asAdmin });
         this.context.assertConfirmed(context.booking);
         this.assertCancellable(context);
 
@@ -148,6 +148,7 @@ export class CancellationService {
         pnr: booking.pnr,
         ownerId: booking.ownerId,
         status: booking.status,
+        partnerOrderId: booking.channelPartnerOrderId,
         paymentReference: booking.paymentReference,
         refundAmount: formatMinorUnits(amounts.refundMinor),
         refundMinor: amounts.refundMinor,

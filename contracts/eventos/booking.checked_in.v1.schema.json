@@ -4,7 +4,7 @@
   "title": "booking.checked_in",
   "description": "Check-in realizado para uno o más pasajeros.",
   "x-event-type": "booking.checked_in",
-  "x-schema-version": "1.0.0",
+  "x-schema-version": "1.1.0",
   "type": "object",
   "required": [
     "bookingId",
@@ -26,6 +26,13 @@
     },
     "checkedInPassengers": {
       "type": "number"
+    },
+    "partnerOrderId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Id de la orden del socio (salesChannel.partnerOrderId), si la reserva vino de un socio."
     }
   }
 }

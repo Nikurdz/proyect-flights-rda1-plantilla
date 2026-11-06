@@ -5,7 +5,7 @@ import type { AuthClaims } from '../auth/token.service';
 import { assertGroupSize, assertInfantRatio } from '../common/business-rules';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { toIso } from '../common/date.util';
-import { formatMinorUnits, toMinorUnits } from '../common/money.util';
+import { moneyAmount, toMinorUnits } from '../common/money.util';
 import { PassengerBreakdown, priceForPartyParts, seatsRequired } from '../common/pricing.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { buildSeatGrid } from '../common/seat-grid';
@@ -255,7 +255,7 @@ export class OffersService {
       status: 'HELD',
       expiresAt: expiresAt.toISOString(),
       ttlMinutes: hold.ttlMinutes,
-      lockedPrice: { currency: offer.currency, total: formatMinorUnits(hold.lockedPriceMinor) },
+      lockedPrice: moneyAmount(offer.currency, hold.lockedPriceMinor, hold.lockedTaxesMinor),
     };
   }
 
@@ -270,7 +270,7 @@ export class OffersService {
       status: hold.status,
       expiresAt: toIso(hold.expiresAt),
       remainingSeconds: hold.status === 'HELD' ? Math.max(0, Math.floor((hold.expiresAt.getTime() - Date.now()) / 1000)) : 0,
-      lockedPrice: { currency: hold.currency, total: formatMinorUnits(hold.lockedPriceMinor) },
+      lockedPrice: moneyAmount(hold.currency, hold.lockedPriceMinor, hold.lockedTaxesMinor),
     };
   }
 

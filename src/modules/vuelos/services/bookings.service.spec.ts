@@ -9,6 +9,12 @@ import { Vuelo } from '../entities/vuelo.entity';
 import type { BookingRequestDto, PassengerItemDto } from '../dto/booking.dto';
 import { VUELOS_CONFIG } from '../common/vuelos-config';
 import { BookingsService } from './bookings.service';
+
+// Unit test with mocked managers: the travellers need a configured cipher and a database, and are covered by the integration suites.
+jest.mock('../common/travellers', () => ({
+  documentHashOf: () => 'hash',
+  ensureTravellers: async () => new Map([['hash', 'traveller-1']]),
+}));
 import { IdempotencyService } from './idempotency.service';
 import { OffersService } from './offers.service';
 
