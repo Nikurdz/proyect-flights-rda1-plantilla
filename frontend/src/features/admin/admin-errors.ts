@@ -8,6 +8,10 @@ export type AdminContext =
   | 'eliminar-vuelo'
   | 'cancelar-vuelo'
   | 'reprogramar-vuelo'
+  | 'estado-vuelo'
+  | 'checkin-reserva'
+  | 'cotizar-reserva'
+  | 'cancelar-reserva'
   | 'crear-proveedor'
   | 'editar-proveedor'
   | 'apagar-proveedor'
@@ -23,6 +27,8 @@ export function adminErrorMessage(error: unknown, context: AdminContext): string
   if (!(error instanceof ProblemDetailsError)) return undefined;
   const proveedor = providerErrorMessage(error, context);
   if (proveedor) return proveedor;
+  const mostrador = counterErrorMessage(error, context);
+  if (mostrador) return mostrador;
   if (error.code === 'EMAIL_ALREADY_REGISTERED') return 'Ya existe un usuario con ese correo. Usa otro correo.';
   if (error.code === 'LAST_ADMIN') return 'No se puede quitar el rol: no puedes quitártelo a ti mismo ni dejar el sistema sin administradores.';
   if (error.code === 'FLIGHT_IN_USE') return 'Este vuelo tiene reservas o retenciones, por eso no se puede eliminar. Usa «Cancelar vuelo»: lo cierra a la venta y reembolsa sus reservas.';
@@ -45,6 +51,35 @@ export function adminErrorMessage(error: unknown, context: AdminContext): string
     }
   }
   return undefined;
+}
+
+/** Texts of the counter (bookings and flight status). */
+function counterErrorMessage(error: ProblemDetailsError, context: AdminContext): string | undefined {
+  switch (context) {
+    case 'checkin-reserva':
+      if (error.code === 'CHECK_IN_NOT_AVAILABLE') return 'El check-in solo se abre 48 horas antes de la salida (y se cierra al salir el vuelo). Intenta dentro de esa ventana.';
+      if (error.code === 'FLIGHT_ALREADY_DEPARTED') return 'El vuelo de esta reserva ya salió: no se puede hacer check-in.';
+      if (error.code === 'CHECK_IN_FAILED') return 'No se pudo asignar un asiento (cabina llena o asiento ocupado). Intenta de nuevo.';
+      if (error.status === 409) return 'El check-in no está disponible ahora: fuera de la ventana de 48 horas antes de la salida, o la reserva no está confirmada.';
+      if (error.status === 404) return 'No existe esta reserva.';
+      return undefined;
+    case 'cotizar-reserva':
+    case 'cancelar-reserva':
+      if (error.code === 'CUTOFF_PASSED') return 'La cancelación ya está cerrada para esta reserva (pasó el plazo antes de la salida).';
+      if (error.code === 'FLIGHT_ALREADY_DEPARTED') return 'El vuelo de esta reserva ya salió: no se puede cancelar.';
+      if (error.code === 'QUOTE_EXPIRED') return 'La cotización venció. Cotiza de nuevo antes de cancelar.';
+      if (error.status === 409) return 'Esta reserva ya no se puede cancelar (ya está cancelada o fuera de plazo). Actualiza la lista.';
+      if (error.status === 404) return 'No existe esta reserva.';
+      return undefined;
+    case 'estado-vuelo':
+      if (error.code === 'INVALID_STATUS_TRANSITION') return 'Ese cambio de estado no es válido desde el estado actual del vuelo (por ejemplo, un vuelo que ya salió no vuelve a programado).';
+      if (error.status === 400) return 'Un vuelo retrasado necesita la salida estimada. Revisa los datos del formulario.';
+      if (error.status === 404) return 'No existe este vuelo para esa fecha.';
+      if (error.status === 409) return 'Ese cambio de estado no es válido desde el estado actual del vuelo.';
+      return undefined;
+    default:
+      return undefined;
+  }
 }
 
 /** Texts of the provider console; undefined for any other context or when the generic message is good enough. */

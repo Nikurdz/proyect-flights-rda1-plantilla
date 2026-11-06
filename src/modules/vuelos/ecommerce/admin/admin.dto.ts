@@ -103,7 +103,10 @@ export class AdminVueloViewDto {
   @ApiProperty() asientosDisponibles: number;
   @ApiProperty() capacidadTotal: number;
   @ApiProperty({ description: 'Asientos con número ya reservados (los pasajeros que no eligieron asiento no cuentan).' }) asientosReservados: number;
-  @ApiProperty({ enum: ['SCHEDULED', 'CANCELLED'], description: 'Un vuelo cancelado está cerrado a la venta y ya no admite ediciones.' }) estado: string;
+  @ApiProperty({ enum: ['SCHEDULED', 'BOARDING', 'DEPARTED', 'DELAYED', 'ARRIVED', 'CANCELLED', 'DIVERTED'], description: 'Estado operativo. Un vuelo cancelado está cerrado a la venta y ya no admite ediciones; uno retrasado sigue a la venta.' }) estado: string;
+  @ApiPropertyOptional({ nullable: true, example: 'B12', description: 'Puerta de embarque, si se informó.' }) puertaSalida?: string | null;
+  @ApiPropertyOptional({ nullable: true, format: 'date-time', description: 'Salida estimada, si el vuelo está retrasado.' }) salidaEstimada?: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Minutos de retraso, si lo hay.' }) retrasoMinutos?: number | null;
 }
 
 export class AdminVueloParamDto {

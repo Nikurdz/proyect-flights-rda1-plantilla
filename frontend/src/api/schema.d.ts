@@ -1777,6 +1777,14 @@ export interface components {
             capacidadTotal: number;
             /** @description Asientos con número ya reservados. */
             asientosReservados: number;
+            /** @description Estado operativo (SCHEDULED, BOARDING, DEPARTED, DELAYED, ARRIVED, CANCELLED, DIVERTED). */
+            estado?: string;
+            /** @description Puerta de embarque, si se informó. */
+            puertaSalida?: string | null;
+            /** @description Salida estimada (UTC), si el vuelo está retrasado. */
+            salidaEstimada?: string | null;
+            /** @description Minutos de retraso, si los hay. */
+            retrasoMinutos?: number | null;
         };
         AdminVuelosPaginaDto: {
             items: components["schemas"]["AdminVueloViewDto"][];

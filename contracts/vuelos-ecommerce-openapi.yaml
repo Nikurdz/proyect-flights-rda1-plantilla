@@ -5601,10 +5601,15 @@ components:
         duracionMinutos:
           type: number
         estado:
-          description: Un vuelo cancelado está cerrado a la venta y ya no admite ediciones.
+          description: Estado operativo. Un vuelo cancelado está cerrado a la venta y ya no admite ediciones; uno retrasado sigue a la venta.
           enum:
             - SCHEDULED
+            - BOARDING
+            - DEPARTED
+            - DELAYED
+            - ARRIVED
             - CANCELLED
+            - DIVERTED
           type: string
         llegada:
           type: string
@@ -5614,7 +5619,21 @@ components:
         precioBaseUsd:
           description: Tarifa base por adulto en USD, antes de familia e impuestos.
           type: number
+        puertaSalida:
+          description: Puerta de embarque, si se informó.
+          example: B12
+          nullable: true
+          type: string
+        retrasoMinutos:
+          description: Minutos de retraso, si lo hay.
+          nullable: true
+          type: number
         salida:
+          type: string
+        salidaEstimada:
+          description: Salida estimada, si el vuelo está retrasado.
+          format: date-time
+          nullable: true
           type: string
         vueloId:
           format: uuid

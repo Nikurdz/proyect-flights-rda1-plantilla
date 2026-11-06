@@ -28,6 +28,9 @@ const vista = (v: Vuelo, reservados: number): AdminVueloViewDto => ({
   capacidadTotal: v.capacidadTotal,
   asientosReservados: reservados,
   estado: v.estado,
+  puertaSalida: v.puertaSalida ?? null,
+  salidaEstimada: v.salidaEstimada ? toIso(v.salidaEstimada) : null,
+  retrasoMinutos: v.retrasoMinutos ?? null,
 });
 
 /**

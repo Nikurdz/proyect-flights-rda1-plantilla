@@ -352,3 +352,178 @@ export function useReprogramarVuelo() {
     onSuccess: refresh,
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// Counter (mostrador): bookings of every channel and the operational status of a flight (ADMIN).
+// The 200 answers have no schema in the contract: these types mirror `reservas-admin.service.ts`.
+// ---------------------------------------------------------------------------------------------
+
+export type CanalReserva = 'SOCIO' | 'DIRECTO';
+export type TipoDocumento = 'NATIONAL_ID' | 'PASSPORT';
+
+export interface ReservaVuelo {
+  vueloId: string;
+  codigoVuelo: string;
+  origen: string;
+  destino: string;
+  salida: string;
+  estado: string;
+}
+
+export interface ReservaPasajero {
+  passengerId: string;
+  travellerId: string;
+  nombre: string;
+  tipoDocumento: string;
+  /** Already masked by the API (only the last 3 characters). */
+  documento: string;
+  asientos: { vueloId: string; asiento: string }[];
+  checkIn: boolean;
+}
+
+export interface AdminReserva {
+  bookingId: string;
+  pnr: string;
+  status: string;
+  canal: CanalReserva;
+  socio: { partnerId: string; partnerOrderId: string | null } | null;
+  paymentReference: string;
+  paymentProvider: string | null;
+  total: { currency: string; total: string };
+  creadaEn: string;
+  vuelos: ReservaVuelo[];
+  pasajeros: ReservaPasajero[];
+  billetes: number;
+}
+
+export interface AdminReservaDetalle extends AdminReserva {
+  cambios: { en: string; descripcion: string }[];
+}
+
+export interface AdminReservasPagina {
+  items: AdminReserva[];
+  total: number;
+  pagina: number;
+  limite: number;
+}
+
+export interface AdminReservasFilters {
+  pnr?: string;
+  partnerOrderId?: string;
+  paymentReference?: string;
+  canal?: CanalReserva | '';
+  documento?: string;
+  tipoDocumento?: TipoDocumento;
+  nacionalidad?: string;
+  pagina?: number;
+  limite?: number;
+}
+
+export interface CotizacionCancelacion {
+  quoteId: string;
+  isRefundable: boolean;
+  refundAmount: string;
+  penaltyAmount: string;
+  currency: string;
+  expiresAt: string;
+}
+
+export interface CancelacionResultado {
+  bookingId: string;
+  status: string;
+  refundAmount: string;
+  penaltyAmount: string;
+  currency: string;
+}
+
+export interface CheckInResultado {
+  bookingId: string;
+  status: string;
+  checkedInPassengers: unknown[];
+}
+
+export function useAdminReservas(filters: AdminReservasFilters, ownerId?: string) {
+  const params = { ...filters, limite: filters.limite ?? 20, pagina: filters.pagina ?? 1 };
+  return useQuery({
+    queryKey: ['admin-reservas', ownerId, params],
+    queryFn: () => apiClient<AdminReservasPagina>(`admin/reservas${toQuery(params)}`),
+    enabled: Boolean(ownerId),
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+}
+
+export function useAdminReserva(bookingId?: string, ownerId?: string) {
+  return useQuery({
+    queryKey: ['admin-reserva', ownerId, bookingId],
+    queryFn: () => apiClient<AdminReservaDetalle>(`admin/reservas/${bookingId}`),
+    enabled: Boolean(bookingId && ownerId),
+    retry: false,
+  });
+}
+
+function useRefreshReservas() {
+  const qc = useQueryClient();
+  return () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-reservas'] }),
+      qc.invalidateQueries({ queryKey: ['admin-reserva'] }),
+      qc.invalidateQueries({ queryKey: ['admin-ordenes'] }),
+    ]);
+}
+
+export function useCheckInMostrador() {
+  const refresh = useRefreshReservas();
+  return useMutation({
+    mutationFn: (bookingId: string) => apiClient<CheckInResultado>(`admin/reservas/${bookingId}/check-in`, { method: 'POST' }),
+    onSuccess: refresh,
+  });
+}
+
+/** A read, but triggered on demand by the operator: modelled as a mutation so it never runs by itself. */
+export function useCotizarCancelacion() {
+  return useMutation({
+    mutationFn: (bookingId: string) => apiClient<CotizacionCancelacion>(`admin/reservas/${bookingId}/cotizacion-cancelacion`),
+  });
+}
+
+export function useCancelarReserva() {
+  const refresh = useRefreshReservas();
+  return useMutation({
+    mutationFn: ({ bookingId, quoteId, reasonCode = 'CUSTOMER_REQUEST' }: { bookingId: string; quoteId?: string; reasonCode?: string }) =>
+      apiClient<CancelacionResultado>(`admin/reservas/${bookingId}/cancelar`, {
+        method: 'POST',
+        body: JSON.stringify({ ...(quoteId ? { quoteId } : {}), reasonCode }),
+        // A new key per attempt: a retry after an error is a new decision of the operator.
+        idempotencyKey: generateUUID(),
+      }),
+    onSuccess: refresh,
+  });
+}
+
+export const ESTADOS_VUELO = ['SCHEDULED', 'BOARDING', 'DEPARTED', 'DELAYED', 'ARRIVED', 'CANCELLED', 'DIVERTED'] as const;
+export type EstadoVuelo = (typeof ESTADOS_VUELO)[number];
+
+export interface CambiarEstadoVueloInput {
+  status: EstadoVuelo;
+  estimatedDepartureAt?: string;
+  estimatedArrivalAt?: string;
+  departureGate?: string;
+  reason?: string;
+}
+
+export interface CambioEstadoVueloResultado {
+  previousStatus: string;
+  affectedBookings: number;
+  eventId: string;
+  flight: unknown;
+}
+
+export function useCambiarEstadoVuelo() {
+  const refresh = useRefreshVuelos();
+  return useMutation({
+    mutationFn: ({ vueloId, cambio }: { vueloId: string; cambio: CambiarEstadoVueloInput }) =>
+      apiClient<CambioEstadoVueloResultado>(`admin/vuelos/${vueloId}/estado`, { method: 'PATCH', body: JSON.stringify(cambio) }),
+    onSuccess: refresh,
+  });
+}

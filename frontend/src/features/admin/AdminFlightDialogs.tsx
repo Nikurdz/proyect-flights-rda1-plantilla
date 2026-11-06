@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
+  useCambiarEstadoVuelo,
   useCancelarVuelo,
   useCrearVuelo,
   useEditarVuelo,
@@ -20,12 +21,16 @@ import { formatDateTime } from '../../lib/labels';
 import { adminErrorMessage } from './admin-errors';
 import {
   editFlightSchema,
+  FLIGHT_STATUSES,
+  flightStatusBody,
+  flightStatusSchema,
   isoToUtcLocal,
   newFlightSchema,
   rescheduleSchema,
   toNumber,
   utcLocalToIso,
   type EditFlightForm,
+  type FlightStatusForm,
   type NewFlightForm,
   type RescheduleForm,
 } from './admin-schemas';
@@ -283,5 +288,74 @@ export const DeleteFlightDialog: React.FC<{
         </div>
       )}
     </ConfirmDialog>
+  );
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  SCHEDULED: 'Programado',
+  BOARDING: 'Embarcando',
+  DEPARTED: 'Despegó',
+  DELAYED: 'Retrasado',
+  ARRIVED: 'Llegó',
+  CANCELLED: 'Cancelado',
+  DIVERTED: 'Desviado',
+};
+
+/** Operational status of a flight (delay, gate, boarding...). The server validates the transition. */
+export const FlightStatusDialog: React.FC<{ flight: AdminVueloView; onClose: () => void; onDone: (message: string) => void }> = ({ flight, onClose, onDone }) => {
+  const cambiar = useCambiarEstadoVuelo();
+  const {
+    register,
+    handleSubmit,
+    control,
+    formState: { errors },
+  } = useForm<FlightStatusForm>({
+    resolver: zodResolver(flightStatusSchema),
+    defaultValues: { status: 'DELAYED', estimatedDepartureAt: isoToUtcLocal(flight.salida), departureGate: '', reason: '' },
+  });
+  const delayed = useWatch({ control, name: 'status' }) === 'DELAYED';
+
+  const onSubmit = (form: FlightStatusForm) => {
+    cambiar.mutate(
+      { vueloId: flight.vueloId, cambio: flightStatusBody(form) },
+      {
+        onSuccess: (r) => {
+          onDone(`Vuelo ${flight.codigoVuelo}: ${STATUS_LABEL[r.previousStatus] ?? r.previousStatus} → ${STATUS_LABEL[form.status]}. Reservas afectadas: ${r.affectedBookings}. Booking lo ve al consultar el estado del vuelo.`);
+          onClose();
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog
+      isOpen
+      onClose={onClose}
+      title={`Estado del vuelo ${flight.codigoVuelo}`}
+      description={`${flight.origen} → ${flight.destino} · salida programada ${formatDateTime(flight.salida)} UTC. Las horas se ingresan en UTC.`}
+      maxWidth="lg"
+    >
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
+        {cambiar.error != null && <ProblemAlert error={cambiar.error} message={adminErrorMessage(cambiar.error, 'estado-vuelo')} />}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Select label="Estado" error={errors.status?.message} {...register('status')}>
+            {FLIGHT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABEL[s]} ({s})
+              </option>
+            ))}
+          </Select>
+          <Input
+            label={delayed ? 'Salida estimada (UTC) · obligatoria' : 'Salida estimada (UTC)'}
+            type="datetime-local"
+            error={errors.estimatedDepartureAt?.message}
+            {...register('estimatedDepartureAt')}
+          />
+          <Input label="Puerta de embarque" placeholder="B12" maxLength={10} autoComplete="off" error={errors.departureGate?.message} {...register('departureGate')} />
+          <Input label="Motivo (opcional)" maxLength={300} error={errors.reason?.message} {...register('reason')} />
+        </div>
+        <Actions onClose={onClose} busy={cambiar.isPending} submitLabel="Guardar estado" />
+      </form>
+    </Dialog>
   );
 };

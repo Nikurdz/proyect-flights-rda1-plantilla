@@ -97,6 +97,9 @@ export class AdminService {
         capacidadTotal: v.capacidadTotal,
         asientosReservados: reservados.get(v.id) ?? 0,
         estado: v.estado,
+        puertaSalida: v.puertaSalida ?? null,
+        salidaEstimada: v.salidaEstimada ? toIso(v.salidaEstimada) : null,
+        retrasoMinutos: v.retrasoMinutos ?? null,
       })),
       ...(rows.length > limit ? { nextCursor: encodeCursor(page[page.length - 1].fechaSalida, page[page.length - 1].id) } : {}),
     };

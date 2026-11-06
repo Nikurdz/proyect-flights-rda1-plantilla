@@ -22,6 +22,7 @@ import { TransportConditionsPage } from '../features/legal/TransportConditionsPa
 import { HelpPage } from '../features/legal/HelpPage';
 import { AdminLayout } from '../features/admin/AdminLayout';
 import { AdminOrdersPage } from '../features/admin/AdminOrdersPage';
+import { AdminReservationsPage } from '../features/admin/AdminReservationsPage';
 import { AdminFlightsPage } from '../features/admin/AdminFlightsPage';
 import { AdminUsersPage } from '../features/admin/AdminUsersPage';
 import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
@@ -81,6 +82,7 @@ export const AppRoutes: React.FC = () => {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboardPage />} />
             <Route path="ordenes" element={<AdminOrdersPage />} />
+            <Route path="reservas" element={<AdminReservationsPage />} />
             <Route path="vuelos" element={<AdminFlightsPage />} />
             <Route path="usuarios" element={<AdminUsersPage />} />
             <Route path="proveedores" element={<AdminProvidersPage />} />

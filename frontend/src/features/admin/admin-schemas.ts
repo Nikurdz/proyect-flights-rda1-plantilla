@@ -110,4 +110,37 @@ export const cancelFlightSchema = z.object({
   motivo: z.string().trim().max(300, 'Usa como máximo 300 caracteres.').optional(),
 });
 
-export const toNumber = (v: string) => Number(v.replace(',', '.'));
+export const FLIGHT_STATUSES = ['SCHEDULED', 'BOARDING', 'DEPARTED', 'DELAYED', 'ARRIVED', 'CANCELLED', 'DIVERTED'] as const;
+
+export const flightStatusSchema = z
+  .object({
+    status: z.enum(FLIGHT_STATUSES, { errorMap: () => ({ message: 'Elige el estado.' }) }),
+    estimatedDepartureAt: z.string().optional(),
+    departureGate: z.string().trim().max(10, 'Usa como máximo 10 caracteres.').optional(),
+    reason: z
+      .string()
+      .trim()
+      .optional()
+      .refine((v) => !v || (v.length >= 3 && v.length <= 300), 'El motivo debe tener entre 3 y 300 caracteres.'),
+  })
+  .refine((d) => d.status !== 'DELAYED' || Boolean(d.estimatedDepartureAt), {
+    path: ['estimatedDepartureAt'],
+    message: 'Un vuelo retrasado necesita la salida estimada.',
+  })
+  .refine((d) => !d.estimatedDepartureAt || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.estimatedDepartureAt), {
+    path: ['estimatedDepartureAt'],
+    message: 'Ingresa una fecha y hora válidas.',
+  });
+export type FlightStatusForm = z.infer<typeof flightStatusSchema>;
+
+/** Form -> body of PATCH /admin/vuelos/{id}/estado: empty optionals are omitted, the time goes as an ISO instant (UTC). */
+export function flightStatusBody(form: FlightStatusForm) {
+  return {
+    status: form.status,
+    ...(form.estimatedDepartureAt ? { estimatedDepartureAt: utcLocalToIso(form.estimatedDepartureAt) } : {}),
+    ...(form.departureGate?.trim() ? { departureGate: form.departureGate.trim() } : {}),
+    ...(form.reason?.trim() ? { reason: form.reason.trim() } : {}),
+  };
+}
+
+export const toNumber =(v: string) => Number(v.replace(',', '.'));

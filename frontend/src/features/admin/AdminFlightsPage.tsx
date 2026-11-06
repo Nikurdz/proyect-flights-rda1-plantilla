@@ -6,7 +6,7 @@ import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
-import { CancelFlightDialog, CreateFlightDialog, DeleteFlightDialog, EditFlightDialog, RescheduleFlightDialog } from './AdminFlightDialogs';
+import { CancelFlightDialog, CreateFlightDialog, DeleteFlightDialog, EditFlightDialog, FlightStatusDialog, RescheduleFlightDialog } from './AdminFlightDialogs';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { SeatLegend, SeatMap } from '../checkout/SeatMap';
 import { formatDateTime } from '../../lib/labels';
@@ -70,7 +70,7 @@ export const AdminFlightsPage: React.FC = () => {
   const session = useSession();
   const [openFlight, setOpenFlight] = useState<AdminVueloView | null>(null);
   const [creating, setCreating] = useState(false);
-  const [action, setAction] = useState<{ kind: 'edit' | 'reschedule' | 'cancel' | 'delete'; flight: AdminVueloView } | null>(null);
+  const [action, setAction] = useState<{ kind: 'edit' | 'reschedule' | 'status' | 'cancel' | 'delete'; flight: AdminVueloView } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const closeAction = () => setAction(null);
   const [draft, setDraft] = useState<AdminFlightsFilters>({});
@@ -124,7 +124,7 @@ export const AdminFlightsPage: React.FC = () => {
       {error != null && <ProblemAlert error={error} onRetry={() => refetch()} className="mb-4" />}
 
       <div role="region" tabIndex={0} aria-label="Tabla de vuelos, desplazable horizontalmente" className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1000px] text-left text-sm">
+        <table className="w-full min-w-[1100px] text-left text-sm">
           <caption className="sr-only">Vuelos programados</caption>
           <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
             <tr>
@@ -160,7 +160,16 @@ export const AdminFlightsPage: React.FC = () => {
                   <td className="px-4 py-3 text-xs font-semibold">
                     {flight.origen} → {flight.destino}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-600">{formatDateTime(flight.salida)}</td>
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    {formatDateTime(flight.salida)}
+                    {flight.estado && flight.estado !== 'SCHEDULED' && (
+                      <div className="mt-1 font-bold text-brand-black" data-testid={`estado-${flight.vueloId}`}>
+                        {flight.estado}
+                        {flight.salidaEstimada ? ` · est. ${formatDateTime(flight.salidaEstimada)}` : ''}
+                        {flight.puertaSalida ? ` · puerta ${flight.puertaSalida}` : ''}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-xs text-slate-600">{flight.aerolinea}</td>
                   <td className="px-4 py-3 text-right">
                     <MoneyText amount={flight.precioBaseUsd.toFixed(2)} currency="USD" />
@@ -176,6 +185,9 @@ export const AdminFlightsPage: React.FC = () => {
                       </Button>
                       <Button type="button" size="sm" variant="outline" aria-label={`Reprogramar vuelo ${flight.codigoVuelo}`} onClick={() => setAction({ kind: 'reschedule', flight })}>
                         Reprogramar
+                      </Button>
+                      <Button type="button" size="sm" variant="outline" aria-label={`Cambiar el estado del vuelo ${flight.codigoVuelo}`} onClick={() => setAction({ kind: 'status', flight })}>
+                        Estado
                       </Button>
                       <Button type="button" size="sm" variant="outline" className="border-red-300 text-red-700 hover:bg-red-50" aria-label={`Cancelar vuelo ${flight.codigoVuelo}`} onClick={() => setAction({ kind: 'cancel', flight })}>
                         Cancelar vuelo
@@ -211,6 +223,7 @@ export const AdminFlightsPage: React.FC = () => {
       {creating && <CreateFlightDialog onClose={() => setCreating(false)} onDone={setNotice} />}
       {action?.kind === 'edit' && <EditFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
       {action?.kind === 'reschedule' && <RescheduleFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
+      {action?.kind === 'status' && <FlightStatusDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
       {action?.kind === 'cancel' && <CancelFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
       {action?.kind === 'delete' && (
         <DeleteFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} onSwitchToCancel={(flight) => setAction({ kind: 'cancel', flight })} />
