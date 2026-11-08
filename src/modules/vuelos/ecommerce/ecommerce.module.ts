@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AdminModule } from './admin/admin.module';
+import { BffModule } from './bff/bff.module';
 import { CatalogoModule } from './catalogo/catalogo.module';
 import { IdentidadModule } from './identidad/identidad.module';
 import { MercadosModule } from './mercados/mercados.module';
@@ -17,6 +18,6 @@ import { PagosModule } from './pagos/pagos.module';
  * module in app.module.ts — and it sells from the flight core's inventory in-process.
  */
 @Module({
-  imports: [MercadosModule, IdentidadModule, CatalogoModule, OfertasModule, PagosModule, OrdenesModule, NotificacionesModule, ObservabilidadModule, IntegracionModule, AdminModule],
+  imports: [MercadosModule, IdentidadModule, CatalogoModule, OfertasModule, PagosModule, OrdenesModule, NotificacionesModule, ObservabilidadModule, IntegracionModule, AdminModule, BffModule],
 })
 export class EcommerceModule {}

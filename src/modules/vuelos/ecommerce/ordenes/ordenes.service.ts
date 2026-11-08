@@ -42,6 +42,13 @@ interface Tramo {
   salida: string;
   llegada: string;
   familia: string;
+  estadoVuelo: string;
+}
+
+/** Options of the order views. `conEstadoVuelo` adds the flight's current state to each leg (BFF views only). */
+export interface OpcionesVistaOrden {
+  publica?: boolean;
+  conEstadoVuelo?: boolean;
 }
 
 interface PasajeroOrden {
@@ -236,11 +243,16 @@ export class OrdenesService implements OnModuleInit {
     orden.historial = [...orden.historial, Object.assign(new OrdenHistorial(), { secuencia, estado: destino, en: new Date(), motivo: motivo ?? null })];
   }
 
-  async obtenerPropia(auth: AuthClaims, numeroOrden: string): Promise<OrdenViewDto> {
+  /** The order itself (not its view) when it belongs to the caller; someone else's answers like a missing one. */
+  async ordenPropia(auth: AuthClaims, numeroOrden: string): Promise<Orden> {
     const orden = await this.ordenes.findOne({ where: { numeroOrden } });
     // Someone else's order answers exactly like a missing one: no existence oracle.
     if (!orden || orden.ownerId !== auth.ownerId) throw orderNotFound();
-    return this.vista(orden);
+    return orden;
+  }
+
+  async obtenerPropia(auth: AuthClaims, numeroOrden: string, opciones: OpcionesVistaOrden = {}): Promise<OrdenViewDto> {
+    return this.vista(await this.ordenPropia(auth, numeroOrden), opciones);
   }
 
   /** RF-ORD-010 / RF-PSV-001: recover a trip with the order number or the PNR plus a passenger's surname. */
@@ -331,12 +343,12 @@ export class OrdenesService implements OnModuleInit {
     };
   }
 
-  async vista(orden: Orden, opciones: { publica?: boolean } = {}): Promise<OrdenViewDto> {
+  async vista(orden: Orden, opciones: OpcionesVistaOrden = {}): Promise<OrdenViewDto> {
     return (await this.vistas([orden], opciones))[0];
   }
 
   /** The views of several orders, built with one query per table (not per order). */
-  async vistas(ordenes: Orden[], opciones: { publica?: boolean } = {}): Promise<OrdenViewDto[]> {
+  async vistas(ordenes: Orden[], opciones: OpcionesVistaOrden = {}): Promise<OrdenViewDto[]> {
     const contexto = await this.contexto(ordenes);
     return ordenes.map((orden) => {
       const { tramos, pasajeros, pago, historial } = contexto.get(orden.ordenId);
@@ -355,6 +367,7 @@ export class OrdenesService implements OnModuleInit {
           salida: t.salida,
           llegada: t.llegada,
           familia: t.familia,
+          ...(opciones.conEstadoVuelo ? { estadoVuelo: t.estadoVuelo } : {}),
         })),
         pasajeros: pasajeros.map((p) => ({
           id: p.id,
@@ -415,6 +428,7 @@ export class OrdenesService implements OnModuleInit {
       salida: toIso(vuelo.fechaSalida),
       llegada: toIso(vuelo.fechaLlegada),
       familia,
+      estadoVuelo: vuelo.estado,
     });
     const ticketDe = new Map(tickets.map((t) => [t.passengerId, t.eTicketNumber]));
 

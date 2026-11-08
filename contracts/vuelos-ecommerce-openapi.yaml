@@ -523,6 +523,56 @@ paths:
       summary: Detalle completo de una orden (ADMIN)
       tags:
         - E-commerce · Back-office
+  /admin/ordenes/{numero}/expediente:
+    get:
+      description: >-
+        Vista de cualquier cliente con pago (estado y referencia), factura, estado de vuelos, transiciones posibles y auditoría: sagas con
+        sus pasos y hasta 50 eventos con su correlation id. El contacto va enmascarado.
+      operationId: ExpedienteOrdenesController_expediente
+      parameters:
+        - description: Número de orden
+          in: path
+          name: numero
+          required: true
+          schema:
+            example: ORD-7K3M9PQ2XA
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpedienteOrdenDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Expediente de una orden (ADMIN)
+      tags:
+        - E-commerce · BFF back-office
   /admin/proveedores:
     get:
       description: Estado de la última comprobación (UP, DEGRADADO, DOWN), latencia en ms, estado del circuit breaker y productos sincronizados.
@@ -3630,6 +3680,101 @@ paths:
       summary: Configuración vigente del mercado
       tags:
         - E-commerce · Mercados
+  /movil/ordenes:
+    get:
+      description: >-
+        Una fila mínima por orden (número, estado, total, ruta, salida y pasajeros), más recientes primero y paginado por cursor. Solo
+        cuentas con sesión; los invitados reciben 403.
+      operationId: MovilOrdenesController_listar
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            default: 20
+            maximum: 50
+            minimum: 1
+            type: number
+        - description: Cursor opaco de la página anterior.
+          in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovilOrdenesPaginaDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Mis órdenes (resumen móvil)
+      tags:
+        - E-commerce · BFF móvil
+  /movil/ordenes/{numero}:
+    get:
+      description: >-
+        Tramos, pasajeros con su billete, asientos y QR, y las acciones disponibles ahora. Sin contacto, pago ni historial. Una orden ajena
+        responde 404.
+      operationId: MovilOrdenesController_detalle
+      parameters:
+        - description: Número de orden
+          in: path
+          name: numero
+          required: true
+          schema:
+            example: ORD-7K3M9PQ2XA
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovilOrdenDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Detalle de una orden propia (móvil)
+      tags:
+        - E-commerce · BFF móvil
   /ofertas:
     post:
       description: >-
@@ -4875,6 +5020,50 @@ paths:
       summary: Verificar un billete a partir de su código QR
       tags:
         - E-commerce · Verificación de billetes
+  /web/ordenes/{numero}:
+    get:
+      description: >-
+        La vista de la orden más el desglose de importes, la factura, el estado actual de cada vuelo y las acciones con su enlace. Una orden
+        ajena responde 404.
+      operationId: WebOrdenesController_detalle
+      parameters:
+        - description: Número de orden
+          in: path
+          name: numero
+          required: true
+          schema:
+            example: ORD-7K3M9PQ2XA
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebOrdenDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+      security:
+        - bearer: []
+      summary: Detalle completo de una orden propia (web)
+      tags:
+        - E-commerce · BFF web
   /webhooks:
     get:
       description: 'Scope de referencia: flights:webhooks. El secreto nunca se devuelve.'
@@ -4982,6 +5171,30 @@ paths:
         - Webhooks
 components:
   schemas:
+    AccionOrdenDto:
+      properties:
+        codigo:
+          enum:
+            - CHECKIN
+            - CANCELAR
+          type: string
+        href:
+          example: /api/v1/bookings/9d3f6a10-7b2e-4f8a-bc11-2a6e5d4c3b21/cancel
+          type: string
+        metodo:
+          enum:
+            - GET
+            - POST
+          type: string
+        requiereIdempotencia:
+          description: true si la llamada exige el header Idempotency-Key.
+          type: boolean
+      required:
+        - codigo
+        - metodo
+        - href
+        - requiereIdempotencia
+      type: object
     AceptarCondicionesDto:
       properties:
         versionCondicionesTransporte:
@@ -6311,6 +6524,225 @@ components:
         - version
         - url
       type: object
+    ExpedienteAuditoriaDto:
+      properties:
+        eventos:
+          description: Hasta 50 eventos, del más antiguo al más reciente.
+          items:
+            $ref: '#/components/schemas/ExpedienteEventoDto'
+          type: array
+        sagas:
+          items:
+            $ref: '#/components/schemas/ExpedienteSagaDto'
+          type: array
+      required:
+        - sagas
+        - eventos
+      type: object
+    ExpedienteEventoDto:
+      properties:
+        agregadoId:
+          type: string
+        correlationId:
+          type: string
+        ocurridoEn:
+          type: string
+        resumen:
+          description: Identificadores del evento, sin datos personales.
+          type: string
+        tipo:
+          example: OrdenEmitida
+          type: string
+      required:
+        - tipo
+        - agregadoId
+        - correlationId
+        - resumen
+        - ocurridoEn
+      type: object
+    ExpedienteOrdenDto:
+      properties:
+        _links:
+          additionalProperties:
+            format: uri
+            type: string
+          description: HATEOAS links (Richardson Maturity Model Level 3)
+          type: object
+        auditoria:
+          $ref: '#/components/schemas/ExpedienteAuditoriaDto'
+        bookingId:
+          description: >-
+            Reserva del núcleo de vuelos tras la emisión: es el `bookingId` de las rutas de equipaje, cambio, cancelación, check-in y pases.
+            Solo en la vista del propietario.
+          format: uuid
+          type: string
+        canal:
+          type: string
+        clienteId:
+          format: uuid
+          nullable: true
+          type: string
+        comprador:
+          enum:
+            - cliente
+            - invitado
+          type: string
+        contacto:
+          description: Solo en la vista del propietario; la recuperación pública lo enmascara.
+          type: object
+        creadaEn:
+          type: string
+        estado:
+          enum:
+            - PENDIENTE_PAGO
+            - PAGO_EN_VERIFICACION
+            - PAGADA
+            - EMITIDA
+            - FALLIDA_COMPENSADA
+            - MODIFICADA
+            - DEVOLUCION_EN_CURSO
+            - REEMBOLSADA
+            - EN_VIAJE
+            - COMPLETADA
+            - EXPIRADA
+          type: string
+        factura:
+          $ref: '#/components/schemas/FacturaResumenDto'
+        historial:
+          items:
+            type: string
+          type: array
+        importes:
+          $ref: '#/components/schemas/WebImportesDto'
+        itinerarios:
+          items:
+            $ref: '#/components/schemas/ItinerarioOrdenDto'
+          type: array
+        mercado:
+          type: string
+        numeroOrden:
+          example: ORD-7K3M9PQ2XA
+          type: string
+        ofertaId:
+          format: uuid
+          type: string
+        ordenId:
+          format: uuid
+          type: string
+        pago:
+          $ref: '#/components/schemas/ExpedientePagoDto'
+        pasajeros:
+          items:
+            $ref: '#/components/schemas/PasajeroOrdenViewDto'
+          type: array
+        pnr:
+          description: Localizador de la reserva (RN-20).
+          nullable: true
+          type: string
+        total:
+          $ref: '#/components/schemas/MontoDto'
+        transicionesPosibles:
+          description: Estados a los que la máquina de estados permite pasar desde el actual.
+          items:
+            type: string
+          type: array
+      required:
+        - ordenId
+        - numeroOrden
+        - estado
+        - mercado
+        - total
+        - itinerarios
+        - pasajeros
+        - creadaEn
+        - historial
+        - ofertaId
+        - comprador
+        - canal
+        - pago
+        - importes
+        - transicionesPosibles
+        - auditoria
+      type: object
+    ExpedientePagoDto:
+      properties:
+        cuotas:
+          type: number
+        estado:
+          description: Estado del pago (CAPTURADO, REEMBOLSADO…).
+          type: string
+        marca:
+          type: string
+        referencia:
+          description: Referencia de autorización de la pasarela.
+          nullable: true
+          type: string
+        ultimos4:
+          nullable: true
+          type: string
+      required:
+        - marca
+        - cuotas
+      type: object
+    ExpedienteSagaDto:
+      properties:
+        correlationId:
+          type: string
+        error:
+          nullable: true
+          type: string
+        estado:
+          enum:
+            - EN_CURSO
+            - COMPLETADA
+            - COMPENSADA
+            - FALLIDA
+          type: string
+        finalizadaEn:
+          nullable: true
+          type: string
+        iniciadaEn:
+          type: string
+        pasos:
+          items:
+            $ref: '#/components/schemas/ExpedienteSagaPasoDto'
+          type: array
+        sagaId:
+          type: string
+        tipo:
+          type: string
+      required:
+        - sagaId
+        - tipo
+        - estado
+        - correlationId
+        - iniciadaEn
+        - pasos
+      type: object
+    ExpedienteSagaPasoDto:
+      properties:
+        detalle:
+          nullable: true
+          type: string
+        duracionMs:
+          type: number
+        estado:
+          enum:
+            - OK
+            - ERROR
+            - COMPENSADO
+            - OMITIDO
+          type: string
+        nombre:
+          type: string
+        secuencia:
+          type: number
+      required:
+        - secuencia
+        - nombre
+        - estado
+        - duracionMs
+      type: object
     ExperienciaViewDto:
       properties:
         cancelacionGratis:
@@ -6376,6 +6808,23 @@ components:
       required:
         - itineraryId
         - quantity
+      type: object
+    FacturaResumenDto:
+      properties:
+        emitidaEn:
+          type: string
+        estado:
+          enum:
+            - EMITIDA
+            - ANULADA
+          type: string
+        numero:
+          example: 001-001-000000123
+          type: string
+      required:
+        - numero
+        - emitidaEn
+        - estado
       type: object
     FacturacionDto:
       properties:
@@ -6707,6 +7156,9 @@ components:
     ItinerarioOrdenDto:
       properties:
         destino:
+          type: string
+        estadoVuelo:
+          description: Estado actual del vuelo (SCHEDULED, DELAYED, CANCELLED…). Solo lo llenan las vistas de los BFF.
           type: string
         familia:
           type: string
@@ -7048,6 +7500,133 @@ components:
       required:
         - moneda
         - monto
+      type: object
+    MovilOrdenDto:
+      properties:
+        acciones:
+          description: Acciones disponibles ahora (pista; el servidor valida al ejecutarlas).
+          items:
+            enum:
+              - CHECKIN
+              - CANCELAR
+            type: string
+          type: array
+        estado:
+          type: string
+        moneda:
+          example: USD
+          type: string
+        numero:
+          type: string
+        pasajeros:
+          items:
+            $ref: '#/components/schemas/MovilPasajeroDto'
+          type: array
+        pnr:
+          nullable: true
+          type: string
+        total:
+          example: '386.40'
+          type: string
+        tramos:
+          items:
+            $ref: '#/components/schemas/MovilTramoDto'
+          type: array
+      required:
+        - numero
+        - estado
+        - total
+        - moneda
+        - tramos
+        - pasajeros
+        - acciones
+      type: object
+    MovilOrdenResumenDto:
+      properties:
+        estado:
+          type: string
+        moneda:
+          example: USD
+          type: string
+        numero:
+          example: ORD-7K3M9PQ2XA
+          type: string
+        pax:
+          description: Cantidad de pasajeros.
+          type: number
+        ruta:
+          description: Origen y escalas hasta el destino final.
+          example: UIO-GYE
+          type: string
+        salida:
+          description: Salida del primer tramo (UTC).
+          type: string
+        total:
+          example: '386.40'
+          type: string
+      required:
+        - numero
+        - estado
+        - total
+        - moneda
+        - ruta
+        - pax
+      type: object
+    MovilOrdenesPaginaDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/MovilOrdenResumenDto'
+          type: array
+        next:
+          description: Cursor opaco de la página siguiente.
+          type: string
+      required:
+        - items
+      type: object
+    MovilPasajeroDto:
+      properties:
+        asientos:
+          description: Un asiento por tramo, en el orden de `tramos`; vacío si no eligió.
+          example:
+            - 12A
+          items:
+            type: string
+          type: array
+        eTicket:
+          nullable: true
+          type: string
+        nombre:
+          example: David Tapia
+          type: string
+        qr:
+          description: Texto firmado del QR del pasajero (sin datos personales).
+          type: string
+      required:
+        - nombre
+        - asientos
+      type: object
+    MovilTramoDto:
+      properties:
+        a:
+          example: GYE
+          type: string
+        de:
+          example: UIO
+          type: string
+        llega:
+          type: string
+        sale:
+          type: string
+        vuelo:
+          example: LA800
+          type: string
+      required:
+        - vuelo
+        - de
+        - a
+        - sale
+        - llega
       type: object
     OfertaViewDto:
       properties:
@@ -8070,6 +8649,104 @@ components:
           type: string
       required:
         - apellido
+      type: object
+    WebImportesDto:
+      properties:
+        impuestos:
+          allOf:
+            - $ref: '#/components/schemas/MontoDto'
+          description: IVA de la factura; ausente si aún no hay factura.
+        subtotal:
+          allOf:
+            - $ref: '#/components/schemas/MontoDto'
+          description: Subtotal de la factura; ausente si aún no hay factura.
+        total:
+          $ref: '#/components/schemas/MontoDto'
+      required:
+        - total
+      type: object
+    WebOrdenDto:
+      properties:
+        _links:
+          additionalProperties:
+            format: uri
+            type: string
+          description: HATEOAS links (Richardson Maturity Model Level 3)
+          type: object
+        acciones:
+          items:
+            $ref: '#/components/schemas/AccionOrdenDto'
+          type: array
+        bookingId:
+          description: >-
+            Reserva del núcleo de vuelos tras la emisión: es el `bookingId` de las rutas de equipaje, cambio, cancelación, check-in y pases.
+            Solo en la vista del propietario.
+          format: uuid
+          type: string
+        contacto:
+          description: Solo en la vista del propietario; la recuperación pública lo enmascara.
+          type: object
+        creadaEn:
+          type: string
+        estado:
+          enum:
+            - PENDIENTE_PAGO
+            - PAGO_EN_VERIFICACION
+            - PAGADA
+            - EMITIDA
+            - FALLIDA_COMPENSADA
+            - MODIFICADA
+            - DEVOLUCION_EN_CURSO
+            - REEMBOLSADA
+            - EN_VIAJE
+            - COMPLETADA
+            - EXPIRADA
+          type: string
+        factura:
+          $ref: '#/components/schemas/FacturaResumenDto'
+        historial:
+          items:
+            type: string
+          type: array
+        importes:
+          $ref: '#/components/schemas/WebImportesDto'
+        itinerarios:
+          items:
+            $ref: '#/components/schemas/ItinerarioOrdenDto'
+          type: array
+        mercado:
+          type: string
+        numeroOrden:
+          example: ORD-7K3M9PQ2XA
+          type: string
+        ordenId:
+          format: uuid
+          type: string
+        pago:
+          type: object
+        pasajeros:
+          items:
+            $ref: '#/components/schemas/PasajeroOrdenViewDto'
+          type: array
+        pnr:
+          description: Localizador de la reserva (RN-20).
+          nullable: true
+          type: string
+        total:
+          $ref: '#/components/schemas/MontoDto'
+      required:
+        - ordenId
+        - numeroOrden
+        - estado
+        - mercado
+        - total
+        - itinerarios
+        - pasajeros
+        - pago
+        - creadaEn
+        - historial
+        - importes
+        - acciones
       type: object
     WebhookSubscriptionDto:
       properties:

@@ -91,6 +91,7 @@ class ItinerarioOrdenDto {
   @ApiProperty() salida: string;
   @ApiProperty() llegada: string;
   @ApiProperty() familia: string;
+  @ApiPropertyOptional({ description: 'Estado actual del vuelo (SCHEDULED, DELAYED, CANCELLED…). Solo lo llenan las vistas de los BFF.' }) estadoVuelo?: string;
 }
 
 class AsientoOrdenViewDto {
