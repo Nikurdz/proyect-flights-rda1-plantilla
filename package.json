@@ -16,6 +16,7 @@
     "lint:fix": "eslint . --fix",
     "contract:export": "node scripts/export-openapi.js",
     "contract:v2:build": "node scripts/build-contract-v2.js",
+    "gateway:smoke": "node scripts/gateway-smoke.js",
     "seed:vuelos": "ts-node src/modules/vuelos/seed/seed.ts",
     "seed:vuelos:prod": "node dist/modules/vuelos/seed/seed.js",
     "migration:generate:vuelos": "typeorm-ts-node-commonjs migration:generate -d src/modules/vuelos/migrations/data-source.ts",

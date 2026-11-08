@@ -28,7 +28,7 @@ Estado al 26-oct-2026. «Hecho» = existe y está probado; «Ronda actual» = ag
 ## Semanas 8–11 — fuera de esta ronda
 | Semana | Tema | Lo que ya existe | Lo que falta (a decidir) |
 |---|---|---|---|
-| 8 | API Gateway y mesh | BFF GraphQL, rate limit, JWT en el borde | Gateway dedicado (Kong DB-less) y decisión documentada sobre Service Mesh |
+| 8 | API Gateway y mesh | BFF GraphQL, BFF REST por cliente (móvil, web, admin), rate limit, JWT en el borde; gateway Kong DB-less local (`deploy/gateway/`, perfil `gateway` de docker-compose) con JWT en las rutas siempre protegidas, 300 peticiones/min por IP, tope de 1 MB, `application/json` y formato de `Idempotency-Key`, y `X-Correlation-Id` | Gateway desplegado en producción (hoy solo local); Service Mesh: no aplica con una réplica y un solo servicio |
 | 9 | Pruebas y contract testing | 293 pruebas, 8 suites de integración | Pact consumidor/proveedor, `can-i-deploy` |
 | 10 | Observabilidad | Winston, auditoría, métricas propias, `correlationId` | OpenTelemetry + Jaeger, `traceparent` en mensajes AMQP |
 | 11 | Seguridad | JWT, RBAC, cifrado AES-256-GCM, SSRF guard | Revisión OAuth2/mTLS, auditoría de accesos |

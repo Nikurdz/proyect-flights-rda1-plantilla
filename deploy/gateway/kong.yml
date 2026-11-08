@@ -1,0 +1,99 @@
+# API Gateway local (Kong DB-less). Edge rules only: JWT signature on the routes that are always protected, a global
+# per-IP rate limit, body size and media type, Idempotency-Key format, and the correlation id. The business rules
+# (ownership, penalties, idempotent replay) stay in the API, which still verifies every token itself.
+#
+# Run:  docker compose --profile gateway up -d kong      (the API on the host at :3000, TRUST_PROXY=1)
+# Check: sed 's|__JWT_SECRET__|x|' deploy/gateway/kong.yml > /tmp/kong.yml, then
+#        docker run --rm -e KONG_DATABASE=off -v /tmp:/k kong:3.9 kong config parse /k/kong.yml
+_format_version: '3.0'
+_transform: true
+
+consumers:
+  # The API signs every token with iss=vuelos-identity (auth/token.service.ts), which the jwt plugin matches by key.
+  - username: vuelos-identity
+    jwt_secrets:
+      - key: vuelos-identity
+        algorithm: HS256
+        # Placeholder: the container replaces it with JWT_SECRET when it starts (see docker-compose.yml), because the
+        # jwt plugin does not resolve vault references in its credential. Never put the real secret in this file.
+        secret: __JWT_SECRET__
+
+services:
+  # Health checks come from the platform: no rate limit, no body rules.
+  - name: vuelos-health
+    url: http://host.docker.internal:3000
+    routes:
+      - name: health
+        paths: ['/api/v1/health', '/api/v2/vuelos/health']
+        methods: ['GET', 'HEAD']
+        strip_path: false
+    plugins:
+      - name: correlation-id
+        config: { header_name: X-Correlation-Id, generator: uuid, echo_downstream: true }
+
+  - name: vuelos-api
+    url: http://host.docker.internal:3000
+    routes:
+      # Always behind a token in the API (JwtAuthGuard on the whole controller): reject a bad signature at the edge.
+      # Not /clientes (sign-up is public) and not /ordenes (public recovery); mixed routes are left to the API.
+      - name: api-protegida
+        paths: ['/api/v1/admin', '/api/v1/movil', '/api/v1/web']
+        strip_path: false
+        plugins:
+          - name: jwt
+            config:
+              key_claim_name: iss
+              claims_to_verify: [exp]
+              header_names: [authorization]
+              run_on_preflight: false
+      - name: api-general
+        paths: ['/api']
+        strip_path: false
+      - name: graphql
+        paths: ['/graphql']
+        strip_path: false
+    plugins:
+      - name: correlation-id
+        config: { header_name: X-Correlation-Id, generator: uuid, echo_downstream: true }
+      - name: rate-limiting
+        config:
+          minute: 300
+          limit_by: ip
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
+      - name: request-size-limiting
+        config: { allowed_payload_size: 1, size_unit: megabytes, require_content_length: false }
+      - name: pre-function
+        config:
+          access:
+            - |
+              local method = kong.request.get_method()
+              if method == "OPTIONS" then return end
+
+              local function rechazar(status, code, title, detail)
+                return kong.response.exit(status, { type = "about:blank", title = title, status = status, code = code, detail = detail },
+                  { ["Content-Type"] = "application/problem+json" })
+              end
+
+              -- A write that carries a body must say it is JSON (CloudEvents use application/cloudevents+json;
+              -- the OAuth2 token endpoint also takes a form).
+              if method == "POST" or method == "PUT" or method == "PATCH" then
+                local largo = tonumber(kong.request.get_header("content-length")) or 0
+                if largo > 0 or kong.request.get_header("transfer-encoding") then
+                  local tipo = (kong.request.get_header("content-type") or ""):lower()
+                  local ok = tipo:find("^application/json") ~= nil or tipo:find("^application/[%w.%-]+%+json") ~= nil
+                  if not ok and kong.request.get_path() == "/api/v2/oauth2/token" and tipo:find("^application/x%-www%-form%-urlencoded") then ok = true end
+                  if not ok then
+                    return rechazar(415, "UNSUPPORTED_MEDIA_TYPE", "Unsupported media type", "Send the body as application/json.")
+                  end
+                end
+              end
+
+              -- Only the format is checked here; storing and replaying the answer is the API's job.
+              local clave = kong.request.get_header("idempotency-key")
+              if clave and not clave:lower():match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then
+                return rechazar(400, "VALIDATION_FAILED", "Invalid Idempotency-Key", "Idempotency-Key must be a UUID.")
+              end
+      - name: file-log
+        config: { path: /dev/stdout, reopen: false }

@@ -62,6 +62,8 @@ flowchart TB
 |---|---|---|
 | Entrada REST | Todas las rutas del contrato GDS, e-commerce, administración y proveedores | `vuelos.controller.ts`, `ecommerce/**/*.controller.ts` |
 | Entrada GraphQL (BFF) | `catalogoUnificado`, `misReservas`, `facturaCompleta`, `saludNodos`, `auditoriaTransacciones`, `auditoriaSagas`; mutaciones `checkoutExterno`, `cancelarReservaSaga`, `checkInDigital`; suscripción `estadoReservaCambiado` (graphql-ws). Mismos errores con `extensions.code` que REST | `gateway/` |
+| Borde (API Gateway) | Kong DB-less **solo local**: JWT (firma y `exp`) en `/api/v1/admin`, `/movil` y `/web`; 300 peticiones/min por IP; cuerpo ≤ 1 MB y `application/json`; formato UUID de `Idempotency-Key`; `X-Correlation-Id`. Lo que decide con datos guardados (dueño, penalidades, repetición idempotente) **no** va aquí: sigue en el dominio, que además vuelve a verificar cada token | `deploy/gateway/kong.yml`, perfil `gateway` de `docker-compose.yml`, `npm run gateway:smoke` |
+| BFF REST por cliente | Vistas de solo lectura de la orden: móvil (tamaño mínimo), web (completa, del dueño) y expediente de back-office (ADMIN, con auditoría y contacto enmascarado). Reutilizan `OrdenesService`; no escriben, no publican eventos ni deciden reglas | `ecommerce/bff/` |
 | ESB | `EsbRouter` (cada operación del gateway pasa por aquí y se mide como `ESB <operación>`), `SagaOrchestrator` genérico | `esb/` |
 | ACL | `ClienteProveedor` (SSRF, tiempo y tamaño acotados), `AdaptadorProveedor` por tipo (Atracciones completo; Autos y Alojamientos solo salud), circuit breaker por proveedor (opossum), kill-switch (`proveedores.activo`) | `ecommerce/integracion/acl/` |
 | Orquestadores | Reserva externa (autorizar → reservar en el socio → verificar precio → confirmar y facturar → capturar) sobre `SagaOrchestrator`. La saga de compra de vuelos conserva su propia implementación con el mismo registro de pasos (`SagasRegistroService`) | `ecommerce/integracion/reservas-externas.service.ts`, `ecommerce/ordenes/compras.service.ts` |
@@ -72,7 +74,7 @@ flowchart TB
 
 ## Variables de entorno de esta arquitectura
 
-`RABBITMQ_URL` (vacío = bus en proceso), `GRAPHQL_MAX_DEPTH` (7), `LOG_DIR`, `LOG_TO_FILES`, `HTTP_LOG_RETENTION_DAYS`, `PROVEEDORES_*` (ver `.env.example`). La introspección de GraphQL se apaga con `NODE_ENV=production`.
+`RABBITMQ_URL` (vacío = bus en proceso), `GRAPHQL_MAX_DEPTH` (7), `LOG_DIR`, `LOG_TO_FILES`, `HTTP_LOG_RETENTION_DAYS`, `PROVEEDORES_*` (ver `.env.example`). Con el gateway local: `TRUST_PROXY=1` en la API (si no, sus límites ven la IP de Kong) y `JWT_SECRET` igual en ambos; `GATEWAY_URL` para `gateway:smoke`. La introspección de GraphQL se apaga con `NODE_ENV=production`.
 
 ## Decisiones y diferencias con el diagrama de referencia
 
