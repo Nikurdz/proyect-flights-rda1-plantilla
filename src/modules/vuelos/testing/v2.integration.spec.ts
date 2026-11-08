@@ -190,6 +190,36 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       await api().delete(`${V2}/offers/hold/${created.res.body.holdId}`).set(bearer(token, 'user-1')).expect(204);
     });
 
+    it('treats documentExpiryDate as optional for a passport and validates it only when it comes', async () => {
+      const token = await tokenFor();
+      const held = await hold(token, 'user-expiry', dayAhead(day++));
+      const holdId = held.res.body.holdId as string;
+      const withExpiry = (value: unknown) => book(token, 'user-expiry', holdId, { passengers: [pax('a1', { documentExpiryDate: value })] });
+
+      // Present and too early: still rejected, and nothing is consumed.
+      const expired = await withExpiry('2020-01-01');
+      expect(expired.status).toBe(422);
+      expect(expired.body.code).toBe('DOCUMENT_EXPIRED');
+      // Present but not a date: a real validation error that names the field.
+      const garbage = await withExpiry('not-a-date');
+      expect(garbage.status).toBe(400);
+      expect(JSON.stringify(garbage.body)).toContain('documentExpiryDate');
+      // "Not sent" in the ways a client commonly says it: null and an empty string are the same as leaving it out.
+      const nulo = await withExpiry(null);
+      expect([nulo.status, nulo.body.code]).toEqual([201, undefined]);
+    });
+
+    it('also accepts an empty documentExpiryDate and a passport that omits it', async () => {
+      const token = await tokenFor();
+      const held = await hold(token, 'user-expiry-2', dayAhead(day++));
+      const holdId = held.res.body.holdId as string;
+      const vacio = await book(token, 'user-expiry-2', holdId, { passengers: [pax('a1', { documentExpiryDate: '' })] });
+      expect(vacio.status).toBe(201);
+      const omitido = await hold(token, 'user-expiry-3', dayAhead(day++));
+      const sinFecha = await book(token, 'user-expiry-3', omitido.res.body.holdId as string, { passengers: [pax('a1')] });
+      expect(sinFecha.status).toBe(201);
+    });
+
     it('books with the sales channel, checks the amount, keeps users apart and serves v2 tickets', async () => {
       const token = await tokenFor();
       const date = dayAhead(day++);

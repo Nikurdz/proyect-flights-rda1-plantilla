@@ -2604,7 +2604,7 @@ components:
         documentExpiryDate:
           type: string
           format: date
-          description: Debe estar vigente a la fecha del viaje (`DOCUMENT_EXPIRED`). Vuelos internacionales exigen PASSPORT (`PASSPORT_REQUIRED_INTERNATIONAL`).
+          description: Opcional, también con PASSPORT. Si se omite, es `null` o llega vacío (`""`) no se valida nada; solo cuando viene con una fecha debe estar vigente a la fecha del último vuelo (`DOCUMENT_EXPIRED`). Un texto que no sea fecha YYYY-MM-DD responde 400 con `invalidParams` que nombra el campo. Vuelos internacionales exigen PASSPORT (`PASSPORT_REQUIRED_INTERNATIONAL`).
           example: '2030-05-31'
         birthDate:
           type: string

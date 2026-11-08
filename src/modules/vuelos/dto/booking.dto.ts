@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -171,6 +171,9 @@ export class PassengerItemDto {
   nationality: string;
 
   @ApiPropertyOptional({ format: 'date' })
+  // Optional for every document type: "not sent" also means null or an empty string (clients that serialise an empty
+  // form field), which is treated as absent. Only a real value is validated here and against the trip dates.
+  @Transform(({ value }) => (typeof value === 'string' && value.trim() === '' ? undefined : value))
   @IsDateOnly()
   @IsOptional()
   documentExpiryDate?: string;
