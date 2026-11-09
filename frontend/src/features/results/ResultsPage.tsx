@@ -38,6 +38,7 @@ export const ResultsPage: React.FC = () => {
   const inbound = searchParams.get('inbound') || undefined;
   const trip = (searchParams.get('trip') as 'RT' | 'OW') || (inbound ? 'RT' : 'OW');
   const adt = Number(searchParams.get('adt')) || 1;
+  const yth = Number(searchParams.get('yth')) || 0;
   const chd = Number(searchParams.get('chd')) || 0;
   const inf = Number(searchParams.get('inf')) || 0;
   const sort = (searchParams.get('sort') as Ordenamiento) || 'RECOMENDADO';
@@ -48,7 +49,8 @@ export const ResultsPage: React.FC = () => {
     outbound,
     inbound: trip === 'RT' ? inbound : undefined,
     trip,
-    adt,
+    // The availability and fare endpoints know no youths: they take a seat and an adult fare like an adult.
+    adt: adt + yth,
     chd,
     inf,
     sort,
@@ -59,7 +61,7 @@ export const ResultsPage: React.FC = () => {
   // Round Trip multi-leg selection state.
   // The outbound flight picked is only valid for the route, outbound day and party it was picked for. The return
   // date is not part of the key: changing it must keep the outbound choice and stay on the return leg.
-  const outboundKey = outboundSelectionKey({ origin, destination, outbound, trip, adt, chd, inf });
+  const outboundKey = outboundSelectionKey({ origin, destination, outbound, trip, adt, yth, chd, inf });
   const [activeLegIndex, setActiveLegIndex] = useKeyedState<number>(outboundKey, 0);
   const [selectedOutbound, setSelectedOutbound] = useKeyedState<{
     itinerario: ItinerarioDto;
@@ -141,7 +143,7 @@ export const ResultsPage: React.FC = () => {
           selecciones,
           pasajeros: {
             adultos: adt,
-            jovenes: 0,
+            jovenes: yth,
             ninos: chd,
             infantes: inf,
           },
@@ -390,7 +392,7 @@ export const ResultsPage: React.FC = () => {
         isOpen={isFareModalOpen}
         onClose={() => setIsFareModalOpen(false)}
         itinerario={modalItinerario}
-        passengers={{ adt, chd, inf }}
+        passengers={{ adt: adt + yth, chd, inf }}
         onSelectFare={handleSelectFare}
       />
     </div>

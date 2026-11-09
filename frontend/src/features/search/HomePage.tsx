@@ -41,7 +41,7 @@ const POPULAR_ROUTES: { from: string; to: string; fromCity: string; toCity: stri
 export const HomePage: React.FC = () => {
   const outbound = addDaysToDate(getTomorrowDateString(), 6);
   // Chosen before clicking a popular route, so the search starts with the right party instead of one adult.
-  const [passengers, setPassengers] = useState<PassengerCounts>({ adt: 1, chd: 0, inf: 0 });
+  const [passengers, setPassengers] = useState<PassengerCounts>({ adt: 1, yth: 0, chd: 0, inf: 0 });
 
   return (
     <div className="bg-slate-50">

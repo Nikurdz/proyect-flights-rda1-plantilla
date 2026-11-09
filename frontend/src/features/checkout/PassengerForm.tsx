@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Users, Mail, Phone, ArrowRight, Baby, UserCheck } from 'lucide-react';
 import { registrarPasajeros } from '../../api/endpoints/offers';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
@@ -9,6 +8,10 @@ import { selectionsFromRegistered, toAsientosPayload, type SeatSelections } from
 import { SeatSelector } from './SeatSelector';
 import { FieldError, FieldLabel } from '../../components/ui/FormField';
 import { fieldA11y } from '../../lib/field-a11y';
+import { useLocalidades } from '../../api/endpoints/catalog';
+import { getTodayDateString, addDaysToDate } from '../../lib/dates';
+import { ageRangeMessage, birthDateRange, flightDay, isInternationalTrip, type PassengerType } from '../../lib/passenger-rules';
+import { buildPassengerFormSchema, type PassengerFormValues } from './passenger-schema';
 import type { OfertaViewDto, RegistrarPasajerosDto, PasajeroDto } from '../../api/types';
 
 const COUNTRIES = [
@@ -28,36 +31,6 @@ const COUNTRIES = [
   { code: 'GB', name: 'Reino Unido' },
 ];
 
-const passengerSchema = z.object({
-  id: z.string(),
-  tipo: z.enum(['ADULT', 'YOUTH', 'CHILD', 'INFANT']),
-  nombres: z.string().min(2, 'Ingresa al menos 2 letras').trim(),
-  apellidos: z.string().min(2, 'Ingresa al menos 2 letras').trim(),
-  fechaNacimiento: z.string().min(10, 'Ingresa la fecha de nacimiento.'),
-  genero: z.enum(['M', 'F', 'X']),
-  nacionalidad: z.string().min(2, 'Selecciona la nacionalidad'),
-  documento: z.object({
-    tipo: z.enum(['PASSPORT', 'NATIONAL_ID']),
-    numero: z.string().min(4, 'Mínimo 4 caracteres').trim(),
-    vencimiento: z.string().optional(),
-  }),
-  numeroSocio: z.string().optional(),
-  asociadoA: z.string().optional(),
-});
-
-const formSchema = z.object({
-  pasajeros: z.array(passengerSchema),
-  contacto: z.object({
-    correo: z.string().email('Ingresa un correo electrónico válido'),
-    telefono: z
-      .string()
-      .min(8, 'Ingresa un teléfono con código de país, por ejemplo +593999999999.')
-      .regex(/^\+[1-9]\d{6,14}$/, 'Usa el formato internacional: "+" y el código de país, por ejemplo +593999999999.'),
-  }),
-});
-
-type FormValues = z.infer<typeof formSchema>;
-
 interface PassengerFormProps {
   oferta: OfertaViewDto;
   onSuccess: (updatedOferta: OfertaViewDto) => void;
@@ -71,6 +44,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
 
   // Initialize initial passengers list based on offer passenger counts
   const adtCount = oferta.pasajeros?.adultos || 1;
+  const ythCount = oferta.pasajeros?.jovenes || 0;
   const chdCount = oferta.pasajeros?.ninos || 0;
   const infCount = oferta.pasajeros?.infantes || 0;
 
@@ -80,6 +54,23 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
     defaultPassengers.push({
       id: `ADT-${i}`,
       tipo: 'ADULT',
+      nombres: '',
+      apellidos: '',
+      fechaNacimiento: '',
+      genero: 'M',
+      nacionalidad: 'EC',
+      documento: {
+        tipo: 'NATIONAL_ID',
+        numero: '',
+        vencimiento: '',
+      },
+    });
+  }
+
+  for (let i = 1; i <= ythCount; i++) {
+    defaultPassengers.push({
+      id: `YTH-${i}`,
+      tipo: 'YOUTH',
       nombres: '',
       apellidos: '',
       fechaNacimiento: '',
@@ -128,12 +119,28 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
     });
   }
 
+  // Rules that depend on the trip: ages are measured on the UTC day of the first flight, the document on the last.
+  const localidades = useLocalidades();
+  const today = getTodayDateString();
+  const firstFlightDay = flightDay(oferta.trayectos[0].salida);
+  const lastFlightDay = flightDay(oferta.trayectos[oferta.trayectos.length - 1].salida);
+  const countryOf = useMemo(
+    () => new Map((localidades.data ?? []).map((l) => [l.iata, l.pais] as const)),
+    [localidades.data],
+  );
+  const international = isInternationalTrip(oferta.trayectos, countryOf);
+  const formSchema = useMemo(
+    () => buildPassengerFormSchema({ firstFlightDay, lastFlightDay, international, today, ids: defaultPassengers.map((p) => p.id) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [firstFlightDay, lastFlightDay, international, today, defaultPassengers.length],
+  );
+
   const {
     register,
     control,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormValues>({
+  } = useForm<PassengerFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       pasajeros: defaultPassengers,
@@ -161,7 +168,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
       return { id: p.id, label: typed || `Pasajero ${order + 1}` };
     });
 
-  const onSubmit = async (values: FormValues) => {
+  const onSubmit = async (values: PassengerFormValues) => {
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -200,11 +207,17 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
           const paxErrors = errors.pasajeros?.[idx];
           const isInfant = field.tipo === 'INFANT';
           const isChild = field.tipo === 'CHILD';
+          const isYouth = field.tipo === 'YOUTH';
+          const type = field.tipo as PassengerType;
+          const range = birthDateRange(type, firstFlightDay, today);
+          const expiryRequired = international;
 
           const labelTitle = isInfant
             ? `Bebé / Infante (${idx + 1})`
             : isChild
             ? `Niño / Menor (${idx + 1})`
+            : isYouth
+            ? `Joven (${idx + 1})`
             : `Adulto Responsable (${idx + 1})`;
 
           return (
@@ -247,6 +260,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                       </option>
                     ))}
                   </select>
+                  <FieldError id={`pax-${idx}-asociadoA`} message={paxErrors?.asociadoA?.message} />
                 </div>
               )}
 
@@ -299,6 +313,8 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                   </FieldLabel>
                   <input
                     type="date"
+                    min={range.min}
+                    max={range.max}
                     {...fieldA11y(`pax-${idx}-nacimiento`, paxErrors?.fechaNacimiento?.message)}
                     {...register(`pasajeros.${idx}.fechaNacimiento` as const)}
                     className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
@@ -307,6 +323,7 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
                         : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
                     }`}
                   />
+                  <p className="mt-1 text-[11px] text-slate-500">{ageRangeMessage(type)}.</p>
                   <FieldError id={`pax-${idx}-nacimiento`} message={paxErrors?.fechaNacimiento?.message} />
                 </div>
 
@@ -377,14 +394,20 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
 
                 <div>
                   <FieldLabel htmlFor={`pax-${idx}-docvence`}>
-                    Fecha Vencimiento (opcional)
+                    {expiryRequired ? 'Fecha Vencimiento *' : 'Fecha Vencimiento (opcional)'}
                   </FieldLabel>
                   <input
-                    id={`pax-${idx}-docvence`}
                     type="date"
+                    min={addDaysToDate(lastFlightDay, 1)}
+                    {...fieldA11y(`pax-${idx}-docvence`, paxErrors?.documento?.vencimiento?.message)}
                     {...register(`pasajeros.${idx}.documento.vencimiento` as const)}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
+                    className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
+                      paxErrors?.documento?.vencimiento
+                        ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
+                        : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
+                    }`}
                   />
+                  <FieldError id={`pax-${idx}-docvence`} message={paxErrors?.documento?.vencimiento?.message} />
                 </div>
               </div>
 

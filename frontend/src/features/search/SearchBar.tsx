@@ -31,6 +31,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
   );
   const [passengers, setPassengers] = useState<PassengerCounts>({
     adt: Number(searchParams.get('adt')) || 1,
+    yth: Number(searchParams.get('yth')) || 0,
     chd: Number(searchParams.get('chd')) || 0,
     inf: Number(searchParams.get('inf')) || 0,
   });
@@ -90,6 +91,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
     if (tripType === 'RT' && inbound) params.set('inbound', inbound);
     params.set('trip', tripType);
     params.set('adt', String(passengers.adt));
+    if (passengers.yth > 0) params.set('yth', String(passengers.yth));
     if (passengers.chd > 0) params.set('chd', String(passengers.chd));
     if (passengers.inf > 0) params.set('inf', String(passengers.inf));
     params.set('cabin', 'ECONOMY');

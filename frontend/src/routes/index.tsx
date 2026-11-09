@@ -30,6 +30,7 @@ import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
 import { AdminObservabilityPage } from '../features/admin/AdminObservabilityPage';
 import { AdminProvidersPage } from '../features/admin/AdminProvidersPage';
 import { AdminInvoicesPage } from '../features/admin/AdminInvoicesPage';
+import { AdminBookingBillingPage } from '../features/admin/AdminBookingBillingPage';
 import { AdminAuditPage } from '../features/admin/AdminAuditPage';
 import { AdminNodesHealthPage } from '../features/admin/AdminNodesHealthPage';
 import { AdminWebhooksPage } from '../features/admin/AdminWebhooksPage';
@@ -90,6 +91,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="usuarios" element={<AdminUsersPage />} />
             <Route path="proveedores" element={<AdminProvidersPage />} />
             <Route path="facturacion" element={<AdminInvoicesPage />} />
+            <Route path="facturacion-booking" element={<AdminBookingBillingPage />} />
             <Route path="auditoria" element={<AdminAuditPage />} />
             <Route path="salud" element={<AdminNodesHealthPage />} />
             <Route path="webhooks" element={<AdminWebhooksPage />} />

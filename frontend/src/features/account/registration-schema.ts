@@ -1,13 +1,15 @@
 import { z } from 'zod';
+import { getTodayDateString } from '../../lib/dates';
 
 const E164 = /^\+[1-9]\d{6,14}$/;
 const MIN_AGE = 18;
 
-/** Whole years between a birth date (YYYY-MM-DD) and a reference date. */
+/** Whole years between a birth date (YYYY-MM-DD) and a reference instant, on the Ecuador day of that instant. */
 export function ageOn(birthDate: string, reference: Date = new Date()): number {
   const [y, m, d] = birthDate.split('-').map(Number);
-  let age = reference.getFullYear() - y;
-  const hadBirthday = reference.getMonth() + 1 > m || (reference.getMonth() + 1 === m && reference.getDate() >= d);
+  const [ry, rm, rd] = getTodayDateString(reference).split('-').map(Number);
+  let age = ry - y;
+  const hadBirthday = rm > m || (rm === m && rd >= d);
   if (!hadBirthday) age -= 1;
   return age;
 }

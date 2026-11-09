@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { Users, Plus, Minus } from 'lucide-react';
+import { MAX_PASSENGERS } from '../../lib/passenger-rules';
 
 export interface PassengerCounts {
   adt: number;
+  yth: number;
   chd: number;
   inf: number;
 }
@@ -16,7 +18,7 @@ export interface PassengerSelectorProps {
 export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
   counts,
   onChange,
-  maxTotal = 9,
+  maxTotal = MAX_PASSENGERS,
 }) => {
   const uid = useId();
   const panelId = `${uid}-panel`;
@@ -24,7 +26,7 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const totalPassengers = counts.adt + counts.chd + counts.inf;
+  const totalPassengers = counts.adt + counts.yth + counts.chd + counts.inf;
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -52,24 +54,26 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
   const handleUpdate = (type: keyof PassengerCounts, delta: number) => {
     const next = { ...counts };
 
+    const sum = (c: PassengerCounts) => c.adt + c.yth + c.chd + c.inf;
+
     if (type === 'adt') {
       const nextAdt = Math.max(1, counts.adt + delta);
-      if (nextAdt + counts.chd + counts.inf <= maxTotal) {
+      if (sum({ ...counts, adt: nextAdt }) <= maxTotal) {
         next.adt = nextAdt;
         // Infants cannot exceed adults
         if (next.inf > nextAdt) {
           next.inf = nextAdt;
         }
       }
-    } else if (type === 'chd') {
-      const nextChd = Math.max(0, counts.chd + delta);
-      if (counts.adt + nextChd + counts.inf <= maxTotal) {
-        next.chd = nextChd;
+    } else if (type === 'yth' || type === 'chd') {
+      const nextValue = Math.max(0, counts[type] + delta);
+      if (sum({ ...counts, [type]: nextValue }) <= maxTotal) {
+        next[type] = nextValue;
       }
     } else if (type === 'inf') {
       const nextInf = Math.max(0, counts.inf + delta);
-      // Infants cannot exceed adults and total within limit
-      if (nextInf <= counts.adt && counts.adt + counts.chd + nextInf <= maxTotal) {
+      // Infants cannot exceed adults (youths and children do not count for that cap) and the total stays within the limit
+      if (nextInf <= counts.adt && sum({ ...counts, inf: nextInf }) <= maxTotal) {
         next.inf = nextInf;
       }
     }
@@ -82,6 +86,9 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
     const parts: string[] = [];
     if (counts.adt === 1) parts.push('1 Adulto');
     else parts.push(`${counts.adt} Adultos`);
+
+    if (counts.yth === 1) parts.push('1 Joven');
+    else if (counts.yth > 1) parts.push(`${counts.yth} Jóvenes`);
 
     if (counts.chd === 1) parts.push('1 Niño');
     else if (counts.chd > 1) parts.push(`${counts.chd} Niños`);
@@ -135,7 +142,7 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-bold text-slate-900">Adultos</div>
-              <div className="text-xs text-slate-500">Desde 12 años</div>
+              <div className="text-xs text-slate-500">Desde 18 años</div>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -154,6 +161,35 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
                 onClick={() => handleUpdate('adt', 1)}
                 className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
                 aria-label="Sumar adulto"
+              >
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+          {/* Jóvenes */}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+            <div>
+              <div className="text-sm font-bold text-slate-900">Joven (12 a 17 años)</div>
+              <div className="text-xs text-slate-500">Viajan con asiento propio</div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                disabled={counts.yth <= 0}
+                onClick={() => handleUpdate('yth', -1)}
+                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                aria-label="Restar joven"
+              >
+                <Minus className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+              <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.yth} jóvenes`}>{counts.yth}</span>
+              <button
+                type="button"
+                disabled={totalPassengers >= maxTotal}
+                onClick={() => handleUpdate('yth', 1)}
+                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                aria-label="Sumar joven"
               >
                 <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
@@ -219,7 +255,7 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
           </div>
 
           <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
-            Máximo 9 pasajeros por reserva. Los bebés viajan en el regazo de un adulto.
+            Máximo {maxTotal} pasajeros por reserva. Los bebés viajan en el regazo de un adulto.
           </div>
 
           <button

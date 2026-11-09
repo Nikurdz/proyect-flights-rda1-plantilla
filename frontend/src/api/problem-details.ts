@@ -71,6 +71,12 @@ const FIELD_LABELS: [RegExp, string][] = [
 ];
 
 const REASON_PATTERNS: [RegExp, string][] = [
+  [/must not be in the future/i, 'La fecha de nacimiento no puede ser futura.'],
+  [/age \d+ at the last flight/i, 'El tipo de pasajero cambia antes del último vuelo según su edad.'],
+  [/age \d+ at the first flight/i, 'La edad el día del primer vuelo no corresponde al tipo de pasajero.'],
+  [/expires before the end of the trip/i, 'El documento vence antes de terminar el viaje.'],
+  [/required for international/i, 'El vencimiento es obligatorio en viajes internacionales.'],
+  [/not a valid Ecuadorian/i, 'La cédula no es válida.'],
   [/email/i, 'Ingresa un correo válido.'],
   [/at least|minimum|min\b|too short|10 char/i, 'Es demasiado corto.'],
   [/at most|maximum|too long/i, 'Es demasiado largo.'],

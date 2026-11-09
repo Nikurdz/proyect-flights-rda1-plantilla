@@ -6,6 +6,7 @@ import { CheckCircle2, Eye, EyeOff, Lock, Mail, Phone, User } from 'lucide-react
 import { login, registrarCliente } from '../../api/endpoints/auth';
 import { vincularOrden } from '../../api/endpoints/orders';
 import { peekLastOrder } from '../../lib/storage';
+import { getTodayDateString } from '../../lib/dates';
 import type { OrdenViewDto } from '../../api/types';
 import { ProblemDetailsError } from '../../api/problem-details';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
@@ -140,7 +141,7 @@ export const RegisterPage: React.FC = () => {
             label="Fecha de nacimiento"
             type="date"
             autoComplete="bday"
-            max={new Date().toISOString().slice(0, 10)}
+            max={getTodayDateString()}
             error={errors.fechaNacimiento?.message}
             {...register('fechaNacimiento')}
           />

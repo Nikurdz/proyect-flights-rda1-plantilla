@@ -20,7 +20,8 @@ export type AdminContext =
   | 'comprobar-proveedor'
   | 'sincronizar-proveedor'
   | 'reintentar-webhook'
-  | 'exportar-reservas';
+  | 'exportar-reservas'
+  | 'exportar-conciliacion';
 
 /**
  * Specific Spanish text for the 409/422 answers of the back office. Returns undefined when the generic
@@ -98,6 +99,7 @@ function counterErrorMessage(error: ProblemDetailsError, context: AdminContext):
       if (error.status === 409) return 'Esta entrega ya fue confirmada por el receptor: no se vuelve a enviar.';
       if (error.status === 404) return 'Esta entrega ya no existe. Actualiza la lista.';
       return undefined;
+    case 'exportar-conciliacion':
     case 'exportar-reservas':
       if (error.status === 400) return 'Algún filtro no es válido (las fechas van como AAAA-MM-DD). Revísalos e intenta de nuevo.';
       return undefined;

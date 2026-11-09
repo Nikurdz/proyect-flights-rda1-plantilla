@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Receipt } from 'lucide-react';
+import { BillingTabs } from './BillingTabs';
 import { useAdminFactura, useAdminFacturas, type FacturasFiltros } from '../../api/endpoints/facturas';
 import { MoneyText } from '../../components/common/MoneyText';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
@@ -124,6 +125,7 @@ export const AdminInvoicesPage: React.FC = () => {
         <Receipt className="h-5 w-5 text-brand-gold-dark" aria-hidden="true" />
         <h2 className="text-lg font-black text-brand-black">Facturación</h2>
       </div>
+      <BillingTabs />
 
       <div className="mb-5 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_1fr_auto]">
         <Select

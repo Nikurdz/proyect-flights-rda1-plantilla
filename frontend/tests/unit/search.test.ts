@@ -21,28 +21,34 @@ describe('outboundSelectionKey', () => {
 
 describe('buildSearchPath', () => {
   it('writes children and infants only when there are some', () => {
-    const path = buildSearchPath({ origin: 'BOG', destination: 'MDE', outbound: '2026-10-12', trip: 'OW', passengers: { adt: 1, chd: 0, inf: 0 }, sort: 'MAS_BARATOS' });
+    const path = buildSearchPath({ origin: 'BOG', destination: 'MDE', outbound: '2026-10-12', trip: 'OW', passengers: { adt: 1, yth: 0, chd: 0, inf: 0 }, sort: 'MAS_BARATOS' });
     expect(path).toBe('/resultados?origin=BOG&destination=MDE&outbound=2026-10-12&trip=OW&adt=1&sort=MAS_BARATOS');
   });
 
   it('carries the chosen passengers', () => {
-    const path = buildSearchPath({ origin: 'BOG', destination: 'MDE', outbound: '2026-10-12', trip: 'OW', passengers: { adt: 2, chd: 1, inf: 1 } });
+    const path = buildSearchPath({ origin: 'BOG', destination: 'MDE', outbound: '2026-10-12', trip: 'OW', passengers: { adt: 2, yth: 0, chd: 1, inf: 1 } });
     const query = new URLSearchParams(path.split('?')[1]);
     expect([query.get('adt'), query.get('chd'), query.get('inf')]).toEqual(['2', '1', '1']);
   });
 
+  it('writes youths only when there are some', () => {
+    const path = buildSearchPath({ origin: 'BOG', destination: 'MDE', outbound: '2026-10-12', trip: 'OW', passengers: { adt: 2, yth: 2, chd: 0, inf: 0 } });
+    expect(new URLSearchParams(path.split('?')[1]).get('yth')).toBe('2');
+  });
+
   it('adds the return date only for round trips', () => {
-    const rt = buildSearchPath({ origin: 'BOG', destination: 'MDE', outbound: '2026-10-12', inbound: '2026-10-19', trip: 'RT', passengers: { adt: 1, chd: 0, inf: 0 } });
+    const rt = buildSearchPath({ origin: 'BOG', destination: 'MDE', outbound: '2026-10-12', inbound: '2026-10-19', trip: 'RT', passengers: { adt: 1, yth: 0, chd: 0, inf: 0 } });
     expect(rt).toContain('inbound=2026-10-19');
-    const ow = buildSearchPath({ origin: 'BOG', destination: 'MDE', outbound: '2026-10-12', inbound: '2026-10-19', trip: 'OW', passengers: { adt: 1, chd: 0, inf: 0 } });
+    const ow = buildSearchPath({ origin: 'BOG', destination: 'MDE', outbound: '2026-10-12', inbound: '2026-10-19', trip: 'OW', passengers: { adt: 1, yth: 0, chd: 0, inf: 0 } });
     expect(ow).not.toContain('inbound');
   });
 });
 
 describe('describePassengers', () => {
   it('uses singular and plural in Spanish', () => {
-    expect(describePassengers({ adt: 1, chd: 0, inf: 0 })).toBe('1 adulto');
-    expect(describePassengers({ adt: 2, chd: 1, inf: 1 })).toBe('2 adultos, 1 niño, 1 bebé');
-    expect(describePassengers({ adt: 3, chd: 2, inf: 2 })).toBe('3 adultos, 2 niños, 2 bebés');
+    expect(describePassengers({ adt: 1, yth: 0, chd: 0, inf: 0 })).toBe('1 adulto');
+    expect(describePassengers({ adt: 2, yth: 0, chd: 1, inf: 1 })).toBe('2 adultos, 1 niño, 1 bebé');
+    expect(describePassengers({ adt: 3, yth: 0, chd: 2, inf: 2 })).toBe('3 adultos, 2 niños, 2 bebés');
+    expect(describePassengers({ adt: 1, yth: 1, chd: 0, inf: 0 })).toBe('1 adulto, 1 joven');
   });
 });

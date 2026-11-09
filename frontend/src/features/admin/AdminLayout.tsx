@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
@@ -7,6 +7,7 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
 
 /** Back-office frame (ADMIN only; the route guard and the API both enforce it). */
 export const AdminLayout: React.FC = () => {
+  const { pathname } = useLocation();
   useEffect(() => {
     document.title = 'Administración | RAM Alliance';
   }, []);
@@ -46,7 +47,7 @@ export const AdminLayout: React.FC = () => {
             <NavLink to="/admin/proveedores" className={tabClass}>
               Proveedores
             </NavLink>
-            <NavLink to="/admin/facturacion" className={tabClass}>
+            <NavLink to="/admin/facturacion" className={() => tabClass({ isActive: pathname.startsWith('/admin/facturacion') })}>
               Facturación
             </NavLink>
             <NavLink to="/admin/auditoria" className={tabClass}>

@@ -51,7 +51,9 @@ describe('registration form rules', () => {
   });
 
   it('computes whole years of age', () => {
-    expect(ageOn('2000-06-15', new Date(2026, 5, 14))).toBe(25);
-    expect(ageOn('2000-06-15', new Date(2026, 5, 15))).toBe(26);
+    expect(ageOn('2000-06-15', new Date('2026-06-14T17:00:00Z'))).toBe(25);
+    expect(ageOn('2000-06-15', new Date('2026-06-15T17:00:00Z'))).toBe(26);
+    // 2026-06-16T02:00Z is still the 15th in Ecuador (UTC-5).
+    expect(ageOn('2000-06-16', new Date('2026-06-16T02:00:00Z'))).toBe(25);
   });
 });

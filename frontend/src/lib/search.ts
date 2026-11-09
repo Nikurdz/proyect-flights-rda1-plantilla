@@ -10,10 +10,11 @@ export function outboundSelectionKey(params: {
   outbound?: string;
   trip?: string;
   adt: number;
+  yth?: number;
   chd: number;
   inf: number;
 }): string {
-  return [params.origin, params.destination, params.outbound, params.trip, params.adt, params.chd, params.inf].join('|');
+  return [params.origin, params.destination, params.outbound, params.trip, params.adt, params.yth ?? 0, params.chd, params.inf].join('|');
 }
 
 interface SearchPathInput {
@@ -26,12 +27,13 @@ interface SearchPathInput {
   sort?: string;
 }
 
-/** The results URL for a search; children and infants are only written when there are any. */
+/** The results URL for a search; youths, children and infants are only written when there are any. */
 export function buildSearchPath({ origin, destination, outbound, inbound, trip, passengers, sort }: SearchPathInput): string {
   const query = new URLSearchParams({ origin, destination, outbound });
   if (trip === 'RT' && inbound) query.set('inbound', inbound);
   query.set('trip', trip);
   query.set('adt', String(passengers.adt));
+  if (passengers.yth > 0) query.set('yth', String(passengers.yth));
   if (passengers.chd > 0) query.set('chd', String(passengers.chd));
   if (passengers.inf > 0) query.set('inf', String(passengers.inf));
   if (sort) query.set('sort', sort);
@@ -41,8 +43,9 @@ export function buildSearchPath({ origin, destination, outbound, inbound, trip, 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
 /** "2 adultos, 1 niño, 1 bebé" */
-export function describePassengers({ adt, chd, inf }: PassengerCounts): string {
+export function describePassengers({ adt, yth, chd, inf }: PassengerCounts): string {
   const parts = [plural(adt, 'adulto', 'adultos')];
+  if (yth > 0) parts.push(plural(yth, 'joven', 'jóvenes'));
   if (chd > 0) parts.push(plural(chd, 'niño', 'niños'));
   if (inf > 0) parts.push(plural(inf, 'bebé', 'bebés'));
   return parts.join(', ');
