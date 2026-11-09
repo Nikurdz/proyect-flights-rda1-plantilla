@@ -28,11 +28,9 @@ import { AdminUsersPage } from '../features/admin/AdminUsersPage';
 import { AdminAirportsPage } from '../features/admin/AdminAirportsPage';
 import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
 import { AdminObservabilityPage } from '../features/admin/AdminObservabilityPage';
-import { AdminProvidersPage } from '../features/admin/AdminProvidersPage';
 import { AdminInvoicesPage } from '../features/admin/AdminInvoicesPage';
 import { AdminBookingBillingPage } from '../features/admin/AdminBookingBillingPage';
 import { AdminAuditPage } from '../features/admin/AdminAuditPage';
-import { AdminNodesHealthPage } from '../features/admin/AdminNodesHealthPage';
 import { AdminWebhooksPage } from '../features/admin/AdminWebhooksPage';
 import { ExperiencesPage } from '../features/experiences/ExperiencesPage';
 import { ExperienceDetailPage } from '../features/experiences/ExperienceDetailPage';
@@ -89,11 +87,11 @@ export const AppRoutes: React.FC = () => {
             <Route path="vuelos" element={<AdminFlightsPage />} />
             <Route path="aeropuertos" element={<AdminAirportsPage />} />
             <Route path="usuarios" element={<AdminUsersPage />} />
-            <Route path="proveedores" element={<AdminProvidersPage />} />
+        <Route path="proveedores" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="facturacion" element={<AdminInvoicesPage />} />
             <Route path="facturacion-booking" element={<AdminBookingBillingPage />} />
             <Route path="auditoria" element={<AdminAuditPage />} />
-            <Route path="salud" element={<AdminNodesHealthPage />} />
+        <Route path="salud" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="webhooks" element={<AdminWebhooksPage />} />
             <Route path="observabilidad" element={<AdminObservabilityPage />} />
           </Route>

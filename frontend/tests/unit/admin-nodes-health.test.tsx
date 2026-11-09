@@ -81,7 +81,7 @@ describe('AdminNodesHealthPage', () => {
   });
 });
 
-describe('Dashboard providers card', () => {
+describe('Dashboard without the providers card', () => {
   const dash = {
     dias: 30,
     moneda: 'USD',
@@ -107,21 +107,11 @@ describe('Dashboard providers card', () => {
   });
   afterEach(cleanup);
 
-  it('names the providers that are down and links to the node health view', async () => {
+  it('no longer shows a providers card and does not ask for the providers', async () => {
     mocked.mockImplementation((async (url: string) => (url.startsWith('admin/dashboard') ? dash : nodos)) as never);
     renderIn(<AdminDashboardPage />);
-    const card = await screen.findByRole('region', { name: 'Proveedores' });
-    expect(await within(card).findByText(/Proveedores caídos: Autos Sur/)).toBeTruthy();
-    expect(within(card).getByRole('link', { name: 'Ver salud de nodos' }).getAttribute('href')).toBe('/admin/salud');
-  });
-
-  it('does not break the dashboard when the providers call fails', async () => {
-    mocked.mockImplementation((async (url: string) => {
-      if (url.startsWith('admin/dashboard')) return dash;
-      throw new Error('boom');
-    }) as never);
-    renderIn(<AdminDashboardPage />);
     expect(await screen.findByText('Conversión')).toBeTruthy();
-    expect(await screen.findByText(/No se pudo leer el estado de los proveedores/)).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Proveedores' })).toBeNull();
+    expect(mocked.mock.calls.some(([url]) => String(url).includes('proveedores'))).toBe(false);
   });
 });
