@@ -39,6 +39,8 @@ export class RuntimeMetrics {
   private readonly events = new Map<string, number>();
   private readonly consumerFailures = new Map<string, number>();
   private readonly jobs = new Map<string, JobStat>();
+  /** State of the links with partners (Booking's stock push and webhook subscription), as last reported by their service. */
+  private readonly integrations = new Map<string, Record<string, unknown>>();
   private rateLimited = 0;
   private requests = 0;
 
@@ -90,6 +92,11 @@ export class RuntimeMetrics {
     this.jobs.set(name, job);
   }
 
+  /** Merges what an integration reports about itself (no secrets, no personal data). */
+  setIntegration(name: string, state: Record<string, unknown>): void {
+    this.integrations.set(name, { ...(this.integrations.get(name) ?? {}), ...state, updatedAt: new Date().toISOString() });
+  }
+
   snapshot() {
     const toObject = (map: Map<string, number>) => Object.fromEntries([...map.entries()].sort((a, b) => b[1] - a[1]));
     const routes = [...this.routes.entries()]
@@ -108,6 +115,7 @@ export class RuntimeMetrics {
       events: toObject(this.events),
       consumerFailures: toObject(this.consumerFailures),
       jobs: Object.fromEntries(this.jobs),
+      integrations: Object.fromEntries(this.integrations),
     };
   }
 }

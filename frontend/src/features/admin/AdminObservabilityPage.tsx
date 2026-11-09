@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Activity, AlertTriangle, CheckCircle2, Pause, Play, RefreshCw } from 'lucide-react';
-import { useAdminObservabilidad, useAdminRuntime, type VentanaObservabilidad } from '../../api/endpoints/admin';
+import { useAdminObservabilidad, useAdminRuntime, type ObservabilidadRuntime, type VentanaObservabilidad } from '../../api/endpoints/admin';
 import { MoneyText } from '../../components/common/MoneyText';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Badge } from '../../components/ui/Badge';
@@ -90,6 +91,112 @@ const Flash: React.FC<{ value: React.ReactNode; className?: string; as?: 'div' |
     <Tag key={tick} className={`${className} ${tick > 0 ? 'animate-flash-gold' : ''}`}>
       {value}
     </Tag>
+  );
+};
+
+const hora = (iso: string | undefined): string => (iso ? new Date(iso).toLocaleTimeString('es-EC') : '—');
+
+const WEBHOOK_STATE: Record<string, { label: string; tone: Tone }> = {
+  SUSCRITO: { label: 'Suscrito', tone: 'success' },
+  SIN_CONFIGURAR: { label: 'Sin configurar', tone: 'warning' },
+  ERROR: { label: 'Error', tone: 'danger' },
+};
+const STOCK_MODE: Record<string, { label: string; tone: Tone }> = {
+  HTTP: { label: 'HTTP', tone: 'success' },
+  GRPC: { label: 'gRPC', tone: 'success' },
+  OFF: { label: 'Apagado', tone: 'warning' },
+};
+
+const Linea: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div className="flex flex-wrap items-baseline justify-between gap-2 py-1.5">
+    <dt className="text-slate-400">{label}</dt>
+    <dd className="break-all text-right font-mono text-slate-100">{children}</dd>
+  </div>
+);
+
+/** Booking integration as this process sees it: webhook subscription made at boot and the stock push. */
+const BookingIntegrationCard: React.FC<{ runtime: ObservabilidadRuntime }> = ({ runtime }) => {
+  const webhook = runtime.integrations?.['booking-webhook'];
+  const stock = runtime.integrations?.['booking-stock'];
+  const job = runtime.jobs['stock-push'];
+  const ws = webhook ? (WEBHOOK_STATE[webhook.estado] ?? { label: webhook.estado, tone: 'secondary' as Tone }) : null;
+  const sm = stock ? (STOCK_MODE[stock.modo] ?? { label: stock.modo, tone: 'secondary' as Tone }) : null;
+  const ronda = stock?.ultimaRonda;
+  return (
+    <section aria-labelledby="integracion-booking" className="rounded-xl border border-white/10 bg-white/5 p-4 text-[11px]">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 id="integracion-booking" className="text-xs font-bold text-slate-200">
+          Integración con Booking
+        </h3>
+        <span className="text-slate-400">Datos de este proceso: se reinician al reiniciar el servidor.</span>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div>
+          <h4 className="mb-1 flex items-center gap-2 font-bold text-slate-300">
+            Webhooks a Booking {ws && <Badge variant={ws.tone === 'secondary' ? 'outline' : ws.tone}>{ws.label}</Badge>}
+          </h4>
+          {!webhook ? (
+            <p className="text-slate-400">Sin datos todavía: el registro se hace al arrancar.</p>
+          ) : (
+            <dl className="divide-y divide-white/10">
+              <Linea label="Dueño">{webhook.owner ?? '—'}</Linea>
+              <Linea label="Destino">{webhook.destino ?? '—'}</Linea>
+              <Linea label="Suscripción">{webhook.suscripcionId ?? '—'}</Linea>
+              {webhook.detalle && <Linea label="Detalle">{webhook.detalle}</Linea>}
+              <Linea label="Actualizado">{hora(webhook.updatedAt)}</Linea>
+            </dl>
+          )}
+          <Link to="/admin/webhooks" className="mt-2 inline-block font-semibold text-brand-gold underline">
+            Ver entregas de webhooks
+          </Link>
+        </div>
+        <div>
+          <h4 className="mb-1 flex items-center gap-2 font-bold text-slate-300">
+            Push de stock {sm && <Badge variant={sm.tone === 'secondary' ? 'outline' : sm.tone}>{sm.label}</Badge>}
+          </h4>
+          {!stock ? (
+            <p className="text-slate-400">Sin datos todavía.</p>
+          ) : (
+            <dl className="divide-y divide-white/10">
+              <Linea label="Destino">{stock.destino ?? '—'}</Linea>
+              {stock.serviceId && <Linea label="service_id">{stock.serviceId}</Linea>}
+              {stock.horizonteDias != null && <Linea label="Horizonte">{stock.horizonteDias} días</Linea>}
+              <Linea label="Última ronda">
+                {ronda ? (
+                  <>
+                    {hora(ronda.en)} · <span className="text-emerald-300">{ronda.enviados} enviados</span> · <span className={ronda.rechazados > 0 ? 'text-amber-300' : ''}>{ronda.rechazados} rechazados</span> ·{' '}
+                    <span className={ronda.fallidos > 0 ? 'text-red-400' : ''}>{ronda.fallidos} fallidos</span> · {ronda.sinIntentar} sin intentar de {ronda.total}
+                  </>
+                ) : (
+                  'Ninguna todavía'
+                )}
+              </Linea>
+              <Linea label="Vuelos en espera">{stock.vuelosEnEspera ?? 0}</Linea>
+              {stock.vuelosEnviadosAlgunaVez != null && <Linea label="Vuelos enviados alguna vez">{stock.vuelosEnviadosAlgunaVez}</Linea>}
+              {stock.ultimoRechazo && (
+                <Linea label="Último rechazo">
+                  <span className="text-amber-300">
+                    {hora(stock.ultimoRechazo.en)} · {stock.ultimoRechazo.detalle}
+                  </span>
+                </Linea>
+              )}
+              {stock.ultimoError && (
+                <Linea label="Último error">
+                  <span className="text-red-400">
+                    {hora(stock.ultimoError.en)} · {stock.ultimoError.mensaje}
+                  </span>
+                </Linea>
+              )}
+              {job && (
+                <Linea label="Proceso">
+                  {job.runs} ciclo(s), {job.failures} con fallo{job.lastRunAt ? ` · último ${hora(job.lastRunAt)}` : ''}
+                </Linea>
+              )}
+            </dl>
+          )}
+        </div>
+      </div>
+    </section>
   );
 };
 
@@ -382,6 +489,8 @@ export const AdminObservabilityPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            <BookingIntegrationCard runtime={r} />
           </>
         )}
       </section>

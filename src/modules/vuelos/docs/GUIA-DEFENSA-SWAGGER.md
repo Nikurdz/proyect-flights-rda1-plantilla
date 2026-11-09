@@ -197,7 +197,7 @@ Con el token del comprador. El `bookingId` sale de `GET /ordenes/{numero}` (camp
 
 - **8B · `POST /webhooks`**: `{ url, events, secret }` (secreto de 16 a 200 caracteres). Solo **https** y solo hosts **públicos**: `localhost`, `10.x`, `192.168.x`, `169.254.x`… dan `400` (defensa SSRF; la dirección se valida también al entregar). Máximo 10 por cuenta.
 - **8A · `GET /webhooks`** lista las tuyas, **sin el secreto** (solo se escribe). **8C · `DELETE /webhooks/{id}`** la desactiva (404 si es de otro).
-- **Entrega:** `POST` con `X-Webhook-Id`, `X-Webhook-Event`, `X-Webhook-Timestamp` y `X-Webhook-Signature: sha256=HMAC(secret, timestamp + "." + cuerpo)`. Si el receptor no responde 2xx se reintenta a 1 min, 5 min, 30 min, 2 h y 6 h, y luego queda `DEAD` (se ve en **Observabilidad → webhooks**).
+- **Entrega:** `POST` con `X-Webhook-Id`, `X-Webhook-Event`, `X-Webhook-Timestamp` y `X-Webhook-Signature: sha256=HMAC(secret, timestamp + "." + cuerpo)`. Si el receptor no responde 2xx se reintenta a 1 min, 5 min, 30 min, 2 h y 6 h, y luego queda `DEAD`. Los contadores están en **Observabilidad**; el detalle por entrega (intentos, último error, reserva) y el botón **Reintentar** en el panel **Admin → Webhooks** (`GET /admin/webhooks/suscripciones`, `GET /admin/webhooks/entregas`, `POST /admin/webhooks/entregas/{id}/reintentar`).
 - **Eventos:** `booking.confirmed`, `booking.ticket_issuing`, `booking.ticket_issued`, `booking.failed`, `booking.ticket_failed`, `booking.changed`, `booking.cancelled`, `hold.expired` y, por acciones del administrador, `flight.cancelled` y `flight.schedule_changed`. Los cuerpos no llevan datos personales.
 
 ---

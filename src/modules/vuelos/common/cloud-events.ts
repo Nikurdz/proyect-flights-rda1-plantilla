@@ -72,7 +72,11 @@ export function cloudEventData(type: VuelosEventName, payload: Record<string, un
         ...(typeof payload.amountCharged === 'string' ? { amountCharged: { currency: payload.currency ?? 'USD', total: payload.amountCharged } } : {}),
       };
     case 'booking.cancelled':
-      return { ...bookingData(payload), ...pick(payload, ['reasonCode', 'refundId', 'refundAmount', 'seatsReleased']) };
+      // Booking refunds its customer and reconciles from this event: it needs the payment it took and the split.
+      return {
+        ...bookingData(payload),
+        ...pick(payload, ['reasonCode', 'reason', 'refundId', 'refundAmount', 'penaltyAmount', 'currency', 'paymentReference', 'seatsReleased']),
+      };
     case 'booking.checked_in':
       return { ...bookingData(payload), ...(payload.checkedInPassengers !== undefined ? { passengersCheckedIn: payload.checkedInPassengers } : {}) };
     case 'flight.status_changed':

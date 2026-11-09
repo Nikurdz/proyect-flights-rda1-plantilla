@@ -125,6 +125,8 @@ export class CancellationService {
     const refunded = amounts.refundMinor > 0;
 
     booking.status = 'CANCELLED';
+    booking.refundMinor = amounts.refundMinor;
+    booking.penaltyMinor = amounts.penaltyMinor;
     await this.context.addChange(manager, booking, `Reserva cancelada (${reason}). Reembolso ${formatMinorUnits(amounts.refundMinor)} ${booking.currency}, penalidad ${formatMinorUnits(amounts.penaltyMinor)} ${booking.currency}.`);
     await manager.save(booking);
 

@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VUELOS_EVENT_NAMES } from '../common/cloud-events';
+import { runtimeMetrics } from '../common/runtime-metrics';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { WebhookSubscription, WebhookSubscriptionEvent } from '../entities/webhook-subscription.entity';
 import { WebhooksService } from '../services/webhooks.service';
@@ -24,8 +25,12 @@ export class BookingBootstrapV2Service implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     const { webhookUrl, webhookSecret } = this.config.booking;
-    if (!webhookUrl) return;
+    if (!webhookUrl) {
+      runtimeMetrics.setIntegration('booking-webhook', { estado: 'SIN_CONFIGURAR', detalle: 'BOOKING_WEBHOOK_URL no está definida: Booking no recibe nuestros webhooks.' });
+      return;
+    }
     const ownerId = `partner:${process.env.PARTNER_CLIENT_ID ?? 'booking-prototipo'}`;
+    const destino = new URL(webhookUrl).origin;
     try {
       const existing = await this.subscriptions.findOne({ where: { ownerId, url: webhookUrl, active: true } });
       if (existing) {
@@ -33,13 +38,17 @@ export class BookingBootstrapV2Service implements OnApplicationBootstrap {
         existing.apiVersion = 2;
         existing.eventos = VUELOS_EVENT_NAMES.map((evento) => this.subscriptions.manager.create(WebhookSubscriptionEvent, { subscriptionId: existing.id, evento }));
         await this.subscriptions.save(existing);
-        this.logger.log(`Booking webhook updated: ${new URL(webhookUrl).origin}`);
+        runtimeMetrics.setIntegration('booking-webhook', { estado: 'SUSCRITO', owner: ownerId, destino, suscripcionId: existing.id });
+        this.logger.log(`Booking webhook updated: ${destino}`);
         return;
       }
-      await this.webhooks.createRow(ownerId, { url: webhookUrl, events: [...VUELOS_EVENT_NAMES], secret: webhookSecret }, 2);
-      this.logger.log(`Booking webhook registered: ${new URL(webhookUrl).origin}`);
+      const created = await this.webhooks.createRow(ownerId, { url: webhookUrl, events: [...VUELOS_EVENT_NAMES], secret: webhookSecret }, 2);
+      runtimeMetrics.setIntegration('booking-webhook', { estado: 'SUSCRITO', owner: ownerId, destino, suscripcionId: created.id });
+      this.logger.log(`Booking webhook registered: ${destino}`);
     } catch (error) {
-      this.logger.warn(`Booking webhook not registered: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      runtimeMetrics.setIntegration('booking-webhook', { estado: 'ERROR', owner: ownerId, destino, detalle: message.slice(0, 300) });
+      this.logger.warn(`Booking webhook not registered: ${message}`);
     }
   }
 }

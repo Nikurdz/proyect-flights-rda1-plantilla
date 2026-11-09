@@ -7,6 +7,7 @@ import * as protoLoader from '@grpc/proto-loader';
 import { MoreThan, Repository } from 'typeorm';
 import { activityGate } from '../common/activity-gate';
 import { DomainEventBus } from '../common/domain-event-bus';
+import { runtimeMetrics } from '../common/runtime-metrics';
 import { requestJson, resolveSafeTarget, SafeTarget } from '../common/safe-http';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { Vuelo } from '../entities/vuelo.entity';
@@ -102,8 +103,15 @@ export class StockPushService implements OnModuleInit, OnModuleDestroy {
       this.transport = 'grpc';
       this.client = this.connect();
     } else {
+      runtimeMetrics.setIntegration('booking-stock', { modo: 'OFF' });
       return;
     }
+    runtimeMetrics.setIntegration('booking-stock', {
+      modo: this.transport === 'http' ? 'HTTP' : 'GRPC',
+      destino: this.transport === 'http' ? new URL(this.config.booking.stockHttpUrl).origin : this.config.stockGrpcUrl,
+      serviceId: this.config.nodeId,
+      horizonteDias: this.config.stockPush.horizonDays,
+    });
     for (const type of STOCK_EVENTS) {
       this.events.subscribe(type, (event) => {
         this.schedule(event.correlationId);
@@ -163,6 +171,7 @@ export class StockPushService implements OnModuleInit, OnModuleDestroy {
       return result;
     }
     this.running = true;
+    const startedAt = Date.now();
     const correlation = correlationId ?? this.pendingCorrelation ?? randomUUID();
     this.pendingCorrelation = null;
     try {
@@ -202,8 +211,13 @@ export class StockPushService implements OnModuleInit, OnModuleDestroy {
       if (full) this.lastFull = now;
       this.counters.updates += result.updates;
       this.counters.changes += result.changes;
+      runtimeMetrics.recordJob('stock-push', { durationMs: Date.now() - startedAt, result: { ...result } });
+      runtimeMetrics.setIntegration('booking-stock', { vuelosEnviadosAlgunaVez: this.lastPushed.size, vuelosEnEspera: this.waitingCount(), contadores: { ...this.counters } });
     } catch (error) {
       this.counters.failures += 1;
+      const message = error instanceof Error ? error.message : String(error);
+      runtimeMetrics.recordJob('stock-push', { durationMs: Date.now() - startedAt, error: message });
+      runtimeMetrics.setIntegration('booking-stock', { ultimoError: { en: new Date().toISOString(), mensaje: message.slice(0, 300) }, contadores: { ...this.counters } });
       this.logger.warn(`Stock push failed, retrying at the next sync: ${error instanceof Error ? error.message : String(error)} [${correlation}]`);
     } finally {
       this.running = false;
@@ -213,6 +227,11 @@ export class StockPushService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return result;
+  }
+
+  /** Flights Booking refused that wait REFUSED_BACKOFF_MS before being sent again. */
+  private waitingCount(now: number = Date.now()): number {
+    return [...this.refusedUntil.values()].filter((until) => until > now).length;
   }
 
   private itemOf(vuelo: Vuelo) {
@@ -267,6 +286,11 @@ export class StockPushService implements OnModuleInit, OnModuleDestroy {
 
     // One summary line per round that sent something, so a healthy push is visible in the logs too.
     this.logger.log(`Stock push round: ${sent.size} sent, ${refused} refused, ${errors} failed, ${pending.length - sent.size - refused - errors} not attempted, of ${pending.length} [${correlationId}]`);
+    runtimeMetrics.setIntegration('booking-stock', {
+      ultimaRonda: { en: new Date().toISOString(), enviados: sent.size, rechazados: refused, fallidos: errors, sinIntentar: pending.length - sent.size - refused - errors, total: pending.length },
+      ...(firstRefusal ? { ultimoRechazo: { en: new Date().toISOString(), detalle: firstRefusal.slice(0, 300) } } : {}),
+      ...(errors > 0 ? { ultimoError: { en: new Date().toISOString(), mensaje: lastError.slice(0, 300) } } : {}),
+    });
     if (refused > 0) {
       this.counters.refused += refused;
       this.logger.warn(`Booking refused ${refused} stock update(s); they wait 1 h before being sent again (first: ${firstRefusal}) [${correlationId}]`);

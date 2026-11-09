@@ -31,6 +31,7 @@ import { AdminProvidersPage } from '../features/admin/AdminProvidersPage';
 import { AdminInvoicesPage } from '../features/admin/AdminInvoicesPage';
 import { AdminAuditPage } from '../features/admin/AdminAuditPage';
 import { AdminNodesHealthPage } from '../features/admin/AdminNodesHealthPage';
+import { AdminWebhooksPage } from '../features/admin/AdminWebhooksPage';
 import { ExperiencesPage } from '../features/experiences/ExperiencesPage';
 import { ExperienceDetailPage } from '../features/experiences/ExperienceDetailPage';
 import { MyExperiencesPage } from '../features/experiences/MyExperiencesPage';
@@ -89,6 +90,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="facturacion" element={<AdminInvoicesPage />} />
             <Route path="auditoria" element={<AdminAuditPage />} />
             <Route path="salud" element={<AdminNodesHealthPage />} />
+            <Route path="webhooks" element={<AdminWebhooksPage />} />
             <Route path="observabilidad" element={<AdminObservabilityPage />} />
           </Route>
         </Route>

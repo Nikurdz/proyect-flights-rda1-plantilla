@@ -23,6 +23,51 @@ function notifyWakeUp(status: { isWakingUp: boolean; elapsedSeconds: number }) {
   wakeUpListeners.forEach((fn) => fn(status));
 }
 
+/**
+ * Authenticated download (CSV and similar): same token, same error handling as `apiClient`, but the body is
+ * returned as a Blob. An error answer is still `application/problem+json`.
+ */
+export async function apiBlob(endpoint: string, accept = 'text/csv'): Promise<Blob> {
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
+  const headers = new Headers({ Accept: `${accept}, application/problem+json` });
+  const token = getStoredToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  let response: Response;
+  try {
+    response = await fetch(url, { headers });
+  } catch {
+    throw new ProblemDetailsError({ status: 503, code: 'SERVICE_UNAVAILABLE' });
+  }
+  if (!response.ok) {
+    let errorPayload: ProblemDetailsPayload = {};
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('json')) {
+      try {
+        errorPayload = await response.json();
+      } catch {
+        errorPayload = {};
+      }
+    }
+    errorPayload.status = response.status;
+    if (response.status === 401) endSession();
+    throw new ProblemDetailsError(errorPayload, response.headers.get('x-correlation-id') || undefined);
+  }
+  return response.blob();
+}
+
+/** Saves a Blob as a file through a temporary object URL. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
 export async function apiClient<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL.replace(/\/$/, '')}/${endpoint.replace(/^\//, '')}`;
 

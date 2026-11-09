@@ -1,4 +1,4 @@
-import type { AdminReserva, AdminReservasFilters, CanalReserva, ReservaPasajero, TipoDocumento } from '../../api/endpoints/admin';
+import type { AdminReserva, AdminReservasFilters, CanalReserva, EstadoReserva, ReservaImportes, ReservaPasajero, TipoDocumento } from '../../api/endpoints/admin';
 
 export const CANAL_LABEL: Record<CanalReserva, string> = { SOCIO: 'Socio (Booking)', DIRECTO: 'Directo (web)' };
 export const DOCUMENT_TYPE_LABEL: Record<string, string> = { NATIONAL_ID: 'Cédula', PASSPORT: 'Pasaporte' };
@@ -22,6 +22,9 @@ export interface ReservasSearchForm {
   documento: string;
   tipoDocumento: TipoDocumento;
   nacionalidad: string;
+  estado: EstadoReserva | '';
+  desde: string;
+  hasta: string;
 }
 
 export const EMPTY_SEARCH: ReservasSearchForm = {
@@ -32,7 +35,30 @@ export const EMPTY_SEARCH: ReservasSearchForm = {
   documento: '',
   tipoDocumento: 'NATIONAL_ID',
   nacionalidad: 'EC',
+  estado: '',
+  desde: '',
+  hasta: '',
 };
+
+export const BOOKING_STATUS_LABEL: Record<EstadoReserva, string> = {
+  PENDING: 'Pendiente',
+  PENDING_PAYMENT: 'Pago pendiente',
+  TICKET_ISSUING: 'Emitiendo billetes',
+  CONFIRMED: 'Confirmada',
+  FAILED: 'Fallida',
+  CHANGE_PENDING: 'Cambio pendiente',
+  CANCELLATION_PENDING: 'Cancelación pendiente',
+  CANCELLED: 'Cancelada',
+};
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The breakdown of a booking; an older API without `importes` falls back to the total alone. */
+export function importesOf(booking: Pick<AdminReserva, 'importes' | 'total'>): ReservaImportes {
+  return (
+    booking.importes ?? { moneda: booking.total.currency, base: null, impuestos: null, total: booking.total.total, reembolso: null, penalidad: null }
+  );
+}
 
 export function toReservasFilters(form: ReservasSearchForm): AdminReservasFilters {
   const filters: AdminReservasFilters = {};
@@ -41,6 +67,9 @@ export function toReservasFilters(form: ReservasSearchForm): AdminReservasFilter
   if (form.partnerOrderId.trim()) filters.partnerOrderId = form.partnerOrderId.trim();
   if (form.paymentReference.trim()) filters.paymentReference = form.paymentReference.trim();
   if (form.canal) filters.canal = form.canal;
+  if (form.estado) filters.estado = form.estado;
+  if (DAY.test(form.desde)) filters.desde = form.desde;
+  if (DAY.test(form.hasta)) filters.hasta = form.hasta;
   if (form.documento.trim()) {
     filters.documento = form.documento.trim();
     filters.tipoDocumento = form.tipoDocumento;

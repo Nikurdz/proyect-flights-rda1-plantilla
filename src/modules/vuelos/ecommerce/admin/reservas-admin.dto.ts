@@ -2,6 +2,10 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 import { ToUpperTrimmed } from '../../dto/validators';
+import { BOOKING_STATUSES, BookingStatus } from '../../entities/booking.entity';
+
+/** A date (YYYY-MM-DD) or a UTC date-time (YYYY-MM-DDTHH:mm[:ss[.sss]][Z]). */
+const UTC_BOUND = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z?)?$/;
 
 export class ReservasQueryDto {
   @ApiPropertyOptional({ example: 'ABC123', description: 'Localizador (PNR).' })
@@ -43,6 +47,21 @@ export class ReservasQueryDto {
   @Matches(/^[A-Z]{2}$/)
   @IsOptional()
   nacionalidad?: string;
+
+  @ApiPropertyOptional({ enum: BOOKING_STATUSES, description: 'Estado de la reserva (CONFIRMED, CANCELLED…).' })
+  @IsIn(BOOKING_STATUSES)
+  @IsOptional()
+  estado?: BookingStatus;
+
+  @ApiPropertyOptional({ example: '2026-11-08', description: 'Creadas desde (fecha o fecha-hora UTC, inclusive).' })
+  @Matches(UTC_BOUND)
+  @IsOptional()
+  desde?: string;
+
+  @ApiPropertyOptional({ example: '2026-11-08', description: 'Creadas hasta (una fecha cubre el día UTC completo).' })
+  @Matches(UTC_BOUND)
+  @IsOptional()
+  hasta?: string;
 
   @ApiPropertyOptional({ minimum: 1, default: 1 })
   @Type(() => Number)

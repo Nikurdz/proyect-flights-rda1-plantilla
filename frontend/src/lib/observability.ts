@@ -67,6 +67,7 @@ export function jobLabel(name: string): string {
   if (name === 'reconciliacion') return 'Reconciliación de pagos y avisos';
   if (name === 'holds-sweeper') return 'Liberación de reservas vencidas';
   if (name === 'webhook-dispatcher') return 'Entrega de webhooks';
+  if (name === 'stock-push') return 'Push de stock a Booking';
   return name;
 }
 

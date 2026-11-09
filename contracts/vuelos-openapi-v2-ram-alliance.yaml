@@ -3936,17 +3936,32 @@ components:
                   properties:
                     reasonCode:
                       type: string
-                      example: SAGA_COMPENSATION
+                      example: FLIGHT_CANCELLED
+                    reason:
+                      type: string
+                      nullable: true
+                      example: Vuelo cancelado por la aerolínea
                     refundId:
                       type: string
-                      example: 313b13d1-b19e-40f3-8ebd-adeb018933a9
                       format: uuid
+                      example: 313b13d1-b19e-40f3-8ebd-adeb018933a9
                     refundAmount:
                       type: string
                       example: '94.50'
+                    penaltyAmount:
+                      type: string
+                      example: '0.00'
+                    currency:
+                      type: string
+                      example: USD
+                    paymentReference:
+                      type: string
+                      nullable: true
+                      example: PAY-BKP-000123
                     seatsReleased:
                       type: integer
                       example: 2
+      description: 'Reserva cancelada (por el viajero, el socio, el mostrador o porque la aerolínea canceló el vuelo: `reasonCode: FLIGHT_CANCELLED`, reembolso total). Lleva lo necesario para devolver el cobro y cuadrar: `paymentReference` del pago original, `refundAmount` y `penaltyAmount` en `currency`.'
     EventCheckedIn:
       allOf:
         - $ref: '#/components/schemas/CloudEventBase'

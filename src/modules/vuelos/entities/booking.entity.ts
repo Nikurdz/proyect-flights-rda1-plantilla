@@ -56,6 +56,14 @@ export class Booking {
   @Column({ type: 'varchar', length: 3 })
   currency: string;
 
+  // What the cancellation gave back and kept, in `currency` (null while not cancelled, and for bookings cancelled before
+  // these columns existed). The reconciliation with a partner compares them with what it refunded.
+  @Column({ type: 'bigint', nullable: true, transformer: bigintNumber })
+  refundMinor?: number | null;
+
+  @Column({ type: 'bigint', nullable: true, transformer: bigintNumber })
+  penaltyMinor?: number | null;
+
   // One payment can back at most one booking.
   @Column({ type: 'varchar', length: 100, unique: true })
   paymentReference: string;

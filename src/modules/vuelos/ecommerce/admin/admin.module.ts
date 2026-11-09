@@ -19,11 +19,13 @@ import { VuelosAdminService } from './vuelos-admin.service';
 import { DashboardService } from './dashboard.service';
 import { HealthController, ObservabilidadController } from './observabilidad.controller';
 import { ObservabilidadService } from './observabilidad.service';
+import { WebhooksAdminController } from './webhooks-admin.controller';
+import { WebhooksAdminService } from './webhooks-admin.service';
 
 @Module({
   imports: [VuelosCoreModule, OrdenesModule, IdentidadModule, TypeOrmModule.forFeature([Vuelo, SeatAssignment, Booking, AuditoriaCambio])],
-  controllers: [AdminController, ReservasAdminController, ObservabilidadController, DashboardController, UsuariosController, HealthController],
-  providers: [AdminService, ReservasAdminService, VuelosAdminService, UsuariosService, ObservabilidadService, DashboardService, RolesGuard],
+  controllers: [AdminController, ReservasAdminController, WebhooksAdminController, ObservabilidadController, DashboardController, UsuariosController, HealthController],
+  providers: [AdminService, ReservasAdminService, WebhooksAdminService, VuelosAdminService, UsuariosService, ObservabilidadService, DashboardService, RolesGuard],
   exports: [AdminService],
 })
 export class AdminModule {}

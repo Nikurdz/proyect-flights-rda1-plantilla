@@ -17,7 +17,9 @@ export type AdminContext =
   | 'apagar-proveedor'
   | 'eliminar-proveedor'
   | 'comprobar-proveedor'
-  | 'sincronizar-proveedor';
+  | 'sincronizar-proveedor'
+  | 'reintentar-webhook'
+  | 'exportar-reservas';
 
 /**
  * Specific Spanish text for the 409/422 answers of the back office. Returns undefined when the generic
@@ -70,6 +72,13 @@ function counterErrorMessage(error: ProblemDetailsError, context: AdminContext):
       if (error.code === 'QUOTE_EXPIRED') return 'La cotización venció. Cotiza de nuevo antes de cancelar.';
       if (error.status === 409) return 'Esta reserva ya no se puede cancelar (ya está cancelada o fuera de plazo). Actualiza la lista.';
       if (error.status === 404) return 'No existe esta reserva.';
+      return undefined;
+    case 'reintentar-webhook':
+      if (error.status === 409) return 'Esta entrega ya fue confirmada por el receptor: no se vuelve a enviar.';
+      if (error.status === 404) return 'Esta entrega ya no existe. Actualiza la lista.';
+      return undefined;
+    case 'exportar-reservas':
+      if (error.status === 400) return 'Algún filtro no es válido (las fechas van como AAAA-MM-DD). Revísalos e intenta de nuevo.';
       return undefined;
     case 'estado-vuelo':
       if (error.code === 'INVALID_STATUS_TRANSITION') return 'Ese cambio de estado no es válido desde el estado actual del vuelo (por ejemplo, un vuelo que ya salió no vuelve a programado).';

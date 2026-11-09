@@ -1,5 +1,5 @@
-import { Body, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Body, Get, Header, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiProduces, ApiResponse } from '@nestjs/swagger';
 import { CurrentAuth, JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles.guard';
 import type { AuthClaims } from '../../auth/token.service';
@@ -32,6 +32,21 @@ export class ReservasAdminController {
   @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN)
   list(@Query() query: ReservasQueryDto) {
     return this.reservas.list(query);
+  }
+
+  // Declared before ':bookingId' so the path is not taken for a booking id.
+  @Get('export.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="reservas.csv"')
+  @ApiOperation({
+    summary: 'Exportar reservas en CSV para el cuadre (ADMIN)',
+    description: `Mismos filtros que la lista (canal, partnerOrderId, estado, desde/hasta…), hasta 5000 filas, las más antiguas primero. Por reserva: localizador, orden y pago del socio, vuelos, base, impuestos, total cobrado, reembolso y penalidad. Sin datos de pasajeros.`,
+  })
+  @ApiProduces('text/csv')
+  @ApiResponse({ status: 200, description: 'CSV separado por comas, UTF-8 con BOM (Excel lo abre directamente).' })
+  @ApiProblemResponses(BAD_REQUEST, UNAUTHORIZED, FORBIDDEN)
+  exportCsv(@Query() query: ReservasQueryDto) {
+    return this.reservas.exportCsv(query);
   }
 
   @Get(':bookingId')

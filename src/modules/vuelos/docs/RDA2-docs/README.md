@@ -8,6 +8,7 @@ Resultado de aprendizaje: *ecosistema de microservicios con APIs REST, API Gatew
 | [COMPARACION-CONTRATOS-V1-V2.md](COMPARACION-CONTRATOS-V1-V2.md) | Contrato v1.5 vs v2 (`vuelos-openapi-v2.yaml`): qué era igual, qué cambió y cómo quedó |
 | [DESCOMPOSICION-MICROSERVICIOS.md](DESCOMPOSICION-MICROSERVICIOS.md) | Qué tablas pueden ser microservicios, qué las ata hoy y en qué orden separarlas |
 | [CONTRATOS-DE-EVENTOS.md](CONTRATOS-DE-EVENTOS.md) | Esquemas de eventos, validación, versionado y compatibilidad |
+| [GUIA-PRUEBA-BOOKING.md](GUIA-PRUEBA-BOOKING.md) | Runbook de la prueba de punta a punta con Booking: preparación, las 12 pruebas y dónde mirar cada una |
 | [../planes/2026-10-26-eventos-contratos-microservicios.md](../planes/2026-10-26-eventos-contratos-microservicios.md) | Plan de implementación de esta ronda |
 
 Artefactos fuera de esta carpeta: `contracts/eventos/` (JSON Schema por evento), `contracts/vuelos-eventos-asyncapi.yaml`, `scripts/check-schema-compat.ts`, `.github/workflows/ci.yml`. El diagrama general es `../arquitectura-completa-vuelos.mermaid`.

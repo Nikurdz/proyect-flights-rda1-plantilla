@@ -1061,6 +1061,35 @@ paths:
             default: EC
             example: EC
             type: string
+        - description: Estado de la reserva (CONFIRMED, CANCELLED…).
+          in: query
+          name: estado
+          required: false
+          schema:
+            enum:
+              - PENDING
+              - PENDING_PAYMENT
+              - TICKET_ISSUING
+              - CONFIRMED
+              - FAILED
+              - CHANGE_PENDING
+              - CANCELLATION_PENDING
+              - CANCELLED
+            type: string
+        - description: Creadas desde (fecha o fecha-hora UTC, inclusive).
+          in: query
+          name: desde
+          required: false
+          schema:
+            example: '2026-11-08'
+            type: string
+        - description: Creadas hasta (una fecha cubre el día UTC completo).
+          in: query
+          name: hasta
+          required: false
+          schema:
+            example: '2026-11-08'
+            type: string
         - in: query
           name: pagina
           required: false
@@ -1100,6 +1129,137 @@ paths:
       security:
         - bearer: []
       summary: Reservas de todos los canales (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/reservas/export.csv:
+    get:
+      description: >-
+        Mismos filtros que la lista (canal, partnerOrderId, estado, desde/hasta…), hasta 5000 filas, las más antiguas primero. Por reserva:
+        localizador, orden y pago del socio, vuelos, base, impuestos, total cobrado, reembolso y penalidad. Sin datos de pasajeros.
+      operationId: ReservasAdminController_exportCsv
+      parameters:
+        - description: Localizador (PNR).
+          in: query
+          name: pnr
+          required: false
+          schema:
+            example: ABC123
+            type: string
+        - description: Orden del socio (salesChannel.partnerOrderId).
+          in: query
+          name: partnerOrderId
+          required: false
+          schema:
+            example: ORD-BKP-20261104-000123
+            type: string
+        - description: Referencia del pago.
+          in: query
+          name: paymentReference
+          required: false
+          schema:
+            example: PAY-BKP-20261104-000123
+            type: string
+        - description: 'SOCIO: vendida por un socio (Booking) con OAuth2; DIRECTO: vendida por la web de la aerolínea.'
+          in: query
+          name: canal
+          required: false
+          schema:
+            enum:
+              - SOCIO
+              - DIRECTO
+            type: string
+        - description: Documento del pasajero (cédula o pasaporte); se busca por su índice ciego, sin descifrar.
+          in: query
+          name: documento
+          required: false
+          schema:
+            example: '1710034065'
+            type: string
+        - in: query
+          name: tipoDocumento
+          required: false
+          schema:
+            default: NATIONAL_ID
+            enum:
+              - NATIONAL_ID
+              - PASSPORT
+            type: string
+        - description: Nacionalidad del documento (2 letras).
+          in: query
+          name: nacionalidad
+          required: false
+          schema:
+            default: EC
+            example: EC
+            type: string
+        - description: Estado de la reserva (CONFIRMED, CANCELLED…).
+          in: query
+          name: estado
+          required: false
+          schema:
+            enum:
+              - PENDING
+              - PENDING_PAYMENT
+              - TICKET_ISSUING
+              - CONFIRMED
+              - FAILED
+              - CHANGE_PENDING
+              - CANCELLATION_PENDING
+              - CANCELLED
+            type: string
+        - description: Creadas desde (fecha o fecha-hora UTC, inclusive).
+          in: query
+          name: desde
+          required: false
+          schema:
+            example: '2026-11-08'
+            type: string
+        - description: Creadas hasta (una fecha cubre el día UTC completo).
+          in: query
+          name: hasta
+          required: false
+          schema:
+            example: '2026-11-08'
+            type: string
+        - in: query
+          name: pagina
+          required: false
+          schema:
+            default: 1
+            minimum: 1
+            type: number
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 20
+            maximum: 100
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          description: CSV separado por comas, UTF-8 con BOM (Excel lo abre directamente).
+        '400':
+          content:
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Exportar reservas en CSV para el cuadre (ADMIN)
       tags:
         - E-commerce · Back-office
   /admin/reservas/{bookingId}:
@@ -1982,6 +2142,157 @@ paths:
       security:
         - bearer: []
       summary: Reprogramar un vuelo (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/webhooks/entregas:
+    get:
+      description: 'Cada evento enviado a cada suscripción: estado, intentos, próximo intento, último código o error y la reserva a la que se refiere.'
+      operationId: WebhooksAdminController_entregas
+      parameters:
+        - description: Estado de la entrega.
+          in: query
+          name: estado
+          required: false
+          schema:
+            enum:
+              - PENDING
+              - DELIVERED
+              - DEAD
+            type: string
+        - description: Tipo de evento.
+          in: query
+          name: tipo
+          required: false
+          schema:
+            example: booking.cancelled
+            type: string
+        - description: Dueño de la suscripción (partner:<cliente> para Booking).
+          in: query
+          name: owner
+          required: false
+          schema:
+            example: partner:booking-prototipo
+            type: string
+        - description: Una suscripción concreta.
+          in: query
+          name: suscripcionId
+          required: false
+          schema:
+            format: uuid
+            type: string
+        - in: query
+          name: pagina
+          required: false
+          schema:
+            default: 1
+            minimum: 1
+            type: number
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 20
+            maximum: 100
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          description: Página de entregas, las más recientes primero.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Entregas de webhooks (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/webhooks/entregas/{deliveryId}/reintentar:
+    post:
+      description: Vuelve a encolar una entrega muerta o pendiente con el mismo cuerpo firmado; una ya entregada responde 409.
+      operationId: WebhooksAdminController_reintentar
+      parameters:
+        - in: path
+          name: deliveryId
+          required: false
+          schema:
+            format: uuid
+            type: string
+      responses:
+        '200':
+          description: La entrega quedó en cola.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No encontrado
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+      security:
+        - bearer: []
+      summary: Reintentar una entrega (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/webhooks/suscripciones:
+    get:
+      description: URL, eventos, versión del contrato y entregas por estado. El secreto nunca se devuelve.
+      operationId: WebhooksAdminController_suscripciones
+      parameters: []
+      responses:
+        '200':
+          description: Suscripciones con el conteo de sus entregas.
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Suscripciones de webhooks de todos los dueños (ADMIN)
       tags:
         - E-commerce · Back-office
   /auth/invitado:

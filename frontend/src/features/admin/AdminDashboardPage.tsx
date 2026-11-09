@@ -231,11 +231,14 @@ export const Content: React.FC<{ d: NonNullable<ReturnType<typeof useAdminDashbo
             <p role="alert" className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800">
               <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
               Hay entregas muertas.{' '}
-              <Link to="/admin/observabilidad" className="underline">
-                Ver observabilidad
+              <Link to="/admin/webhooks?estado=DEAD" className="underline">
+                Ver entregas muertas
               </Link>
             </p>
           )}
+          <Link to="/admin/webhooks" className="mt-3 inline-block text-xs font-semibold text-slate-700 underline hover:text-brand-black">
+            Ver suscripciones y entregas
+          </Link>
         </section>
         <ProvidersCard />
       </div>

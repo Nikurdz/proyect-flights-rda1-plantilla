@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Users } from 'lucide-react';
+import { Download, Users } from 'lucide-react';
 import {
   useAdminReserva,
   useAdminReservas,
   useCancelarReserva,
   useCheckInMostrador,
   useCotizarCancelacion,
+  useExportarReservasCsv,
+  ESTADOS_RESERVA,
   type AdminReserva,
   type AdminReservasFilters,
   type CancelacionResultado,
@@ -21,8 +23,10 @@ import { formatDateTime } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 import { adminErrorMessage } from './admin-errors';
 import {
+  BOOKING_STATUS_LABEL,
   CHECK_IN_LABEL,
   EMPTY_SEARCH,
+  importesOf,
   canalLabel,
   checkInState,
   documentTypeLabel,
@@ -46,6 +50,49 @@ const CheckInBadge: React.FC<{ booking: Pick<AdminReserva, 'pasajeros'> }> = ({ 
   const state = checkInState(booking);
   const tone = state === 'COMPLETO' ? 'bg-emerald-100 text-emerald-800' : state === 'PARCIAL' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600';
   return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${tone}`}>{CHECK_IN_LABEL[state]}</span>;
+};
+
+/** Compact breakdown for the list: base + taxes = total, and what a cancellation gave back. */
+const ImportesCompactos: React.FC<{ booking: AdminReserva }> = ({ booking }) => {
+  const i = importesOf(booking);
+  return (
+    <div className="space-y-0.5">
+      <div className="font-bold text-brand-black">
+        <MoneyText amount={i.total} currency={i.moneda} size="sm" />
+      </div>
+      {(i.base != null || i.impuestos != null) && (
+        <div className="text-[11px] text-slate-600">
+          Base {i.base ?? '—'} · Imp. {i.impuestos ?? '—'}
+        </div>
+      )}
+      {isCancelled(booking) && (i.reembolso != null || i.penalidad != null) && (
+        <div className="text-[11px] text-red-700">
+          Reemb. {i.reembolso ?? '—'} · Pen. {i.penalidad ?? '—'}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** Full breakdown for the detail dialog. */
+const ImportesDetalle: React.FC<{ booking: AdminReserva }> = ({ booking }) => {
+  const i = importesOf(booking);
+  const rows: [string, string | null][] = [
+    ['Base', i.base],
+    ['Impuestos', i.impuestos],
+    ['Total cobrado', i.total],
+  ];
+  if (isCancelled(booking)) rows.push(['Reembolso', i.reembolso], ['Penalidad', i.penalidad]);
+  return (
+    <dl className="grid grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3 text-xs sm:grid-cols-5" aria-label="Desglose de importes">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <dt className="font-semibold uppercase text-slate-500">{label}</dt>
+          <dd className={`mt-1 ${label === 'Total cobrado' ? 'font-black' : 'font-bold'}`}>{value == null ? '—' : <MoneyText amount={value} currency={i.moneda} size="sm" />}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 };
 
 const PassengerList: React.FC<{ booking: AdminReserva; sharedIds: Set<string> }> = ({ booking, sharedIds }) => {
@@ -166,6 +213,12 @@ const ReservationDetailDialog: React.FC<{ bookingId: string; ownerId?: string; o
               </dd>
             </div>
           </dl>
+
+          <div>
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Importes ({importesOf(booking).moneda})</h3>
+            <ImportesDetalle booking={booking} />
+            {importesOf(booking).base == null && <p className="mt-1 text-[11px] text-slate-500">Sin desglose de base e impuestos para esta reserva: solo se conoce el total cobrado.</p>}
+          </div>
 
           {booking.canal === 'SOCIO' && (
             <p className="rounded-lg bg-sky-50 p-3 text-xs text-sky-900">Esta reserva se ve en Booking en unos segundos: los cambios llegan por el feed de eventos del socio.</p>
@@ -297,6 +350,13 @@ export const AdminReservationsPage: React.FC = () => {
   const items = useMemo(() => data?.items ?? [], [data]);
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limite)) : 1;
   const shared = useMemo(() => sharedTravellers(items), [items]);
+  const exportCsv = useExportarReservasCsv();
+  const [exported, setExported] = useState<string | null>(null);
+
+  const doExport = () => {
+    setExported(null);
+    exportCsv.mutate(filters, { onSuccess: (filename) => setExported(filename) });
+  };
 
   const set = <K extends keyof ReservasSearchForm>(key: K, value: ReservasSearchForm[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
@@ -332,6 +392,16 @@ export const AdminReservationsPage: React.FC = () => {
         </Select>
         <Input label="Documento del pasajero" autoComplete="off" value={draft.documento} onChange={(e) => set('documento', e.target.value)} />
         <Input label="Nacionalidad" maxLength={2} placeholder="EC" value={draft.nacionalidad} onChange={(e) => set('nacionalidad', e.target.value.toUpperCase())} />
+        <Select label="Estado" value={draft.estado} onChange={(e) => set('estado', e.target.value as ReservasSearchForm['estado'])}>
+          <option value="">Todos</option>
+          {ESTADOS_RESERVA.map((s) => (
+            <option key={s} value={s}>
+              {BOOKING_STATUS_LABEL[s]}
+            </option>
+          ))}
+        </Select>
+        <Input label="Creadas desde (UTC)" type="date" value={draft.desde} max={draft.hasta || undefined} onChange={(e) => set('desde', e.target.value)} />
+        <Input label="Creadas hasta (UTC)" type="date" value={draft.hasta} min={draft.desde || undefined} onChange={(e) => set('hasta', e.target.value)} />
         <div className="flex items-end gap-2">
           <Button type="submit" variant="primary" className="flex-1">
             Buscar
@@ -341,6 +411,20 @@ export const AdminReservationsPage: React.FC = () => {
           </Button>
         </div>
       </form>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3" aria-live="polite">
+        <p className="text-[11px] text-slate-500">El CSV usa los filtros aplicados (sin paginar, hasta 5000 reservas) y no incluye datos de pasajeros.</p>
+        <Button type="button" variant="outline" size="sm" isLoading={exportCsv.isPending} onClick={doExport}>
+          <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Exportar CSV
+        </Button>
+      </div>
+      {exported && (
+        <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+          Descargado {exported}.
+        </p>
+      )}
+      {exportCsv.error != null && <ProblemAlert error={exportCsv.error} message={adminErrorMessage(exportCsv.error, 'exportar-reservas')} className="mb-4" />}
 
       {error != null && <ProblemAlert error={error} onRetry={() => refetch()} className="mb-4" />}
 
@@ -362,7 +446,7 @@ export const AdminReservationsPage: React.FC = () => {
             <tr>
               <th scope="col" className="px-4 py-3">Reserva</th>
               <th scope="col" className="px-4 py-3">Canal / orden del socio</th>
-              <th scope="col" className="px-4 py-3">Cobro</th>
+              <th scope="col" className="px-4 py-3">Importes / pago</th>
               <th scope="col" className="px-4 py-3">Vuelos</th>
               <th scope="col" className="px-4 py-3">Pasajeros, asientos</th>
               <th scope="col" className="px-4 py-3">Check-in</th>
@@ -391,8 +475,8 @@ export const AdminReservationsPage: React.FC = () => {
                   <div className="break-all font-mono text-slate-600">{b.socio?.partnerOrderId ?? '—'}</div>
                 </td>
                 <td className="px-4 py-3 text-xs">
-                  <MoneyText amount={b.total.total} currency={b.total.currency} />
-                  <div className="break-all font-mono text-slate-600">{b.paymentReference}</div>
+                  <ImportesCompactos booking={b} />
+                  <div className="mt-1 break-all font-mono text-slate-600">{b.paymentReference}</div>
                 </td>
                 <td className="px-4 py-3 text-xs">
                   {b.vuelos.map((v) => (

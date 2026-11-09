@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../client';
+import { apiBlob, apiClient, saveBlob } from '../client';
 import { generateUUID } from '../../lib/uuid';
 import type { Schemas } from '../types';
 
@@ -53,6 +53,39 @@ export interface ObservabilidadRuntime {
   events: Counts;
   consumerFailures: Counts;
   jobs: Record<string, { runs: number; failures: number; lastRunAt: string | null; lastDurationMs: number | null; lastResult: Counts | null; lastError: string | null }>;
+  /** What each integration reports about itself (process-local, absent until the integration starts). */
+  integrations?: IntegracionesRuntime;
+}
+
+/** `integrations['booking-stock']`: the stock push to Booking (HTTP or gRPC). */
+export interface IntegracionStockBooking {
+  modo: 'HTTP' | 'GRPC' | 'OFF';
+  destino?: string;
+  serviceId?: string;
+  horizonteDias?: number;
+  ultimaRonda?: { en: string; enviados: number; rechazados: number; fallidos: number; sinIntentar: number; total: number };
+  ultimoRechazo?: { en: string; detalle: string };
+  ultimoError?: { en: string; mensaje: string };
+  vuelosEnviadosAlgunaVez?: number;
+  vuelosEnEspera?: number;
+  contadores?: Counts;
+  updatedAt: string;
+}
+
+/** `integrations['booking-webhook']`: the webhook subscription registered for Booking at boot. */
+export interface IntegracionWebhookBooking {
+  estado: 'SUSCRITO' | 'SIN_CONFIGURAR' | 'ERROR';
+  owner?: string;
+  destino?: string;
+  suscripcionId?: string;
+  detalle?: string;
+  updatedAt: string;
+}
+
+export interface IntegracionesRuntime {
+  'booking-stock'?: IntegracionStockBooking;
+  'booking-webhook'?: IntegracionWebhookBooking;
+  [name: string]: unknown;
 }
 
 export interface AdminOrdersFilters {
@@ -390,10 +423,21 @@ export interface AdminReserva {
   paymentReference: string;
   paymentProvider: string | null;
   total: { currency: string; total: string };
+  /** Breakdown of what was charged plus what a cancellation gave back (amounts as strings; null when unknown). */
+  importes?: ReservaImportes;
   creadaEn: string;
   vuelos: ReservaVuelo[];
   pasajeros: ReservaPasajero[];
   billetes: number;
+}
+
+export interface ReservaImportes {
+  moneda: string;
+  base: string | null;
+  impuestos: string | null;
+  total: string;
+  reembolso: string | null;
+  penalidad: string | null;
 }
 
 export interface AdminReservaDetalle extends AdminReserva {
@@ -415,8 +459,30 @@ export interface AdminReservasFilters {
   documento?: string;
   tipoDocumento?: TipoDocumento;
   nacionalidad?: string;
+  estado?: EstadoReserva | '';
+  /** YYYY-MM-DD (UTC day, inclusive). */
+  desde?: string;
+  /** YYYY-MM-DD (covers the whole UTC day). */
+  hasta?: string;
   pagina?: number;
   limite?: number;
+}
+
+/** `BookingStatus` of the backend (`entities/booking.entity.ts`). */
+export const ESTADOS_RESERVA = ['PENDING', 'PENDING_PAYMENT', 'TICKET_ISSUING', 'CONFIRMED', 'FAILED', 'CHANGE_PENDING', 'CANCELLATION_PENDING', 'CANCELLED'] as const;
+export type EstadoReserva = (typeof ESTADOS_RESERVA)[number];
+
+/** GET /admin/reservas/export.csv with the list filters (no paging); saved as `reservas-AAAA-MM-DD.csv`. */
+export function useExportarReservasCsv() {
+  return useMutation({
+    mutationFn: async (filters: AdminReservasFilters) => {
+      // The export takes the list filters but no paging (it returns up to 5000 rows).
+      const blob = await apiBlob(`admin/reservas/export.csv${toQuery({ ...filters, pagina: undefined, limite: undefined })}`);
+      const filename = `reservas-${new Date().toISOString().slice(0, 10)}.csv`;
+      saveBlob(blob, filename);
+      return filename;
+    },
+  });
 }
 
 export interface CotizacionCancelacion {
@@ -525,5 +591,105 @@ export function useCambiarEstadoVuelo() {
     mutationFn: ({ vueloId, cambio }: { vueloId: string; cambio: CambiarEstadoVueloInput }) =>
       apiClient<CambioEstadoVueloResultado>(`admin/vuelos/${vueloId}/estado`, { method: 'PATCH', body: JSON.stringify(cambio) }),
     onSuccess: refresh,
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Webhooks (ADMIN): subscriptions of every owner and every delivery. Types mirror `webhooks-admin.service.ts`.
+// ---------------------------------------------------------------------------------------------
+
+export const ESTADOS_ENTREGA = ['PENDING', 'DELIVERED', 'DEAD'] as const;
+export type EstadoEntrega = (typeof ESTADOS_ENTREGA)[number];
+
+export interface WebhookSuscripcion {
+  suscripcionId: string;
+  owner: string;
+  url: string;
+  eventos: string[];
+  activa: boolean;
+  apiVersion: number;
+  creadaEn: string | null;
+  entregas: { pendientes: number; entregadas: number; muertas: number };
+}
+
+export interface WebhookEntrega {
+  deliveryId: string;
+  suscripcionId: string;
+  owner: string | null;
+  url: string | null;
+  eventId: string;
+  tipo: string;
+  estado: EstadoEntrega;
+  intentos: number;
+  proximoIntento: string | null;
+  ultimoCodigo: number | null;
+  ultimoError: string | null;
+  creadaEn: string | null;
+  entregadaEn: string | null;
+  bookingId: string | null;
+  pnr: string | null;
+  partnerOrderId: string | null;
+}
+
+export interface WebhookEntregasPagina {
+  items: WebhookEntrega[];
+  total: number;
+  pagina: number;
+  limite: number;
+}
+
+export interface WebhookEntregasFilters {
+  estado?: EstadoEntrega | '';
+  tipo?: string;
+  owner?: string;
+  suscripcionId?: string;
+  pagina?: number;
+  limite?: number;
+}
+
+export interface ReintentoEntrega {
+  deliveryId: string;
+  estado: 'PENDING';
+  mensaje: string;
+}
+
+/** The dispatcher sends every 15 s: the console refreshes at the same pace. */
+export const WEBHOOKS_REFRESH_MS = 15_000;
+
+export function useAdminWebhookSuscripciones(ownerId?: string) {
+  return useQuery({
+    queryKey: ['admin-webhook-suscripciones', ownerId],
+    queryFn: () => apiClient<{ items: WebhookSuscripcion[] }>('admin/webhooks/suscripciones'),
+    enabled: Boolean(ownerId),
+    refetchInterval: WEBHOOKS_REFRESH_MS,
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
+}
+
+export function useAdminWebhookEntregas(filters: WebhookEntregasFilters, ownerId?: string) {
+  const params = { ...filters, limite: filters.limite ?? 20, pagina: filters.pagina ?? 1 };
+  return useQuery({
+    queryKey: ['admin-webhook-entregas', ownerId, params],
+    queryFn: () => apiClient<WebhookEntregasPagina>(`admin/webhooks/entregas${toQuery(params)}`),
+    enabled: Boolean(ownerId),
+    placeholderData: keepPreviousData,
+    refetchInterval: WEBHOOKS_REFRESH_MS,
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
+}
+
+/** POST /admin/webhooks/entregas/{id}/reintentar: puts a DEAD or PENDING delivery back in the queue (409 if delivered). */
+export function useReintentarEntrega() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (deliveryId: string) => apiClient<ReintentoEntrega>(`admin/webhooks/entregas/${deliveryId}/reintentar`, { method: 'POST' }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['admin-webhook-entregas'] }),
+        qc.invalidateQueries({ queryKey: ['admin-webhook-suscripciones'] }),
+        qc.invalidateQueries({ queryKey: ['admin-dashboard'] }),
+      ]),
   });
 }

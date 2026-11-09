@@ -173,7 +173,8 @@ export class AdminService {
         const context = await this.contexto.complete(manager, booking);
         const amounts = await this.cancelaciones.amountsFor(manager, context, 0, true);
         const outcome = await this.cancelaciones.applyCancellation(manager, context, amounts, razon);
-        cancelled.push({ event: outcome.event, ownerId: booking.ownerId });
+        // The partner tells an airline cancellation (full refund) from a traveller's by the reason code.
+        cancelled.push({ event: { ...outcome.event, reasonCode: 'FLIGHT_CANCELLED' }, ownerId: booking.ownerId });
       }
       return { vuelo, cancelled };
     });
