@@ -9,7 +9,7 @@ import { Input } from '../../components/ui/Input';
 import { CancelFlightDialog, CreateFlightDialog, DeleteFlightDialog, EditFlightDialog, FlightStatusDialog, RescheduleFlightDialog } from './AdminFlightDialogs';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { SeatLegend, SeatMap } from '../checkout/SeatMap';
-import { formatDateTime } from '../../lib/labels';
+import { formatAdminDateTime } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 
 /** The cabin of one flight with its reserved seats; read only. */
@@ -26,7 +26,7 @@ const FlightSeatsDialog: React.FC<{ flight: AdminVueloView | null; ownerId?: str
       ) : (
         <div className="space-y-5">
           <p className="text-xs text-slate-600">
-            Salida {formatDateTime(data.salida)} UTC · <strong>{data.reservados.length}</strong> asiento(s) reservados de {data.capacidadTotal}. Quien no eligió asiento no aparece aquí.
+            Salida {formatAdminDateTime(data.salida)} · <strong>{data.reservados.length}</strong> asiento(s) reservados de {data.capacidadTotal}. Quien no eligió asiento no aparece aquí.
           </p>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-[auto_1fr]">
             <div className="max-h-[26rem] overflow-y-auto rounded-3xl">
@@ -92,7 +92,7 @@ export const AdminFlightsPage: React.FC = () => {
   return (
     <section aria-label="Vuelos">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-slate-600">Crea, edita, reprograma, cancela o elimina vuelos. Las horas se muestran y se ingresan en UTC.</p>
+        <p className="text-xs text-slate-600">Crea, edita, reprograma, cancela o elimina vuelos. Las horas se muestran y se ingresan en hora de Ecuador (UTC-5).</p>
         <Button type="button" variant="accent" onClick={() => setCreating(true)}>
           <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
           Nuevo vuelo
@@ -130,7 +130,7 @@ export const AdminFlightsPage: React.FC = () => {
             <tr>
               <th scope="col" className="px-4 py-3">Vuelo</th>
               <th scope="col" className="px-4 py-3">Ruta</th>
-              <th scope="col" className="px-4 py-3">Salida (UTC)</th>
+              <th scope="col" className="px-4 py-3">Salida (Ecuador)</th>
               <th scope="col" className="px-4 py-3">Aerolínea</th>
               <th scope="col" className="px-4 py-3 text-right">Tarifa base</th>
               <th scope="col" className="px-4 py-3 text-right">Libres</th>
@@ -161,11 +161,11 @@ export const AdminFlightsPage: React.FC = () => {
                     {flight.origen} → {flight.destino}
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600">
-                    {formatDateTime(flight.salida)}
+                    {formatAdminDateTime(flight.salida)}
                     {flight.estado && flight.estado !== 'SCHEDULED' && (
                       <div className="mt-1 font-bold text-brand-black" data-testid={`estado-${flight.vueloId}`}>
                         {flight.estado}
-                        {flight.salidaEstimada ? ` · est. ${formatDateTime(flight.salidaEstimada)}` : ''}
+                        {flight.salidaEstimada ? ` · est. ${formatAdminDateTime(flight.salidaEstimada)}` : ''}
                         {flight.puertaSalida ? ` · puerta ${flight.puertaSalida}` : ''}
                       </div>
                     )}

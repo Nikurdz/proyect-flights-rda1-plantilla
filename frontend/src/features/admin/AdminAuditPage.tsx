@@ -9,7 +9,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { AUDIT_BADGE_CLASS, SAGA_STATES, cleanCorrelation, formatDuration, pasoEstado, pasosOrdenados, sagaDuration, sagaEstado, sagaRequiereAtencion } from '../../lib/auditoria';
-import { formatDateTime } from '../../lib/labels';
+import { formatAdminDateTime } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 
 /** A correlation id that opens the audit filtered by it: everything that request touched. */
@@ -52,7 +52,7 @@ const SagaCard: React.FC<{ saga: AuditoriaSaga }> = ({ saga }) => {
           <div className="text-right">
             <Pill tone={estado.tone}>{estado.label}</Pill>
             <p className="mt-1 text-[11px] text-slate-500">
-              {formatDateTime(saga.iniciadaEn)} UTC{total !== null ? ` · ${formatDuration(total)}` : saga.finalizadaEn ? '' : ' · sin finalizar'}
+              {formatAdminDateTime(saga.iniciadaEn)}{total !== null ? ` · ${formatDuration(total)}` : saga.finalizadaEn ? '' : ' · sin finalizar'}
             </p>
           </div>
         </header>
@@ -195,7 +195,7 @@ export const AdminAuditPage: React.FC = () => {
             <caption className="sr-only">Eventos de dominio registrados, los más recientes primero</caption>
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                <th scope="col" className="px-4 py-3">Cuándo (UTC)</th>
+                <th scope="col" className="px-4 py-3">Cuándo (Ecuador)</th>
                 <th scope="col" className="px-4 py-3">Evento</th>
                 <th scope="col" className="px-4 py-3">Resumen</th>
                 <th scope="col" className="px-4 py-3">Agregado</th>
@@ -214,7 +214,7 @@ export const AdminAuditPage: React.FC = () => {
               )}
               {eventos.map((e) => (
                 <tr key={e.id} className="align-top">
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{formatDateTime(e.ocurridoEn)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{formatAdminDateTime(e.ocurridoEn)}</td>
                   <td className="px-4 py-3 font-mono text-xs font-bold text-brand-black">{e.tipo}</td>
                   <td className="px-4 py-3 text-xs text-slate-700">{e.resumen}</td>
                   <td className="px-4 py-3 break-all font-mono text-[11px] text-slate-500">{e.agregadoId}</td>

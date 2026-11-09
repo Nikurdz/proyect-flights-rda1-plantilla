@@ -13,15 +13,13 @@ describe('labels', () => {
 });
 
 describe('airport time zones', () => {
-  it('shows flight times in the local time of each airport', () => {
-    // 13:00 UTC is 08:00 in Bogotá/Quito (UTC-5) and 14:00 in Madrid winter time... but 15:00 in summer; use fixed dates.
-    expect(formatDateTime('2026-11-10T13:00:00.000Z', timeZoneOf('BOG'))).toContain('08:00');
-    expect(formatDateTime('2026-11-10T13:00:00.000Z', timeZoneOf('UIO'))).toContain('08:00');
-    expect(formatDateTime('2026-11-10T13:00:00.000Z', timeZoneOf('MAD'))).toContain('14:00');
+  it('shows every flight time in Ecuador time, whatever the airport', () => {
+    // 13:00 UTC is 08:00 in Ecuador (UTC-5, no daylight saving), also for a flight to Madrid or Santiago.
+    for (const iata of ['BOG', 'UIO', 'MAD', 'SCL', 'XXX', undefined]) expect(formatDateTime('2026-11-10T13:00:00.000Z', timeZoneOf(iata))).toContain('08:00');
   });
 
-  it('falls back to UTC for an unknown airport', () => {
-    expect(timeZoneOf('XXX')).toBe('UTC');
-    expect(timeZoneOf(undefined)).toBe('UTC');
+  it('formats an instant in Ecuador time by default', () => {
+    expect(formatDateTime('2026-11-10T13:00:00.000Z')).toContain('08:00');
+    expect(formatDateTime('2026-11-10T02:30:00.000Z')).toContain('9 nov'); // 9:30 PM of the 9th in Ecuador
   });
 });

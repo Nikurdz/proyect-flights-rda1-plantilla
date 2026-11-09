@@ -19,7 +19,7 @@ import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { formatDateTime } from '../../lib/labels';
+import { formatAdminDateTime } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 import { adminErrorMessage } from './admin-errors';
 import {
@@ -233,7 +233,7 @@ const ReservationDetailDialog: React.FC<{ bookingId: string; ownerId?: string; o
                     {v.codigoVuelo} · {v.origen} → {v.destino}
                   </span>
                   <span>
-                    {formatDateTime(v.salida)} UTC · {v.estado}
+                    {formatAdminDateTime(v.salida)} · {v.estado}
                   </span>
                 </li>
               ))}
@@ -253,7 +253,7 @@ const ReservationDetailDialog: React.FC<{ bookingId: string; ownerId?: string; o
               <ol className="space-y-1 text-xs text-slate-600">
                 {booking.cambios.map((c, index) => (
                   <li key={index}>
-                    {formatDateTime(c.en)} UTC · {c.descripcion}
+                    {formatAdminDateTime(c.en)} · {c.descripcion}
                   </li>
                 ))}
               </ol>
@@ -292,7 +292,7 @@ const ReservationDetailDialog: React.FC<{ bookingId: string; ownerId?: string; o
                 </div>
                 <div>
                   <dt className="font-semibold uppercase text-slate-500">Vence</dt>
-                  <dd className="mt-1">{formatDateTime(quoteData.expiresAt)} UTC</dd>
+                  <dd className="mt-1">{formatAdminDateTime(quoteData.expiresAt)}</dd>
                 </div>
               </dl>
             )}
@@ -375,7 +375,7 @@ export const AdminReservationsPage: React.FC = () => {
   return (
     <section aria-label="Reservas">
       <p className="mb-4 text-xs text-slate-600">
-        Reservas de todos los canales. Busca por localizador, orden del socio, referencia de pago o documento del pasajero; haz check-in o cancela por el viajero. Las horas se muestran en UTC.
+        Reservas de todos los canales. Busca por localizador, orden del socio, referencia de pago o documento del pasajero; haz check-in o cancela por el viajero. Las horas se muestran en hora de Ecuador (UTC-5); los filtros de fecha son días UTC.
       </p>
       <form onSubmit={apply} className="mb-5 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
         <Input label="Localizador (PNR)" placeholder="ABC123" maxLength={6} value={draft.pnr} onChange={(e) => set('pnr', e.target.value)} />
@@ -468,7 +468,7 @@ export const AdminReservationsPage: React.FC = () => {
                 <td className="px-4 py-3">
                   <div className="font-mono text-xs font-bold text-brand-black">{b.pnr}</div>
                   <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${statusTone(b.status)}`}>{b.status}</span>
-                  <div className="mt-1 text-[11px] text-slate-500">{formatDateTime(b.creadaEn)}</div>
+                  <div className="mt-1 text-[11px] text-slate-500">{formatAdminDateTime(b.creadaEn)}</div>
                 </td>
                 <td className="px-4 py-3 text-xs">
                   <div className="font-semibold">{canalLabel(b.canal)}</div>
@@ -482,7 +482,7 @@ export const AdminReservationsPage: React.FC = () => {
                   {b.vuelos.map((v) => (
                     <div key={v.vueloId}>
                       <strong>{v.codigoVuelo}</strong> {v.origen} → {v.destino}
-                      <div className="text-slate-500">{formatDateTime(v.salida)} UTC</div>
+                      <div className="text-slate-500">{formatAdminDateTime(v.salida)}</div>
                     </div>
                   ))}
                 </td>

@@ -67,7 +67,7 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ oferta, onExpi
                 </div>
 
                 <div className="flex items-center justify-between text-slate-600 text-[11px]">
-                  <span>Salida (hora local): {formatDateTime(trayecto.salida, timeZoneOf(trayecto.origen))}</span>
+                  <span>Salida (hora de Ecuador): {formatDateTime(trayecto.salida, timeZoneOf(trayecto.origen))}</span>
                   <span className="font-bold text-airline-navy bg-airline-navy/5 px-2 py-0.5 rounded uppercase">
                     Tarifa {fareFamilyLabel(trayecto.familia)}
                   </span>

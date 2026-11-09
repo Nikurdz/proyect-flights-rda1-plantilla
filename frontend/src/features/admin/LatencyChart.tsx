@@ -1,6 +1,6 @@
 import React from 'react';
 import { LED_DOT_CLASS, estadisticasLatencia, formatLatency, semaforo, techoEje, type PuntoLatencia } from '../../lib/proveedores';
-import { formatDateTime } from '../../lib/labels';
+import { formatAdminDateTime } from '../../lib/labels';
 import { ChartCard, EmptyChart } from './dashboard/charts';
 
 const W = 600;
@@ -9,14 +9,14 @@ const PAD = { l: 52, r: 14, t: 12, b: 28 };
 
 const POINT_COLOR: Record<string, string> = { success: '#059669', warning: '#D97706', danger: '#DC2626', neutral: '#64748B' };
 
-const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+const hhmm = (ms: number) => new Date(ms - 5 * 3_600_000).toISOString().slice(11, 16); // clock of Ecuador (UTC-5)
 
 /** Latency history of one node as a plain SVG line chart (no chart library). The data table is always available under it. */
 export const LatencyChart: React.FC<{ title: string; puntos: PuntoLatencia[] }> = ({ title, puntos }) => {
   const stats = estadisticasLatencia(puntos);
   const table = {
-    headers: ['Fecha (UTC)', 'Estado', 'Latencia'],
-    rows: [...puntos].reverse().map((p) => [formatDateTime(new Date(p.at).toISOString()), semaforo(p.estado).label, formatLatency(p.ms)]),
+    headers: ['Fecha (Ecuador)', 'Estado', 'Latencia'],
+    rows: [...puntos].reverse().map((p) => [formatAdminDateTime(new Date(p.at).toISOString()), semaforo(p.estado).label, formatLatency(p.ms)]),
   };
 
   if (!stats) {
@@ -38,7 +38,7 @@ export const LatencyChart: React.FC<{ title: string; puntos: PuntoLatencia[] }> 
   return (
     <ChartCard
       title={title}
-      summary={`${puntos.length} comprobaciones entre ${hhmm(t0)} y ${hhmm(t1)} UTC. Latencia mínima ${stats.min} ms, media ${stats.media} ms, máxima ${stats.max} ms, última ${stats.ultima} ms.`}
+      summary={`${puntos.length} comprobaciones entre ${hhmm(t0)} y ${hhmm(t1)} (hora de Ecuador). Latencia mínima ${stats.min} ms, media ${stats.media} ms, máxima ${stats.max} ms, última ${stats.ultima} ms.`}
       table={table}
       readout={`Mín. ${stats.min} ms · media ${stats.media} ms · máx. ${stats.max} ms · última ${stats.ultima} ms`}
     >
@@ -58,14 +58,14 @@ export const LatencyChart: React.FC<{ title: string; puntos: PuntoLatencia[] }> 
           {hhmm(t0)}
         </text>
         <text x={W - PAD.r} y={H - 8} textAnchor="end" fontSize="10" fill="#4B5563">
-          {hhmm(t1)} UTC
+          {hhmm(t1)}
         </text>
         {puntos.length > 1 && <path d={path} fill="none" stroke="#8C7547" strokeWidth="2" strokeLinejoin="round" />}
         {puntos.map((p) => {
           const s = semaforo(p.estado);
           return (
             <circle key={p.at} cx={x(p.at)} cy={y(p.ms)} r="4" fill={POINT_COLOR[s.tone]} stroke="#fff" strokeWidth="1.5">
-              <title>{`${hhmm(p.at)} UTC · ${s.label} · ${formatLatency(p.ms)}`}</title>
+              <title>{`${hhmm(p.at)} · ${s.label} · ${formatLatency(p.ms)}`}</title>
             </circle>
           );
         })}

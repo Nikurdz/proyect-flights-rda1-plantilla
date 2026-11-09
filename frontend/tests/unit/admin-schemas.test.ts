@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   editFlightSchema,
-  isoToUtcLocal,
+  isoToEcuadorLocal,
   newFlightSchema,
   newUserSchema,
   rescheduleSchema,
-  utcLocalToIso,
+  ecuadorLocalToIso,
 } from '../../src/features/admin/admin-schemas';
 
 const validUser = { correo: 'ana@ram.com', contrasena: 'Clave12345', nombres: 'Ana', apellidos: 'Paz', fechaNacimiento: '1990-05-01' };
@@ -80,8 +80,19 @@ describe('editFlightSchema and rescheduleSchema', () => {
     expect(rescheduleSchema.safeParse({ nuevaSalida: '2020-01-01T10:00' }).success).toBe(false);
   });
 
-  it('converts datetime-local values as UTC', () => {
-    expect(utcLocalToIso('2030-03-04T05:06')).toBe('2030-03-04T05:06:00.000Z');
-    expect(isoToUtcLocal('2030-03-04T05:06:00.000Z')).toBe('2030-03-04T05:06');
+  it('converts datetime-local values as Ecuador time (UTC-5)', () => {
+    expect(ecuadorLocalToIso('2030-03-04T05:06')).toBe('2030-03-04T10:06:00.000Z');
+    expect(ecuadorLocalToIso('2030-03-04T21:30')).toBe('2030-03-05T02:30:00.000Z'); // 9:30 PM in Ecuador is already the next day in UTC
+    expect(isoToEcuadorLocal('2030-03-04T10:06:00.000Z')).toBe('2030-03-04T05:06');
+    expect(isoToEcuadorLocal('2030-03-05T02:30:00.000Z')).toBe('2030-03-04T21:30');
+  });
+
+  it('judges "future" in Ecuador time: a time later tonight in Ecuador is accepted even though it is past in UTC', () => {
+    const now = new Date();
+    const ecuadorNow = new Date(now.getTime() - 5 * 3_600_000).toISOString().slice(0, 16);
+    const inOneHour = new Date(now.getTime() - 5 * 3_600_000 + 3_600_000).toISOString().slice(0, 16);
+    expect(rescheduleSchema.safeParse({ nuevaSalida: inOneHour }).success).toBe(true);
+    expect(rescheduleSchema.safeParse({ nuevaSalida: new Date(now.getTime() - 5 * 3_600_000 - 3_600_000).toISOString().slice(0, 16) }).success).toBe(false);
+    expect(ecuadorNow.length).toBe(16);
   });
 });

@@ -25,7 +25,14 @@ describe('dates utilities', () => {
     expect(formattedUtc).toBe('15:30');
   });
 
-  it('calculates UTC-aligned valid dates and additions correctly', () => {
+  it('uses Ecuador as the default zone and the Ecuador calendar day for today', () => {
+    expect(formatTimeInTimeZone('2026-10-15T15:30:00.000Z')).toBe('10:30');
+    // 7:32 PM in Ecuador on the 8th is already the 9th in UTC: today is still the 8th.
+    expect(getValidSearchDateString(new Date('2026-11-09T00:32:00Z'))).toBe('2026-11-08');
+    expect(getValidSearchDateString(new Date('2026-11-09T05:00:00Z'))).toBe('2026-11-09');
+  });
+
+  it('calculates the valid dates (Ecuador days) and additions correctly', () => {
     const validToday = getValidSearchDateString();
     expect(validToday).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 

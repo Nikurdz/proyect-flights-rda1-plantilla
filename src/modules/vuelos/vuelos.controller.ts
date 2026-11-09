@@ -94,7 +94,8 @@ export class VuelosController {
         { name: 'X-Device-Fingerprint', reason: 'required header is missing or empty' },
       ]);
     }
-    return this.searchService.search(searchRequestDto);
+    // The web reads the date as an Ecuador calendar day (the partner API, v2, keeps UTC days).
+    return this.searchService.search(searchRequestDto, { ecuadorDay: true });
   }
 
   @Get('offers/:offerId/seatmap')

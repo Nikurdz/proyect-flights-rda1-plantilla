@@ -17,7 +17,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { formatDateTime } from '../../lib/labels';
+import { formatAdminDateTime } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 import { adminErrorMessage } from './admin-errors';
 
@@ -34,7 +34,7 @@ const EstadoBadge: React.FC<{ estado: EstadoEntrega }> = ({ estado }) => (
   <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${ESTADO_TONE[estado]}`}>{ESTADO_LABEL[estado]}</span>
 );
 
-const fecha = (iso: string | null): string => (iso ? `${formatDateTime(iso)} UTC` : '—');
+const fecha = (iso: string | null): string => (iso ? `${formatAdminDateTime(iso)}` : '—');
 
 interface FiltrosForm {
   estado: EstadoEntrega | '';
@@ -205,7 +205,7 @@ export const AdminWebhooksPage: React.FC = () => {
         </button>
       </div>
       <p className="text-xs text-slate-600">
-        Suscripciones de todos los dueños y cada evento enviado a cada una. El despachador envía cada {WEBHOOKS_REFRESH_MS / 1000} s y reintenta a 1 min, 5 min, 30 min, 2 h y 6 h; después la entrega queda muerta. Esta página se actualiza sola con el mismo ritmo. Las horas se muestran en UTC.
+        Suscripciones de todos los dueños y cada evento enviado a cada una. El despachador envía cada {WEBHOOKS_REFRESH_MS / 1000} s y reintenta a 1 min, 5 min, 30 min, 2 h y 6 h; después la entrega queda muerta. Esta página se actualiza sola con el mismo ritmo. Las horas se muestran en hora de Ecuador (UTC-5).
       </p>
 
       <div>

@@ -19,7 +19,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { formatDateTime } from '../../lib/labels';
+import { formatAdminDateTime } from '../../lib/labels';
 import { TIPOS_SERVICIO, formatLatency, haceTiempo, puedeSincronizar, resumenFlota, resumenSincronizacion, tipoServicioLabel } from '../../lib/proveedores';
 import { useSession } from '../../lib/session';
 import { adminErrorMessage } from './admin-errors';
@@ -85,7 +85,7 @@ const HealthHistory: React.FC<{ proveedorId: string; ownerId?: string }> = ({ pr
         <caption className="sr-only">Historial de comprobaciones, la más reciente primero</caption>
         <thead className="text-slate-500">
           <tr>
-            <th scope="col" className="py-1 pr-3 font-semibold">Fecha (UTC)</th>
+            <th scope="col" className="py-1 pr-3 font-semibold">Fecha (Ecuador)</th>
             <th scope="col" className="py-1 pr-3 font-semibold">Estado</th>
             <th scope="col" className="py-1 pr-3 text-right font-semibold">Latencia</th>
             <th scope="col" className="py-1 font-semibold">Detalle</th>
@@ -94,7 +94,7 @@ const HealthHistory: React.FC<{ proveedorId: string; ownerId?: string }> = ({ pr
         <tbody className="divide-y divide-slate-100">
           {data.map((h: SaludView, i) => (
             <tr key={`${h.comprobadoEn}-${i}`}>
-              <td className="py-1.5 pr-3 text-slate-600">{h.comprobadoEn ? formatDateTime(h.comprobadoEn) : '—'}</td>
+              <td className="py-1.5 pr-3 text-slate-600">{h.comprobadoEn ? formatAdminDateTime(h.comprobadoEn) : '—'}</td>
               <td className="py-1.5 pr-3">
                 <LedStatus estado={h.estado} />
               </td>

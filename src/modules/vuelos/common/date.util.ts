@@ -23,6 +23,30 @@ export function todayUtc(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
+/**
+ * Ecuador is UTC-5 all year (no daylight saving). The web and the back office work in Ecuador time: the day a person
+ * picks is an Ecuador calendar day. Instants stay in UTC (storage, API v2, stock sent to Booking); only this
+ * interpretation of a calendar day changes, and only for the callers that ask for it.
+ */
+export const ECUADOR_UTC_OFFSET_HOURS = -5;
+
+/** Half-open [start, end) UTC range covering one Ecuador calendar day (00:00 to 24:00 at UTC-5). */
+export function ecuadorDayRange(date: string): { start: Date; end: Date } {
+  const start = new Date(new Date(`${date}T00:00:00.000Z`).getTime() - ECUADOR_UTC_OFFSET_HOURS * 3_600_000);
+  return { start, end: new Date(start.getTime() + 24 * 3_600_000) };
+}
+
+/** Today's date (YYYY-MM-DD) in Ecuador. */
+export function todayEcuador(now: Date = new Date()): string {
+  return new Date(now.getTime() + ECUADOR_UTC_OFFSET_HOURS * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** An instant as "2026-11-08 21:30 (hora de Ecuador)", for messages people read. */
+export function formatEcuador(iso: string): string {
+  const local = new Date(new Date(iso).getTime() + ECUADOR_UTC_OFFSET_HOURS * 3_600_000).toISOString();
+  return `${local.slice(0, 10)} ${local.slice(11, 16)} (hora de Ecuador)`;
+}
+
 /** TypeORM can hand back a Date or an ISO string depending on the column type/driver. */
 export function toIso(value: Date | string): string {
   return (value instanceof Date ? value : new Date(value)).toISOString();

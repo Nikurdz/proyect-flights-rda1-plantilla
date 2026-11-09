@@ -17,7 +17,7 @@ import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { formatDateTime } from '../../lib/labels';
+import { formatAdminDateTime } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 import { adminErrorMessage } from './admin-errors';
 import { newUserSchema, type NewUserForm } from './admin-schemas';
@@ -235,7 +235,7 @@ export const AdminUsersPage: React.FC = () => {
                   <td className="px-4 py-3 text-xs text-slate-600">
                     {u.bloqueada ? <Badge variant="danger">Bloqueada</Badge> : u.correoVerificado ? 'Correo verificado' : 'Correo sin verificar'}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-600">{formatDateTime(u.creadoEn)}</td>
+                  <td className="px-4 py-3 text-xs text-slate-600">{formatAdminDateTime(u.creadoEn)}</td>
                   <td className="px-4 py-3 text-right">
                     <Button
                       type="button"

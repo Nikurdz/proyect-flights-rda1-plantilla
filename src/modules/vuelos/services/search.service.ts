@@ -3,7 +3,7 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { assertChronology, assertGroupSize, assertInfantRatio, assertOriginDestinationDiffer } from '../common/business-rules';
-import { toIso, utcDayRange } from '../common/date.util';
+import { ecuadorDayRange, todayEcuador, toIso, utcDayRange } from '../common/date.util';
 import { formatMinorUnits, toMinorUnits } from '../common/money.util';
 import {
   PASSENGER_TYPES,
@@ -39,11 +39,12 @@ export class SearchService {
     @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
   ) {}
 
-  async search(request: SearchRequestDto): Promise<SearchResponseDto> {
+  /** `ecuadorDay`: the web (v1) reads a departureDate as an Ecuador calendar day; the partner API (v2) keeps UTC days. */
+  async search(request: SearchRequestDto, options: { ecuadorDay?: boolean } = {}): Promise<SearchResponseDto> {
     for (const leg of request.itineraries) {
       assertOriginDestinationDiffer(leg);
     }
-    assertChronology(request.itineraries);
+    assertChronology(request.itineraries, options.ecuadorDay ? todayEcuador() : undefined);
     const passengers = this.normalizeBreakdown(request.passengers);
     assertInfantRatio(passengers);
     assertGroupSize(passengers, this.config.maxPassengersPerOrder);
@@ -53,7 +54,7 @@ export class SearchService {
 
     const legOptions: Vuelo[][] = [];
     for (const leg of request.itineraries) {
-      const matches = await this.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats);
+      const matches = await this.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats, { ecuadorDay: options.ecuadorDay });
       if (matches.length === 0) {
         // RF-031: a differentiated empty result, not an error.
         return { totalOffers: 0, offers: [] };
@@ -127,9 +128,9 @@ export class SearchService {
     );
   }
 
-  /** Direct flights on one calendar day (UTC) that have not departed and can seat the whole party. */
-  async findDirectFlights(origin: string | undefined, destination: string | undefined, departureDate: string, seatsNeeded: number, options: { includeSoldOut?: boolean } = {}): Promise<Vuelo[]> {
-    const { start, end } = utcDayRange(departureDate);
+  /** Direct flights on one calendar day (UTC, or Ecuador with `ecuadorDay`) that have not departed and can seat the whole party. */
+  async findDirectFlights(origin: string | undefined, destination: string | undefined, departureDate: string, seatsNeeded: number, options: { includeSoldOut?: boolean; ecuadorDay?: boolean } = {}): Promise<Vuelo[]> {
+    const { start, end } = options.ecuadorDay ? ecuadorDayRange(departureDate) : utcDayRange(departureDate);
     const qb = this.vuelos.createQueryBuilder('v').leftJoinAndSelect('v.aerolineaRef', 'a').where('1 = 1');
     // Omitted origin/destination mean "any": lets a visitor browse without knowing codes.
     if (origin) qb.andWhere('v."origenIATA" = :origin', { origin });

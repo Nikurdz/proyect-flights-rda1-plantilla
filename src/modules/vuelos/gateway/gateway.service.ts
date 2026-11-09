@@ -114,7 +114,7 @@ export class GatewayService implements OnModuleInit {
     let vuelos: CatalogoUnificadoGql['vuelos'] = [];
     if (e.fecha) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(e.fecha)) throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Invalid date', 'fecha must be YYYY-MM-DD.');
-      const encontrados = await this.search.findDirectFlights(e.origen?.toUpperCase(), e.destino?.toUpperCase(), e.fecha, 1, { includeSoldOut: true });
+      const encontrados = await this.search.findDirectFlights(e.origen?.toUpperCase(), e.destino?.toUpperCase(), e.fecha, 1, { includeSoldOut: true, ecuadorDay: true });
       vuelos = encontrados.slice(0, limite).map((v) => ({
         id: v.id,
         codigoVuelo: v.codigoVuelo,

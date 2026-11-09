@@ -50,8 +50,16 @@ export function orderStatusTone(status: string): string {
   }
 }
 
-/** "2026-10-15T13:00:00.000Z" -> "15 oct 2026, 08:00" in the given IANA time zone (default: UTC). */
-export function formatDateTime(iso: string, timeZone: string = 'UTC'): string {
+/** Time zone of the whole system: Ecuador (UTC-5, no daylight saving). Every screen shows and every form takes Ecuador time. */
+export const SYSTEM_TIME_ZONE = 'America/Guayaquil';
+/** Same zone, as the back office names it. */
+export const ADMIN_TIME_ZONE = SYSTEM_TIME_ZONE;
+
+/** An instant in the time of Ecuador, for the back office. */
+export const formatAdminDateTime = (iso: string): string => formatDateTime(iso, ADMIN_TIME_ZONE);
+
+/** "2026-10-15T13:00:00.000Z" -> "15 oct 2026, 08:00" in the given IANA time zone (default: Ecuador). */
+export function formatDateTime(iso: string, timeZone: string = SYSTEM_TIME_ZONE): string {
   try {
     return new Intl.DateTimeFormat('es-EC', {
       day: 'numeric',
@@ -67,7 +75,7 @@ export function formatDateTime(iso: string, timeZone: string = 'UTC'): string {
   }
 }
 
-export function formatDay(iso: string, timeZone: string = 'UTC'): string {
+export function formatDay(iso: string, timeZone: string = SYSTEM_TIME_ZONE): string {
   try {
     return new Intl.DateTimeFormat('es-EC', { day: 'numeric', month: 'long', year: 'numeric', timeZone }).format(new Date(iso));
   } catch {

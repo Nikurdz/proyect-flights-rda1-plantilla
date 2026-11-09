@@ -151,7 +151,7 @@ export const MyExperiencesPage: React.FC = () => {
                       )}
                       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
                         <div className="text-xs text-slate-500">
-                          <span className="block">Reservada el {formatDateTime(r.creadaEn)} UTC</span>
+                          <span className="block">Reservada el {formatDateTime(r.creadaEn)}</span>
                           {r.factura && (
                             <span className="mt-1 inline-flex items-center gap-1.5 font-semibold text-slate-700">
                               <Receipt className="h-3.5 w-3.5" aria-hidden="true" />

@@ -83,7 +83,7 @@ describe('flight status form', () => {
   it('builds the body with an ISO instant and omits empty fields', () => {
     expect(flightStatusBody({ status: 'DELAYED', estimatedDepartureAt: '2026-11-06T13:30', departureGate: ' B12 ', reason: '' })).toEqual({
       status: 'DELAYED',
-      estimatedDepartureAt: '2026-11-06T13:30:00.000Z',
+      estimatedDepartureAt: '2026-11-06T18:30:00.000Z', // 13:30 in Ecuador
       departureGate: 'B12',
     });
   });

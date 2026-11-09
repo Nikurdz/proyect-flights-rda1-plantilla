@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { uniqueViolationColumns } from '../../common/db-errors';
+import { formatEcuador } from '../../common/date.util';
 import { DomainEvent, DomainEventBus } from '../../common/domain-event-bus';
 import { MercadosService } from '../mercados/mercados.service';
 import { Notificacion, TipoNotificacion } from './entities/notificacion.entity';
@@ -21,7 +22,7 @@ interface Envio {
   variables: Record<string, string>;
 }
 
-const fecha = (iso: string) => iso.replace('T', ' ').slice(0, 16) + ' UTC';
+const fecha = (iso: string) => formatEcuador(iso);
 
 /**
  * D16. Turns domain events into transactional messages. Service messages (order confirmation,

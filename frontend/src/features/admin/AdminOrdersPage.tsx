@@ -8,7 +8,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { TicketQr } from '../../components/common/TicketQr';
-import { fareFamilyLabel, formatDateTime, orderStatusLabel, orderStatusTone, passengerTypeLabel } from '../../lib/labels';
+import { fareFamilyLabel, formatAdminDateTime, orderStatusLabel, orderStatusTone, passengerTypeLabel } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 
 interface HistoryEntry {
@@ -100,7 +100,7 @@ export const AdminOrdersPage: React.FC = () => {
                   <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${orderStatusTone(orden.estado)}`}>{orderStatusLabel(orden.estado)}</span>
                 </td>
                 <td className="px-4 py-3 text-xs text-slate-600">{orden.comprador === 'cliente' ? 'Cliente' : 'Invitado'}</td>
-                <td className="px-4 py-3 text-xs text-slate-600">{formatDateTime(orden.creadaEn)}</td>
+                <td className="px-4 py-3 text-xs text-slate-600">{formatAdminDateTime(orden.creadaEn)}</td>
                 <td className="px-4 py-3 text-right">
                   <MoneyText amount={orden.total.monto} currency={orden.total.moneda} />
                 </td>
@@ -162,7 +162,7 @@ export const AdminOrdersPage: React.FC = () => {
                       {itin.numeroVuelo} · {itin.origen} → {itin.destino}
                     </span>
                     <span>
-                      {formatDateTime(itin.salida)} UTC · {fareFamilyLabel(itin.familia)}
+                      {formatAdminDateTime(itin.salida)} · {fareFamilyLabel(itin.familia)}
                     </span>
                   </li>
                 ))}
@@ -201,7 +201,7 @@ export const AdminOrdersPage: React.FC = () => {
               <ol className="space-y-1 text-xs text-slate-600">
                 {(selected.historial as unknown as HistoryEntry[]).map((h, index) => (
                   <li key={index}>
-                    {formatDateTime(h.en)} UTC · <strong>{orderStatusLabel(h.estado)}</strong>
+                    {formatAdminDateTime(h.en)} · <strong>{orderStatusLabel(h.estado)}</strong>
                     {h.motivo ? ` · ${h.motivo}` : ''}
                   </li>
                 ))}

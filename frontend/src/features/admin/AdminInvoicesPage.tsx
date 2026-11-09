@@ -8,7 +8,7 @@ import { Dialog } from '../../components/ui/Dialog';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { estadoFacturaLabel, origenFacturaLabel } from '../../lib/auditoria';
-import { formatDateTime } from '../../lib/labels';
+import { formatAdminDateTime } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 
 const LINE_TYPE: Record<string, string> = { TARIFA: 'Tarifa', EQUIPAJE: 'Equipaje', EXPERIENCIA: 'Experiencia' };
@@ -37,8 +37,8 @@ const InvoiceDialog: React.FC<{ numero: string | null; ownerId?: string; onClose
               <dd className="mt-1 font-semibold text-slate-800">{origenFacturaLabel(data.origen)}</dd>
             </div>
             <div>
-              <dt className="font-bold uppercase tracking-wider text-slate-500">Emitida (UTC)</dt>
-              <dd className="mt-1 text-slate-800">{formatDateTime(data.emitidaEn)}</dd>
+              <dt className="font-bold uppercase tracking-wider text-slate-500">Emitida (Ecuador)</dt>
+              <dd className="mt-1 text-slate-800">{formatAdminDateTime(data.emitidaEn)}</dd>
             </div>
             <div>
               <dt className="font-bold uppercase tracking-wider text-slate-500">Referencia</dt>
@@ -162,7 +162,7 @@ export const AdminInvoicesPage: React.FC = () => {
           <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
             <tr>
               <th scope="col" className="px-4 py-3">Factura</th>
-              <th scope="col" className="px-4 py-3">Emitida (UTC)</th>
+              <th scope="col" className="px-4 py-3">Emitida (Ecuador)</th>
               <th scope="col" className="px-4 py-3">Origen</th>
               <th scope="col" className="px-4 py-3">Estado</th>
               <th scope="col" className="px-4 py-3 text-right">Subtotal</th>
@@ -187,7 +187,7 @@ export const AdminInvoicesPage: React.FC = () => {
                     {f.numeroFactura}
                   </button>
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-600">{formatDateTime(f.emitidaEn)}</td>
+                <td className="px-4 py-3 text-xs text-slate-600">{formatAdminDateTime(f.emitidaEn)}</td>
                 <td className="px-4 py-3 text-xs font-semibold text-slate-700">{origenFacturaLabel(f.origen)}</td>
                 <td className="px-4 py-3">
                   <Badge variant={f.estado === 'EMITIDA' ? 'success' : 'danger'}>{estadoFacturaLabel(f.estado)}</Badge>

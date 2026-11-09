@@ -1,5 +1,8 @@
+/** Time zone of the whole system: Ecuador (UTC-5, no daylight saving). */
+const ECUADOR_TZ = 'America/Guayaquil';
+
 /**
- * Formats an ISO UTC date string into the airport's local time zone.
+ * Formats an ISO UTC instant as a clock time in the given time zone (default: Ecuador).
  */
 export function formatTimeInTimeZone(
   isoDate: string,
@@ -11,7 +14,7 @@ export function formatTimeInTimeZone(
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-      timeZone: timeZone || 'UTC',
+      timeZone: timeZone || ECUADOR_TZ,
     }).format(date);
   } catch {
     return isoDate.substring(11, 16) || '--:--';
@@ -31,7 +34,7 @@ export function formatDateInTimeZone(
       weekday: 'short',
       day: 'numeric',
       month: 'short',
-      timeZone: timeZone || 'UTC',
+      timeZone: timeZone || ECUADOR_TZ,
     }).format(date);
   } catch {
     return isoDate.substring(0, 10);
@@ -52,31 +55,21 @@ export function formatDuration(minutes: number): string {
 }
 
 /**
- * Returns today's date formatted as YYYY-MM-DD in the local or specified time zone.
+ * Today's date as YYYY-MM-DD in Ecuador, whatever the zone of the browser (the web reads a date as an Ecuador day).
  */
-export function getTodayDateString(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+export function getTodayDateString(now: Date = new Date()): string {
+  return new Date(now.getTime() - 5 * 3_600_000).toISOString().slice(0, 10);
 }
 
 /**
- * Returns the current date in UTC as YYYY-MM-DD.
- * The backend verifies departureDate >= todayUtc(), so this provides
- * the exact minimum date acceptable by the backend.
+ * The earliest date the search accepts: today in Ecuador (the backend checks departureDate >= today in Ecuador).
  */
-export function getValidSearchDateString(): string {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(now.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+export function getValidSearchDateString(now: Date = new Date()): string {
+  return getTodayDateString(now);
 }
 
 /**
- * Returns tomorrow's date based on UTC as YYYY-MM-DD.
+ * Returns tomorrow's date in Ecuador as YYYY-MM-DD.
  * Recommended default for flight departures to ensure schedule availability.
  */
 export function getTomorrowDateString(): string {

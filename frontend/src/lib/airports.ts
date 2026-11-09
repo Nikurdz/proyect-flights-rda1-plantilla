@@ -56,6 +56,18 @@ export function registerTimeZones(airports: ReadonlyArray<{ iata?: string | null
   }
 }
 
-export function timeZoneOf(iata?: string | null): string {
+/**
+ * The whole system shows Ecuador time, also for flights that land elsewhere (the zones above stay in the catalogue
+ * for the day it is decided to show local airport time: flip this switch).
+ */
+export const SHOW_AIRPORT_LOCAL_TIME = false;
+
+/** The zone the catalogue gives an airport ('UTC' when it is unknown). */
+export function airportTimeZoneOf(iata?: string | null): string {
   return (iata && TIME_ZONES[iata.toUpperCase()]) || 'UTC';
+}
+
+/** The zone a screen shows an airport's times in: Ecuador, unless the local-time switch is on. */
+export function timeZoneOf(iata?: string | null): string {
+  return SHOW_AIRPORT_LOCAL_TIME ? airportTimeZoneOf(iata) : 'America/Guayaquil';
 }

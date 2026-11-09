@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { decodeCursor, encodeCursor } from '../../common/cursor.util';
-import { toIso, utcDayRange } from '../../common/date.util';
+import { ecuadorDayRange, toIso } from '../../common/date.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { uniqueViolationColumns } from '../../common/db-errors';
 import { DomainEventBus } from '../../common/domain-event-bus';
@@ -41,8 +41,8 @@ export class AdminService {
     if (query.estado) qb.andWhere('o."estado" = :estado', { estado: query.estado });
     if (query.numero) qb.andWhere('o."numeroOrden" = :numero', { numero: query.numero });
     if (query.pnr) qb.andWhere('o."pnr" = :pnr', { pnr: query.pnr });
-    if (query.desde) qb.andWhere('o."creadaEn" >= :desde', { desde: utcDayRange(query.desde).start });
-    if (query.hasta) qb.andWhere('o."creadaEn" < :hasta', { hasta: utcDayRange(query.hasta).end });
+    if (query.desde) qb.andWhere('o."creadaEn" >= :desde', { desde: ecuadorDayRange(query.desde).start });
+    if (query.hasta) qb.andWhere('o."creadaEn" < :hasta', { hasta: ecuadorDayRange(query.hasta).end });
     if (query.cursor) {
       const { createdAt, id } = decodeCursor(query.cursor);
       qb.andWhere('(o."creadaEn", o."ordenId") < (:cursorAt, :cursorId)', { cursorAt: createdAt, cursorId: id });
@@ -69,7 +69,7 @@ export class AdminService {
     if (query.destino) qb.andWhere('v."destinoIATA" = :destino', { destino: query.destino });
     if (query.vuelo) qb.andWhere('v."codigoVuelo" = :vuelo', { vuelo: query.vuelo });
     if (query.fecha) {
-      const { start, end } = utcDayRange(query.fecha);
+      const { start, end } = ecuadorDayRange(query.fecha);
       qb.andWhere('v."fechaSalida" >= :start AND v."fechaSalida" < :end', { start, end });
     } else {
       qb.andWhere('v."fechaSalida" >= :now', { now: new Date() });

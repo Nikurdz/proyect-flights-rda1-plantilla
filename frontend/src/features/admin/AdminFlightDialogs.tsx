@@ -17,18 +17,18 @@ import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { formatDateTime } from '../../lib/labels';
+import { formatAdminDateTime } from '../../lib/labels';
 import { adminErrorMessage } from './admin-errors';
 import {
   editFlightSchema,
   FLIGHT_STATUSES,
   flightStatusBody,
   flightStatusSchema,
-  isoToUtcLocal,
+  isoToEcuadorLocal,
   newFlightSchema,
   rescheduleSchema,
   toNumber,
-  utcLocalToIso,
+  ecuadorLocalToIso,
   type EditFlightForm,
   type FlightStatusForm,
   type NewFlightForm,
@@ -72,7 +72,7 @@ export const CreateFlightDialog: React.FC<{ onClose: () => void; onDone: (messag
         aerolinea: form.aerolinea,
         origen: form.origen,
         destino: form.destino,
-        salida: utcLocalToIso(form.salida),
+        salida: ecuadorLocalToIso(form.salida),
         duracionMinutos: Number(form.duracionMinutos),
         precioBaseUsd: toNumber(form.precioBaseUsd),
         ...(form.capacidad ? { capacidad: Number(form.capacidad) } : {}),
@@ -86,7 +86,7 @@ export const CreateFlightDialog: React.FC<{ onClose: () => void; onDone: (messag
     );
 
   return (
-    <Dialog isOpen onClose={onClose} title="Nuevo vuelo" description="La hora de salida se ingresa en UTC." maxWidth="lg">
+    <Dialog isOpen onClose={onClose} title="Nuevo vuelo" description="La hora de salida se ingresa en hora de Ecuador (UTC-5)." maxWidth="lg">
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         {crear.error != null && <ProblemAlert error={crear.error} message={adminErrorMessage(crear.error, 'crear-vuelo')} />}
         {localidades.isError && <ProblemAlert error={localidades.error} onRetry={() => localidades.refetch()} title="No pudimos cargar los aeropuertos" />}
@@ -95,7 +95,7 @@ export const CreateFlightDialog: React.FC<{ onClose: () => void; onDone: (messag
           <Input label="Aerolínea" placeholder="LATAM Airlines" autoComplete="off" error={errors.aerolinea?.message} {...register('aerolinea')} />
           <Select label="Origen" options={airports} error={errors.origen?.message} {...register('origen')} />
           <Select label="Destino" options={airports} error={errors.destino?.message} {...register('destino')} />
-          <Input label="Salida (UTC)" type="datetime-local" error={errors.salida?.message} {...register('salida')} />
+          <Input label="Salida (hora de Ecuador)" type="datetime-local" error={errors.salida?.message} {...register('salida')} />
           <Input label="Duración (minutos)" type="number" inputMode="numeric" min={20} max={1500} error={errors.duracionMinutos?.message} {...register('duracionMinutos')} />
           <Input label="Tarifa base (USD)" inputMode="decimal" placeholder="120.00" error={errors.precioBaseUsd?.message} {...register('precioBaseUsd')} />
           <Input label="Capacidad" type="number" inputMode="numeric" min={1} max={400} helperText="De 1 a 400; por defecto 180." error={errors.capacidad?.message} {...register('capacidad')} />
@@ -172,12 +172,12 @@ export const RescheduleFlightDialog: React.FC<{ flight: AdminVueloView; onClose:
     formState: { errors },
   } = useForm<RescheduleForm>({
     resolver: zodResolver(rescheduleSchema),
-    defaultValues: { nuevaSalida: isoToUtcLocal(flight.salida), motivo: '' },
+    defaultValues: { nuevaSalida: isoToEcuadorLocal(flight.salida), motivo: '' },
   });
 
   const onSubmit = (form: RescheduleForm) => {
     reprogramar.mutate(
-      { vueloId: flight.vueloId, nuevaSalida: utcLocalToIso(form.nuevaSalida), motivo: form.motivo || undefined },
+      { vueloId: flight.vueloId, nuevaSalida: ecuadorLocalToIso(form.nuevaSalida), motivo: form.motivo || undefined },
       {
         onSuccess: (r) => {
           onDone(`Vuelo ${flight.codigoVuelo} reprogramado. Reservas actualizadas: ${r.reservasAfectadas}.`);
@@ -192,12 +192,12 @@ export const RescheduleFlightDialog: React.FC<{ flight: AdminVueloView; onClose:
       isOpen
       onClose={onClose}
       title={`Reprogramar vuelo ${flight.codigoVuelo}`}
-      description={`Salida actual: ${formatDateTime(flight.salida)} UTC. Las reservas confirmadas se mueven a la nueva hora y se avisa por webhooks.`}
+      description={`Salida actual: ${formatAdminDateTime(flight.salida)}. Las reservas confirmadas se mueven a la nueva hora y se avisa por webhooks.`}
       maxWidth="md"
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
         {reprogramar.error != null && <ProblemAlert error={reprogramar.error} message={adminErrorMessage(reprogramar.error, 'reprogramar-vuelo')} />}
-        <Input label="Nueva salida (UTC)" type="datetime-local" error={errors.nuevaSalida?.message} {...register('nuevaSalida')} />
+        <Input label="Nueva salida (hora de Ecuador)" type="datetime-local" error={errors.nuevaSalida?.message} {...register('nuevaSalida')} />
         <Input label="Motivo (opcional)" maxLength={300} error={errors.motivo?.message} {...register('motivo')} />
         <Actions onClose={onClose} busy={reprogramar.isPending} submitLabel="Reprogramar" />
       </form>
@@ -311,7 +311,7 @@ export const FlightStatusDialog: React.FC<{ flight: AdminVueloView; onClose: () 
     formState: { errors },
   } = useForm<FlightStatusForm>({
     resolver: zodResolver(flightStatusSchema),
-    defaultValues: { status: 'DELAYED', estimatedDepartureAt: isoToUtcLocal(flight.salida), departureGate: '', reason: '' },
+    defaultValues: { status: 'DELAYED', estimatedDepartureAt: isoToEcuadorLocal(flight.salida), departureGate: '', reason: '' },
   });
   const delayed = useWatch({ control, name: 'status' }) === 'DELAYED';
 
@@ -332,7 +332,7 @@ export const FlightStatusDialog: React.FC<{ flight: AdminVueloView; onClose: () 
       isOpen
       onClose={onClose}
       title={`Estado del vuelo ${flight.codigoVuelo}`}
-      description={`${flight.origen} → ${flight.destino} · salida programada ${formatDateTime(flight.salida)} UTC. Las horas se ingresan en UTC.`}
+      description={`${flight.origen} → ${flight.destino} · salida programada ${formatAdminDateTime(flight.salida)}. Las horas se ingresan en hora de Ecuador.`}
       maxWidth="lg"
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -346,7 +346,7 @@ export const FlightStatusDialog: React.FC<{ flight: AdminVueloView; onClose: () 
             ))}
           </Select>
           <Input
-            label={delayed ? 'Salida estimada (UTC) · obligatoria' : 'Salida estimada (UTC)'}
+            label={delayed ? 'Salida estimada (hora de Ecuador) · obligatoria' : 'Salida estimada (hora de Ecuador)'}
             type="datetime-local"
             error={errors.estimatedDepartureAt?.message}
             {...register('estimatedDepartureAt')}

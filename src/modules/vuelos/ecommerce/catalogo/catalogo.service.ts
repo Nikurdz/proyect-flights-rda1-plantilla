@@ -7,7 +7,7 @@ import {
   assertInfantRatio,
   assertOriginDestinationDiffer,
 } from '../../common/business-rules';
-import { toIso, utcDayRange } from '../../common/date.util';
+import { ECUADOR_UTC_OFFSET_HOURS, ecuadorDayRange, todayEcuador } from '../../common/date.util';
 import { PASSENGER_TYPES, PassengerBreakdown, seatsRequired } from '../../common/pricing.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { VUELOS_CONFIG, VuelosConfig } from '../../common/vuelos-config';
@@ -32,6 +32,9 @@ import {
 } from './dto/catalogo.dto';
 import { Localidad } from './entities/localidad.entity';
 import { PreciosService } from './precios.service';
+
+/** The Ecuador calendar day (YYYY-MM-DD) of an instant. */
+const ecuadorDate = (instant: Date | string): string => todayEcuador(new Date(instant));
 
 // RF-SHP-019: A-04 (the scarcity threshold) is an open business question; this is the default.
 const SCARCITY_THRESHOLD = 9;
@@ -103,7 +106,7 @@ export class CatalogoService {
     }
 
     // Everything but a round trip's own legs is optional: no date = tomorrow, no origin/destination = any.
-    const outbound = query.outbound ?? new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const outbound = query.outbound ?? todayEcuador(new Date(Date.now() + 86_400_000));
     const legs: { origin?: string; destination?: string; departureDate: string; sentido: string }[] = [
       { origin: query.origin, destination: query.destination, departureDate: outbound, sentido: 'IDA' },
     ];
@@ -115,7 +118,7 @@ export class CatalogoService {
     for (const leg of legs) {
       if (leg.origin && leg.destination) assertOriginDestinationDiffer({ origin: leg.origin, destination: leg.destination, departureDate: leg.departureDate });
     }
-    assertChronology(legs.map((l) => ({ origin: l.origin ?? '', destination: l.destination ?? '', departureDate: l.departureDate })));
+    assertChronology(legs.map((l) => ({ origin: l.origin ?? '', destination: l.destination ?? '', departureDate: l.departureDate })), todayEcuador());
     assertInfantRatio(composicion);
     assertGroupSize(composicion, this.config.maxPassengersPerOrder);
 
@@ -125,7 +128,7 @@ export class CatalogoService {
     const trayectos: TrayectoDisponibleDto[] = [];
     for (const leg of legs) {
       // A full flight is listed too (as sold out) so the traveller sees it exists; it is never offered for sale.
-      const flights = await this.search.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats, { includeSoldOut: true });
+      const flights = await this.search.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats, { includeSoldOut: true, ecuadorDay: true });
       const itinerarios = await this.construirItinerarios(flights, familias, mercado, query.sort ?? 'RECOMENDADO', seats);
       const reservables = itinerarios.filter((i) => !i.agotado).length;
       trayectos.push({
@@ -235,7 +238,7 @@ export class CatalogoService {
         llegada: llegada.toISOString(),
         duracionMinutos: vuelo.durationMinutes,
         escalas: 0,
-        cruceDeDia: salida.toISOString().slice(0, 10) !== llegada.toISOString().slice(0, 10),
+        cruceDeDia: ecuadorDate(salida) !== ecuadorDate(llegada),
         precioDesde: money(precio, mercado.moneda),
         familiaDesde: familia.code,
         distintivos,
@@ -261,9 +264,9 @@ export class CatalogoService {
       const max = Math.max(...all);
       return max === min ? 0 : (value - min) / (max - min);
     };
-    // Departures between 06:00 and 22:00 UTC are "reasonable"; the further outside, the worse.
+    // Departures between 06:00 and 22:00 (Ecuador time) are "reasonable"; the further outside, the worse.
     const inconvenience = (vuelo: Vuelo) => {
-      const hour = new Date(vuelo.fechaSalida).getUTCHours();
+      const hour = new Date(new Date(vuelo.fechaSalida).getTime() + ECUADOR_UTC_OFFSET_HOURS * 3_600_000).getUTCHours();
       return hour >= 6 && hour <= 22 ? 0 : 1;
     };
     return scored
@@ -296,7 +299,7 @@ export class CatalogoService {
 
   /** RF-SHP-024: when a day has no flights, show the nearest days that do, with their lowest price. */
   private async fechasAlternativas(origin: string, destination: string, fecha: string, seats: number, familias: FareFamily[], mercado: Mercado): Promise<FechaAlternativaDto[]> {
-    const { start } = utcDayRange(fecha);
+    const { start } = ecuadorDayRange(fecha);
     const from = new Date(start.getTime() - ALTERNATIVE_DAYS * 86_400_000);
     const to = new Date(start.getTime() + (ALTERNATIVE_DAYS + 1) * 86_400_000);
 
@@ -309,7 +312,7 @@ export class CatalogoService {
 
     const lowestPerDay = new Map<string, number>();
     for (const vuelo of flights) {
-      const day = toIso(vuelo.fechaSalida).slice(0, 10);
+      const day = ecuadorDate(vuelo.fechaSalida);
       const price = this.precios.precioDesde(vuelo, familias, mercado).totalMinor;
       lowestPerDay.set(day, Math.min(lowestPerDay.get(day) ?? Number.POSITIVE_INFINITY, price));
     }

@@ -10,19 +10,21 @@ function todayIso(reference: Date = new Date()): string {
   return `${reference.getFullYear()}-${p(reference.getMonth() + 1)}-${p(reference.getDate())}`;
 }
 
-/** A `datetime-local` value (YYYY-MM-DDTHH:mm), read as UTC because the back office shows UTC, to ISO. */
-export function utcLocalToIso(value: string): string {
-  return new Date(`${value}:00Z`).toISOString();
+const ECUADOR_OFFSET_MS = 5 * 3_600_000; // Ecuador is UTC-5 all year
+
+/** A `datetime-local` value (YYYY-MM-DDTHH:mm), typed in Ecuador time (UTC-5), to an ISO instant. */
+export function ecuadorLocalToIso(value: string): string {
+  return new Date(`${value}:00-05:00`).toISOString();
 }
 
-/** ISO instant to the `datetime-local` format, in UTC. */
-export function isoToUtcLocal(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 16);
+/** ISO instant to the `datetime-local` format, in Ecuador time. */
+export function isoToEcuadorLocal(iso: string): string {
+  return new Date(new Date(iso).getTime() - ECUADOR_OFFSET_MS).toISOString().slice(0, 16);
 }
 
-const futureUtc = (value: string) => {
+const futureEcuador = (value: string) => {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return false;
-  const t = Date.parse(`${value}:00Z`);
+  const t = Date.parse(`${value}:00-05:00`);
   return !Number.isNaN(t) && t > Date.now();
 };
 
@@ -118,7 +120,7 @@ export const newFlightSchema = z
     aerolinea: airline,
     origen: z.string().regex(IATA, 'Elige el aeropuerto de origen.'),
     destino: z.string().regex(IATA, 'Elige el aeropuerto de destino.'),
-    salida: z.string().min(1, 'Ingresa la fecha y hora de salida.').refine(futureUtc, 'La salida debe ser una fecha y hora futuras.'),
+    salida: z.string().min(1, 'Ingresa la fecha y hora de salida.').refine(futureEcuador, 'La salida debe ser una fecha y hora futuras.'),
     duracionMinutos: minutes,
     precioBaseUsd: price,
     capacidad: capacity.or(z.literal('')),
@@ -136,7 +138,7 @@ export const editFlightSchema = z.object({
 export type EditFlightForm = z.infer<typeof editFlightSchema>;
 
 export const rescheduleSchema = z.object({
-  nuevaSalida: z.string().min(1, 'Ingresa la nueva fecha y hora de salida.').refine(futureUtc, 'La nueva salida debe ser futura.'),
+  nuevaSalida: z.string().min(1, 'Ingresa la nueva fecha y hora de salida.').refine(futureEcuador, 'La nueva salida debe ser futura.'),
   motivo: z.string().trim().max(300, 'Usa como máximo 300 caracteres.').optional(),
 });
 export type RescheduleForm = z.infer<typeof rescheduleSchema>;
@@ -168,11 +170,11 @@ export const flightStatusSchema = z
   });
 export type FlightStatusForm = z.infer<typeof flightStatusSchema>;
 
-/** Form -> body of PATCH /admin/vuelos/{id}/estado: empty optionals are omitted, the time goes as an ISO instant (UTC). */
+/** Form -> body of PATCH /admin/vuelos/{id}/estado: empty optionals are omitted, the time (typed in Ecuador time) goes as an ISO instant. */
 export function flightStatusBody(form: FlightStatusForm) {
   return {
     status: form.status,
-    ...(form.estimatedDepartureAt ? { estimatedDepartureAt: utcLocalToIso(form.estimatedDepartureAt) } : {}),
+    ...(form.estimatedDepartureAt ? { estimatedDepartureAt: ecuadorLocalToIso(form.estimatedDepartureAt) } : {}),
     ...(form.departureGate?.trim() ? { departureGate: form.departureGate.trim() } : {}),
     ...(form.reason?.trim() ? { reason: form.reason.trim() } : {}),
   };
