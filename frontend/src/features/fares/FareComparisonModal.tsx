@@ -11,7 +11,7 @@ export interface FareComparisonModalProps {
   isOpen: boolean;
   onClose: () => void;
   itinerario: ItinerarioDto | null;
-  passengers?: { adt: number; chd: number; inf: number };
+  passengers?: { adt: number; yth?: number; chd: number; inf: number };
   onSelectFare: (itinerario: ItinerarioDto, familia: FamiliaTarifariaDto) => void;
 }
 
@@ -26,6 +26,7 @@ export const FareComparisonModal: React.FC<FareComparisonModalProps> = ({
     itinerario?.itinerarioId,
     {
       adt: passengers.adt,
+      yth: passengers.yth,
       chd: passengers.chd,
       inf: passengers.inf,
     }

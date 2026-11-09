@@ -3905,6 +3905,15 @@ paths:
             maximum: 50
             minimum: 1
             type: number
+        - description: Jóvenes de 12 a 17 años (ocupan asiento, pagan como adultos y no acompañan a un infante)
+          in: query
+          name: yth
+          required: false
+          schema:
+            default: 0
+            maximum: 50
+            minimum: 0
+            type: number
         - description: Niños
           in: query
           name: chd
@@ -4254,6 +4263,15 @@ paths:
             default: 1
             maximum: 50
             minimum: 1
+            type: number
+        - description: Jóvenes de 12 a 17 años (ocupan asiento, pagan como adultos y no acompañan a un infante)
+          in: query
+          name: yth
+          required: false
+          schema:
+            default: 0
+            maximum: 50
+            minimum: 0
             type: number
         - in: query
           name: chd

@@ -49,8 +49,8 @@ export const ResultsPage: React.FC = () => {
     outbound,
     inbound: trip === 'RT' ? inbound : undefined,
     trip,
-    // The availability and fare endpoints know no youths: they take a seat and an adult fare like an adult.
-    adt: adt + yth,
+    adt,
+    yth,
     chd,
     inf,
     sort,
@@ -178,7 +178,7 @@ export const ResultsPage: React.FC = () => {
   const hasNoFlights = Boolean(currentTrayecto) && bookableFlights.length === 0 && (currentTrayecto?.itinerarios.length ?? 0) === 0;
   const allSoldOut =
     Boolean(currentTrayecto) && bookableFlights.length === 0 && (currentTrayecto?.itinerarios.length ?? 0) > 0;
-  const seatsNeeded = adt + chd;
+  const seatsNeeded = adt + yth + chd;
 
   const minValidDate = getValidSearchDateString();
   const activeDate =
@@ -392,7 +392,7 @@ export const ResultsPage: React.FC = () => {
         isOpen={isFareModalOpen}
         onClose={() => setIsFareModalOpen(false)}
         itinerario={modalItinerario}
-        passengers={{ adt: adt + yth, chd, inf }}
+        passengers={{ adt, yth, chd, inf }}
         onSelectFare={handleSelectFare}
       />
     </div>

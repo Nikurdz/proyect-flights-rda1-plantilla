@@ -28,6 +28,7 @@ export async function fetchDisponibilidad(params: SearchParams): Promise<Disponi
   if (params.outbound) query.set('outbound', params.outbound);
   if (params.inbound) query.set('inbound', params.inbound);
   if (params.adt !== undefined) query.set('adt', String(params.adt));
+  if (params.yth) query.set('yth', String(params.yth));
   if (params.chd !== undefined) query.set('chd', String(params.chd));
   if (params.inf !== undefined) query.set('inf', String(params.inf));
   if (params.trip) query.set('trip', params.trip);
@@ -48,10 +49,11 @@ export function useDisponibilidad(params: SearchParams, enabled: boolean = true)
 
 export async function fetchTarifas(
   itinerarioId: string,
-  params: { adt?: number; chd?: number; inf?: number }
+  params: { adt?: number; yth?: number; chd?: number; inf?: number }
 ): Promise<TarifasViewDto> {
   const query = new URLSearchParams();
   if (params.adt !== undefined) query.set('adt', String(params.adt));
+  if (params.yth) query.set('yth', String(params.yth));
   if (params.chd !== undefined) query.set('chd', String(params.chd));
   if (params.inf !== undefined) query.set('inf', String(params.inf));
 
@@ -60,7 +62,7 @@ export async function fetchTarifas(
 
 export function useTarifas(
   itinerarioId?: string,
-  params: { adt?: number; chd?: number; inf?: number } = {}
+  params: { adt?: number; yth?: number; chd?: number; inf?: number } = {}
 ) {
   return useQuery({
     queryKey: ['tarifas', itinerarioId, params],

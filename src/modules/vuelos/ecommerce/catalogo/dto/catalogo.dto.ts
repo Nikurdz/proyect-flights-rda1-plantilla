@@ -70,6 +70,14 @@ export class DisponibilidadQueryDto {
   @IsOptional()
   adt?: number = 1;
 
+  @ApiPropertyOptional({ minimum: 0, maximum: 50, default: 0, description: 'Jóvenes de 12 a 17 años (ocupan asiento, pagan como adultos y no acompañan a un infante)' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  @IsOptional()
+  yth?: number = 0;
+
   @ApiPropertyOptional({ minimum: 0, maximum: 50, default: 0, description: 'Niños' })
   @Type(() => Number)
   @IsInt()
@@ -128,6 +136,14 @@ export class TarifasQueryDto {
   @Max(50)
   @IsOptional()
   adt?: number = 1;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 50, default: 0, description: 'Jóvenes de 12 a 17 años (ocupan asiento, pagan como adultos y no acompañan a un infante)' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  @IsOptional()
+  yth?: number = 0;
 
   @ApiPropertyOptional({ minimum: 0, maximum: 50, default: 0 })
   @Type(() => Number)

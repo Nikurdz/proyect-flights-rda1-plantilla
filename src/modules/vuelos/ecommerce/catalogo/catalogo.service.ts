@@ -154,7 +154,7 @@ export class CatalogoService {
   /** RF-PRC-002/003/009: every fare family of one itinerary, with structured conditions and a validity. */
   async tarifasDeItinerario(itinerarioId: string, query: TarifasQueryDto): Promise<TarifasViewDto> {
     const mercado = await this.mercados.requerirActivo(query.mercado ?? 'ec');
-    const composicion: PassengerBreakdown = { adults: query.adt ?? 1, youths: 0, children: query.chd ?? 0, infants: query.inf ?? 0 };
+    const composicion: PassengerBreakdown = { adults: query.adt ?? 1, youths: query.yth ?? 0, children: query.chd ?? 0, infants: query.inf ?? 0 };
     assertInfantRatio(composicion);
     assertGroupSize(composicion, this.config.maxPassengersPerOrder);
 
@@ -197,8 +197,8 @@ export class CatalogoService {
     };
   }
 
-  private composicion(query: { adt?: number; chd?: number; inf?: number }): PassengerBreakdown {
-    return { adults: query.adt ?? 1, youths: 0, children: query.chd ?? 0, infants: query.inf ?? 0 };
+  private composicion(query: { adt?: number; yth?: number; chd?: number; inf?: number }): PassengerBreakdown {
+    return { adults: query.adt ?? 1, youths: query.yth ?? 0, children: query.chd ?? 0, infants: query.inf ?? 0 };
   }
 
   private async construirItinerarios(flights: Vuelo[], familias: FareFamily[], mercado: Mercado, sort: Ordenamiento, seats: number): Promise<ItinerarioDto[]> {

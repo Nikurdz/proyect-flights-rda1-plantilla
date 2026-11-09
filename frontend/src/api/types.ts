@@ -83,6 +83,8 @@ export interface SearchParams {
   outbound?: string;
   inbound?: string;
   adt?: number;
+  /** Youths (12-17): they take a seat, pay the adult fare and do not accompany an infant. */
+  yth?: number;
   chd?: number;
   inf?: number;
   trip?: 'RT' | 'OW';
