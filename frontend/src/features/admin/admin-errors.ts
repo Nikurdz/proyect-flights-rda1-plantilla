@@ -3,6 +3,7 @@ import { ProblemDetailsError } from '../../api/problem-details';
 export type AdminContext =
   | 'crear-usuario'
   | 'roles'
+  | 'crear-aeropuerto'
   | 'crear-vuelo'
   | 'editar-vuelo'
   | 'eliminar-vuelo'
@@ -31,6 +32,26 @@ export function adminErrorMessage(error: unknown, context: AdminContext): string
   if (proveedor) return proveedor;
   const mostrador = counterErrorMessage(error, context);
   if (mostrador) return mostrador;
+  if (context === 'crear-aeropuerto') {
+    if (error.status === 409) return 'Ya existe un aeropuerto con ese código.';
+    if (error.status === 422) return 'Falta la confirmación. Confirma el alta e intenta de nuevo.';
+    if (error.status === 400) {
+      const campos: Record<string, string> = {
+        iata: 'código IATA',
+        ciudad: 'ciudad',
+        nombre: 'nombre del aeropuerto',
+        pais: 'país',
+        paisNombre: 'nombre del país',
+        zonaHoraria: 'zona horaria (debe ser una zona IANA real)',
+        confirmar: 'confirmación',
+      };
+      const names = error.invalidParams.map((p) => campos[p.name] ?? p.name);
+      return names.length > 0
+        ? `Revisa estos datos: ${names.join(', ')}.`
+        : 'Algún dato no es válido. Revísalo e intenta de nuevo.';
+    }
+    return undefined;
+  }
   if (error.code === 'EMAIL_ALREADY_REGISTERED') return 'Ya existe un usuario con ese correo. Usa otro correo.';
   if (error.code === 'LAST_ADMIN') return 'No se puede quitar el rol: no puedes quitártelo a ti mismo ni dejar el sistema sin administradores.';
   if (error.code === 'FLIGHT_IN_USE') return 'Este vuelo tiene reservas o retenciones, por eso no se puede eliminar. Usa «Cancelar vuelo»: lo cierra a la venta y reembolsa sus reservas.';

@@ -25,6 +25,7 @@ import { AdminOrdersPage } from '../features/admin/AdminOrdersPage';
 import { AdminReservationsPage } from '../features/admin/AdminReservationsPage';
 import { AdminFlightsPage } from '../features/admin/AdminFlightsPage';
 import { AdminUsersPage } from '../features/admin/AdminUsersPage';
+import { AdminAirportsPage } from '../features/admin/AdminAirportsPage';
 import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
 import { AdminObservabilityPage } from '../features/admin/AdminObservabilityPage';
 import { AdminProvidersPage } from '../features/admin/AdminProvidersPage';
@@ -85,6 +86,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="ordenes" element={<AdminOrdersPage />} />
             <Route path="reservas" element={<AdminReservationsPage />} />
             <Route path="vuelos" element={<AdminFlightsPage />} />
+            <Route path="aeropuertos" element={<AdminAirportsPage />} />
             <Route path="usuarios" element={<AdminUsersPage />} />
             <Route path="proveedores" element={<AdminProvidersPage />} />
             <Route path="facturacion" element={<AdminInvoicesPage />} />

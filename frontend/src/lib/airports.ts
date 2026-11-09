@@ -28,7 +28,33 @@ const TIME_ZONES: Record<string, string> = {
   MIA: 'America/New_York',
   JFK: 'America/New_York',
   MAD: 'Europe/Madrid',
+  // Ecuador: continental airports (America/Guayaquil) and Galápagos (SCY joins GPS).
+  SCY: 'Pacific/Galapagos',
+  ...Object.fromEntries(
+    ['LOH', 'MEC', 'ESM', 'LTX', 'SNC', 'ETR', 'TUA', 'ATF', 'BHA', 'OCC', 'MRR', 'XMS', 'MCH', 'LGQ', 'PVO', 'PYO', 'WSE', 'PTZ', 'SUQ', 'TSC', 'TPC', 'TNW', 'TPN', 'JIP'].map((c) => [c, 'America/Guayaquil']),
+  ),
 };
+
+function isValidZone(zone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Completes the map with the zones the API reports for the catalogue (so an airport an admin created is
+ * not shown in UTC). Known entries and invalid zones are left untouched.
+ */
+export function registerTimeZones(airports: ReadonlyArray<{ iata?: string | null; zonaHoraria?: string | null }>): void {
+  for (const a of airports) {
+    const code = a.iata?.toUpperCase();
+    if (!code || !a.zonaHoraria || TIME_ZONES[code] || !isValidZone(a.zonaHoraria)) continue;
+    TIME_ZONES[code] = a.zonaHoraria;
+  }
+}
 
 export function timeZoneOf(iata?: string | null): string {
   return (iata && TIME_ZONES[iata.toUpperCase()]) || 'UTC';

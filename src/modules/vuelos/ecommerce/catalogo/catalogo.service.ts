@@ -37,6 +37,8 @@ import { PreciosService } from './precios.service';
 const SCARCITY_THRESHOLD = 9;
 const ALTERNATIVE_DAYS = 3;
 const SUGGESTION_LIMIT = 10;
+// With nothing typed the whole catalogue is offered (the admin flight form is a plain select over it).
+const CATALOG_LIMIT = 200;
 
 interface ScoredFlight {
   vuelo: Vuelo;
@@ -59,21 +61,22 @@ export class CatalogoService {
 
   /** RF-SHP-002: prefix match on code, city and airport, ignoring accents and case. */
   async sugerirLocalidades(q: string = ''): Promise<LocalidadViewDto[]> {
-    // No text typed yet: offer the whole (short) list instead of demanding a search term.
-    const prefix = `${escapeLike(normalizarTexto(q))}%`;
+    const key = normalizarTexto(q);
+    // No text typed yet: offer the whole list instead of demanding a search term.
+    const limit = key === '' ? CATALOG_LIMIT : SUGGESTION_LIMIT;
+    const prefix = `${escapeLike(key)}%`;
     const rows = await this.localidades
       .createQueryBuilder('l')
       .where('LOWER(l.iata) LIKE :prefix OR l."ciudadNorm" LIKE :prefix OR l."nombreNorm" LIKE :prefix', { prefix })
       .orderBy('l.iata', 'ASC')
-      .limit(SUGGESTION_LIMIT * 3)
+      .limit(limit * 3)
       .getMany();
 
-    const key = normalizarTexto(q);
     // An exact code first ("bog" -> BOG), then city matches, then airport-name matches.
     const rank = (l: Localidad) => (l.iata.toLowerCase() === key ? 0 : l.ciudadNorm.startsWith(key) ? 1 : 2);
     return rows
       .sort((a, b) => rank(a) - rank(b) || a.ciudad.localeCompare(b.ciudad))
-      .slice(0, SUGGESTION_LIMIT)
+      .slice(0, limit)
       .map(({ iata, ciudad, nombre, pais, paisNombre, zonaHoraria }) => ({ iata, ciudad, nombre, pais, paisNombre, zonaHoraria }));
   }
 

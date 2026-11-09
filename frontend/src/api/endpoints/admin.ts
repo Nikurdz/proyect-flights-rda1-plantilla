@@ -299,6 +299,68 @@ export function useCambiarRoles() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Airport catalogue (ADMIN): list and create only (flights reference the code, so no edit/delete).
+// ---------------------------------------------------------------------------------------------
+
+export interface AdminAeropuerto {
+  iata: string;
+  ciudad: string;
+  nombre: string;
+  pais: string;
+  paisNombre: string;
+  zonaHoraria: string;
+  vuelos: number;
+}
+
+export interface AdminAeropuertosPagina {
+  items: AdminAeropuerto[];
+  total: number;
+  pagina: number;
+  limite: number;
+}
+
+export interface AdminAeropuertosFilters {
+  q?: string;
+  pais?: string;
+  pagina?: number;
+  limite?: number;
+}
+
+export interface CrearAeropuertoInput {
+  iata: string;
+  ciudad: string;
+  nombre: string;
+  pais: string;
+  paisNombre: string;
+  zonaHoraria: string;
+  confirmar: true;
+}
+
+export function useAeropuertos(filters: AdminAeropuertosFilters, ownerId?: string) {
+  const params = { ...filters, limite: filters.limite ?? 25, pagina: filters.pagina ?? 1 };
+  return useQuery({
+    queryKey: ['admin-aeropuertos', ownerId, params],
+    queryFn: () => apiClient<AdminAeropuertosPagina>(`admin/aeropuertos${toQuery(params)}`),
+    enabled: Boolean(ownerId),
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+}
+
+/** POST /admin/aeropuertos. The public catalogue (10 min cache) and the admin list are refreshed on success. */
+export function useCrearAeropuerto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CrearAeropuertoInput) =>
+      apiClient<AdminAeropuerto>('admin/aeropuertos', { method: 'POST', body: JSON.stringify(body) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['localidades'] });
+      return qc.invalidateQueries({ queryKey: ['admin-aeropuertos'] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Flight management (ADMIN).
 // ---------------------------------------------------------------------------------------------
 

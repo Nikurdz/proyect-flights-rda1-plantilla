@@ -37,6 +37,9 @@ export const AdminLayout: React.FC = () => {
             <NavLink to="/admin/vuelos" className={tabClass}>
               Vuelos
             </NavLink>
+            <NavLink to="/admin/aeropuertos" className={tabClass}>
+              Aeropuertos
+            </NavLink>
             <NavLink to="/admin/usuarios" className={tabClass}>
               Usuarios
             </NavLink>

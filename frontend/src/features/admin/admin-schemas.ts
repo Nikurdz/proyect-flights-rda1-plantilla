@@ -51,6 +51,41 @@ export const newUserSchema = z.object({
 });
 export type NewUserForm = z.infer<typeof newUserSchema>;
 
+/** True when the runtime knows the IANA zone (same check the browser uses to format times). */
+export function isIanaZone(value: string): boolean {
+  if (!/^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)+$/.test(value) && value !== 'UTC') return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const newAirportSchema = z.object({
+  iata: z
+    .string()
+    .trim()
+    .transform((v) => v.toUpperCase())
+    .refine((v) => IATA.test(v), 'El código IATA son exactamente 3 letras, por ejemplo LOH.'),
+  ciudad: z.string().trim().min(1, 'Ingresa la ciudad.').max(100, 'Usa como máximo 100 caracteres.'),
+  nombre: z.string().trim().min(1, 'Ingresa el nombre del aeropuerto.').max(150, 'Usa como máximo 150 caracteres.'),
+  pais: z
+    .string()
+    .trim()
+    .transform((v) => v.toUpperCase())
+    .refine((v) => /^[A-Z]{2}$/.test(v), 'El país son 2 letras (ISO), por ejemplo EC.'),
+  paisNombre: z.string().trim().min(1, 'Ingresa el nombre del país.').max(100, 'Usa como máximo 100 caracteres.'),
+  zonaHoraria: z
+    .string()
+    .trim()
+    .min(1, 'Ingresa la zona horaria.')
+    .max(50, 'Usa como máximo 50 caracteres.')
+    .refine(isIanaZone, 'No es una zona IANA válida, por ejemplo America/Guayaquil.'),
+});
+export type NewAirportForm = z.input<typeof newAirportSchema>;
+export type NewAirportData = z.output<typeof newAirportSchema>;
+
 const price = z
   .string()
   .trim()

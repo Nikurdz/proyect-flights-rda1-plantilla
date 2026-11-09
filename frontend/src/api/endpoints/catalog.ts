@@ -1,12 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../client';
+import { registerTimeZones } from '../../lib/airports';
 import type { DisponibilidadViewDto, LocalidadViewDto, SearchParams, TarifasViewDto } from '../types';
 
 export async function fetchLocalidades(q?: string): Promise<LocalidadViewDto[]> {
   const query = new URLSearchParams();
   if (q) query.set('q', q);
   const qs = query.toString();
-  return apiClient<LocalidadViewDto[]>(`localidades${qs ? `?${qs}` : ''}`);
+  const localidades = await apiClient<LocalidadViewDto[]>(`localidades${qs ? `?${qs}` : ''}`);
+  if (Array.isArray(localidades)) registerTimeZones(localidades);
+  return localidades;
 }
 
 export function useLocalidades(q?: string) {

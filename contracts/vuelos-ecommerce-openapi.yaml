@@ -19,6 +19,124 @@ servers:
     url: http://localhost:3000/api/v1
 tags: []
 paths:
+  /admin/aeropuertos:
+    get:
+      description: Catálogo completo con búsqueda por código, ciudad o nombre, filtro por país y el número de vuelos que usan cada aeropuerto.
+      operationId: AeropuertosAdminController_listar
+      parameters:
+        - description: Busca por código, ciudad o nombre del aeropuerto (sin tildes ni mayúsculas).
+          in: query
+          name: q
+          required: false
+          schema:
+            example: loja
+            type: string
+        - description: País (ISO 3166-1 alfa-2).
+          in: query
+          name: pais
+          required: false
+          schema:
+            example: EC
+            type: string
+        - in: query
+          name: pagina
+          required: false
+          schema:
+            default: 1
+            minimum: 1
+            type: number
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 25
+            maximum: 100
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAeropuertosPaginaDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Listar aeropuertos (ADMIN)
+      tags:
+        - E-commerce · Back-office
+    post:
+      description: >-
+        Agrega un aeropuerto al catálogo para poder crear vuelos desde y hacia él. Exige `confirmar: true` (422 si falta). El código IATA
+        son tres letras y la zona horaria debe ser una zona IANA real. 409 si el código ya existe. Queda en la auditoría administrativa.
+      operationId: AeropuertosAdminController_crear
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCrearAeropuertoDto'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAeropuertoViewDto'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Conflicto
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Entidad no procesable
+      security:
+        - bearer: []
+      summary: Crear un código de aeropuerto (ADMIN)
+      tags:
+        - E-commerce · Back-office
   /admin/auditoria:
     get:
       operationId: AdminMercadosController_auditoria
@@ -5647,6 +5765,53 @@ components:
           example: 340
           type: number
       type: object
+    AdminAeropuertoViewDto:
+      properties:
+        ciudad:
+          type: string
+        iata:
+          example: LOH
+          type: string
+        nombre:
+          type: string
+        pais:
+          example: EC
+          type: string
+        paisNombre:
+          type: string
+        vuelos:
+          description: Vuelos del calendario que salen o llegan a este aeropuerto.
+          type: number
+        zonaHoraria:
+          example: America/Guayaquil
+          type: string
+      required:
+        - iata
+        - ciudad
+        - nombre
+        - pais
+        - paisNombre
+        - zonaHoraria
+        - vuelos
+      type: object
+    AdminAeropuertosPaginaDto:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AdminAeropuertoViewDto'
+          type: array
+        limite:
+          type: number
+        pagina:
+          type: number
+        total:
+          type: number
+      required:
+        - items
+        - total
+        - pagina
+        - limite
+      type: object
     AdminAsientoMapaDto:
       properties:
         characteristics:
@@ -5740,6 +5905,47 @@ components:
         motivo:
           example: Falla técnica de la aeronave
           type: string
+      type: object
+    AdminCrearAeropuertoDto:
+      properties:
+        ciudad:
+          example: Loja
+          maxLength: 100
+          type: string
+        confirmar:
+          description: >-
+            Debe ser true: confirma que el administrador revisó el código, porque un aeropuerto ya creado no se puede borrar ni editar desde
+            aquí.
+          example: true
+          type: boolean
+        iata:
+          description: Código IATA de tres letras.
+          example: LOH
+          type: string
+        nombre:
+          example: Camilo Ponce Enríquez (Catamayo)
+          maxLength: 150
+          type: string
+        pais:
+          description: País (ISO 3166-1 alfa-2).
+          example: EC
+          type: string
+        paisNombre:
+          example: Ecuador
+          maxLength: 100
+          type: string
+        zonaHoraria:
+          description: Zona horaria IANA real; con ella se muestran las horas del aeropuerto.
+          example: America/Guayaquil
+          type: string
+      required:
+        - iata
+        - ciudad
+        - nombre
+        - pais
+        - paisNombre
+        - zonaHoraria
+        - confirmar
       type: object
     AdminCrearUsuarioDto:
       properties:

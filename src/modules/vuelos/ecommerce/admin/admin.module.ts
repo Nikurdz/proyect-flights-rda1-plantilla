@@ -10,6 +10,8 @@ import { IdentidadModule } from '../identidad/identidad.module';
 import { AuditoriaCambio } from '../mercados/entities/auditoria-cambio.entity';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { AeropuertosAdminController } from './aeropuertos-admin.controller';
+import { AeropuertosAdminService } from './aeropuertos-admin.service';
 import { ReservasAdminController } from './reservas-admin.controller';
 import { ReservasAdminService } from './reservas-admin.service';
 import { DashboardController } from './dashboard.controller';
@@ -24,8 +26,8 @@ import { WebhooksAdminService } from './webhooks-admin.service';
 
 @Module({
   imports: [VuelosCoreModule, OrdenesModule, IdentidadModule, TypeOrmModule.forFeature([Vuelo, SeatAssignment, Booking, AuditoriaCambio])],
-  controllers: [AdminController, ReservasAdminController, WebhooksAdminController, ObservabilidadController, DashboardController, UsuariosController, HealthController],
-  providers: [AdminService, ReservasAdminService, WebhooksAdminService, VuelosAdminService, UsuariosService, ObservabilidadService, DashboardService, RolesGuard],
+  controllers: [AdminController, AeropuertosAdminController, ReservasAdminController, WebhooksAdminController, ObservabilidadController, DashboardController, UsuariosController, HealthController],
+  providers: [AdminService, AeropuertosAdminService, ReservasAdminService, WebhooksAdminService, VuelosAdminService, UsuariosService, ObservabilidadService, DashboardService, RolesGuard],
   exports: [AdminService],
 })
 export class AdminModule {}

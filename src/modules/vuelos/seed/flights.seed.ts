@@ -90,7 +90,7 @@ export const SCHEDULE: ScheduleEntry[] = [
 // Departure hours are LOCAL times converted to UTC with a fixed offset per airport (approximate:
 // no daylight-saving changes). A deliberate, documented simplification, not a real timetable.
 const UTC_OFFSET: Record<string, number> = {
-  BOG: -5, MDE: -5, CLO: -5, CTG: -5, UIO: -5, GYE: -5, CUE: -5, GPS: -6, LIM: -5, CUZ: -5,
+  BOG: -5, MDE: -5, CLO: -5, CTG: -5, UIO: -5, GYE: -5, CUE: -5, LOH: -5, GPS: -6, LIM: -5, CUZ: -5,
   PTY: -5, SCL: -3, EZE: -3, GRU: -3, MIA: -4, MAD: 1,
 };
 
@@ -123,6 +123,8 @@ const ROUTES: RoutePair[] = [
   { a: 'BOG', b: 'CLO', carrier: 'AV', number: 140, durationMinutes: 70, priceUsd: 84, capacity: 180, hoursA: [6, 12, 18], hoursB: [8, 14, 20] },
   { a: 'BOG', b: 'CTG', carrier: 'AV', number: 150, durationMinutes: 75, priceUsd: 96, capacity: 180, hoursA: [7, 15], hoursB: [9, 17] },
   { a: 'UIO', b: 'CUE', carrier: 'LA', number: 2420, durationMinutes: 45, priceUsd: 62, capacity: 96, hoursA: [7, 16], hoursB: [9, 18] },
+  { a: 'UIO', b: 'LOH', carrier: 'LA', number: 2470, durationMinutes: 60, priceUsd: 75, capacity: 96, hoursA: [7, 17], hoursB: [9, 19] },
+  { a: 'GYE', b: 'LOH', carrier: 'LA', number: 2480, durationMinutes: 50, priceUsd: 68, capacity: 96, hoursA: [8, 16], hoursB: [10, 18] },
   { a: 'GYE', b: 'GPS', carrier: 'LA', number: 2430, durationMinutes: 105, priceUsd: 190, capacity: 150, hoursA: [8], hoursB: [13] },
   { a: 'UIO', b: 'GPS', carrier: 'LA', number: 2440, durationMinutes: 195, priceUsd: 235, capacity: 150, hoursA: [7], hoursB: [13] },
   { a: 'UIO', b: 'BOG', carrier: 'AV', number: 330, durationMinutes: 105, priceUsd: 176, capacity: 180, hoursA: [8, 17], hoursB: [10, 19] },
