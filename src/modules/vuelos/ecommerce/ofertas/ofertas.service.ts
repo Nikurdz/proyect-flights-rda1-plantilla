@@ -343,7 +343,7 @@ export class OfertasService implements OnModuleInit {
     const primerVuelo = oferta.trayectos[0].salida;
     const ultimoVuelo = oferta.trayectos[oferta.trayectos.length - 1].salida;
     for (const p of pasajeros) {
-      assertPassengerTypeMatchesAge(p.tipo, p.fechaNacimiento, primerVuelo);
+      assertPassengerTypeMatchesAge(p.tipo, p.fechaNacimiento, primerVuelo, { field: 'pasajeros.fechaNacimiento', lastFlightDate: ultimoVuelo });
     }
 
     // RF-CHK-002: the document expiry is required when a leg crosses a border, and must outlast the trip.

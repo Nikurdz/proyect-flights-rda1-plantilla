@@ -366,7 +366,7 @@ export class BookingsService {
 
     const firstDate = toIso(firstFlight.fechaSalida);
     for (const passenger of request.passengers) {
-      assertPassengerTypeMatchesAge(passenger.passengerType as PassengerType, passenger.birthDate, firstDate);
+      assertPassengerTypeMatchesAge(passenger.passengerType as PassengerType, passenger.birthDate, firstDate, { field: 'passengers.birthDate', lastFlightDate: toIso(lastFlight.fechaSalida) });
       if (passenger.documentExpiryDate && new Date(passenger.documentExpiryDate) < new Date(lastFlight.fechaSalida)) {
         fail('Travel document expired', `The document of ${passenger.firstName} ${passenger.lastName} expires before the last flight.`, {
           name: 'passengers.documentExpiryDate',

@@ -102,6 +102,26 @@ describe('business-rules', () => {
       // Born 2009-01-01: turns 18 on 2027-01-01, the flight date itself.
       expect(() => assertPassengerTypeMatchesAge('CHILD', '2009-01-01', '2027-01-01')).toThrow();
     });
+
+    it('names the field of the request that fails', () => {
+      try {
+        assertPassengerTypeMatchesAge('ADULT', '2020-01-01', '2027-01-01', { field: 'pasajeros.fechaNacimiento' });
+        fail('expected an error');
+      } catch (error) {
+        expect(JSON.stringify((error as { getResponse: () => unknown }).getResponse())).toContain('pasajeros.fechaNacimiento');
+      }
+    });
+
+    it('rejects a birth date in the future explicitly', () => {
+      expect(() => assertPassengerTypeMatchesAge('INFANT', '2999-01-01', '3000-01-01')).toThrow();
+    });
+
+    it('also checks the last flight: an infant who turns 2 before the return is refused', () => {
+      // Born 2025-03-01: 1 year old on 2026-11-01, 2 years old on the return of 2027-04-01.
+      expect(() => assertPassengerTypeMatchesAge('INFANT', '2025-03-01', '2026-11-01')).not.toThrow();
+      expect(() => assertPassengerTypeMatchesAge('INFANT', '2025-03-01', '2026-11-01', { lastFlightDate: '2027-04-01' })).toThrow();
+      expect(() => assertPassengerTypeMatchesAge('INFANT', '2025-03-01', '2026-11-01', { lastFlightDate: '2027-02-01' })).not.toThrow();
+    });
   });
 
   describe('assertNoDuplicatePassengers (RF-068)', () => {

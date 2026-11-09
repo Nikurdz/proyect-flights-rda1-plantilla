@@ -39,7 +39,7 @@ function importesDe(b: Booking, taxesMinor: number | null | undefined) {
 }
 
 /** One CSV field: quoted when it holds a separator, a quote or a line break; a leading formula sign is neutralised. */
-function csvField(value: unknown): string {
+export function csvField(value: unknown): string {
   let text = value === null || value === undefined ? '' : String(value);
   if (/^[=+\-@]/.test(text) && !/^-?\d+(\.\d+)?$/.test(text)) text = `'${text}`;
   return /[",;\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;

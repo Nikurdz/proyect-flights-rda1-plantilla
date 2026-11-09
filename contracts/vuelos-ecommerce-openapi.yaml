@@ -224,6 +224,272 @@ paths:
       summary: 'Dashboard de gestión: ventas, conversión, rutas y ocupación (ADMIN)'
       tags:
         - E-commerce · Observabilidad
+  /admin/facturacion-booking:
+    get:
+      description: >-
+        Cada venta con su base, IVA, IVA esperado (15 % de la base) e IVA según Booking (15 % incluido en el total), la alerta si no cuadra,
+        la nota de crédito derivada de una cancelación (reembolso y penalidad), el equipaje y los cambios de fecha. Vista de conciliación:
+        no es un documento fiscal.
+      operationId: BookingConciliacionController_listar
+      parameters:
+        - description: Ventas desde este día de Ecuador (inclusive).
+          in: query
+          name: desde
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: Ventas hasta este día de Ecuador (inclusive).
+          in: query
+          name: hasta
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: Socio (client id OAuth2).
+          in: query
+          name: partnerId
+          required: false
+          schema:
+            example: booking-prototipo
+            type: string
+        - in: query
+          name: estado
+          required: false
+          schema:
+            enum:
+              - PENDING
+              - PENDING_PAYMENT
+              - TICKET_ISSUING
+              - CONFIRMED
+              - FAILED
+              - CHANGE_PENDING
+              - CANCELLATION_PENDING
+              - CANCELLED
+            type: string
+        - description: Solo las ventas cuyo IVA no cuadra con el 15 %.
+          in: query
+          name: soloAlertas
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: pagina
+          required: false
+          schema:
+            default: 1
+            minimum: 1
+            type: number
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 25
+            maximum: 100
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          description: Página de ventas con sus importes.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Ventas de Booking como líneas de factura (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/facturacion-booking/export.csv:
+    get:
+      description: Mismos filtros que la lista; hasta 5000 ventas, las más antiguas primero.
+      operationId: BookingConciliacionController_exportCsv
+      parameters:
+        - description: Ventas desde este día de Ecuador (inclusive).
+          in: query
+          name: desde
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: Ventas hasta este día de Ecuador (inclusive).
+          in: query
+          name: hasta
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: Socio (client id OAuth2).
+          in: query
+          name: partnerId
+          required: false
+          schema:
+            example: booking-prototipo
+            type: string
+        - in: query
+          name: estado
+          required: false
+          schema:
+            enum:
+              - PENDING
+              - PENDING_PAYMENT
+              - TICKET_ISSUING
+              - CONFIRMED
+              - FAILED
+              - CHANGE_PENDING
+              - CANCELLATION_PENDING
+              - CANCELLED
+            type: string
+        - description: Solo las ventas cuyo IVA no cuadra con el 15 %.
+          in: query
+          name: soloAlertas
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: pagina
+          required: false
+          schema:
+            default: 1
+            minimum: 1
+            type: number
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 25
+            maximum: 100
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          description: CSV separado por comas, UTF-8 con BOM.
+        '400':
+          content:
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Exportar la conciliación de Booking en CSV (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/facturacion-booking/resumen:
+    get:
+      description: >-
+        Por día de Ecuador y del periodo: ventas, base, IVA, total, cancelaciones, reembolsos, penalidades, equipaje, cambios de fecha, neto
+        y cuántas ventas tienen el IVA descuadrado. Filtros: desde/hasta (días de Ecuador) y socio.
+      operationId: BookingConciliacionController_resumen
+      parameters:
+        - description: Ventas desde este día de Ecuador (inclusive).
+          in: query
+          name: desde
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: Ventas hasta este día de Ecuador (inclusive).
+          in: query
+          name: hasta
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: Socio (client id OAuth2).
+          in: query
+          name: partnerId
+          required: false
+          schema:
+            example: booking-prototipo
+            type: string
+        - in: query
+          name: estado
+          required: false
+          schema:
+            enum:
+              - PENDING
+              - PENDING_PAYMENT
+              - TICKET_ISSUING
+              - CONFIRMED
+              - FAILED
+              - CHANGE_PENDING
+              - CANCELLATION_PENDING
+              - CANCELLED
+            type: string
+        - description: Solo las ventas cuyo IVA no cuadra con el 15 %.
+          in: query
+          name: soloAlertas
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: pagina
+          required: false
+          schema:
+            default: 1
+            minimum: 1
+            type: number
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 25
+            maximum: 100
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          description: Totales del periodo y de cada día.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Resumen de las ventas de Booking por día (ADMIN)
+      tags:
+        - E-commerce · Back-office
   /admin/facturas:
     get:
       description: Más recientes primero, con filtro por estado y por origen (vuelo o experiencia).

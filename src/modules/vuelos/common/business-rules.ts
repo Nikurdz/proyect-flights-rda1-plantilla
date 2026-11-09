@@ -113,21 +113,46 @@ export function ageAt(birthDate: string, referenceDate: string): number {
   return age;
 }
 
-/** RN-06: passenger type must match age at the itinerary's first departure date. */
+const bandOf = (age: number) => AGE_BANDS.find((b) => age >= b.minAge && age <= b.maxAge);
+
+/**
+ * RN-06: passenger type must match age at the itinerary's first departure date, and still match at the last one (a baby
+ * who turns 2 before the return leg is no longer an infant). `field` names the request field the error points at.
+ */
 export function assertPassengerTypeMatchesAge(
   declaredType: PassengerTypeBand,
   birthDate: string,
   firstFlightDate: string,
+  options: { field?: string; lastFlightDate?: string } = {},
 ): void {
+  const field = options.field ?? 'passengers.birthDate';
+  if (birthDate > todayUtc()) {
+    throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', 'Birth date in the future', `Birth date ${birthDate} is in the future.`, [
+      { name: field, reason: 'must not be in the future' },
+    ]);
+  }
   const age = ageAt(birthDate, firstFlightDate);
-  const band = AGE_BANDS.find((b) => age >= b.minAge && age <= b.maxAge);
+  const band = bandOf(age);
   if (!band || band.type !== declaredType) {
     throw new ProblemDetailsException(
       HttpStatus.UNPROCESSABLE_ENTITY,
       'VALIDATION_FAILED',
       'Passenger type does not match age',
       `Passenger born ${birthDate} is ${age} year(s) old at the first flight date and cannot be declared as ${declaredType}`,
+      [{ name: field, reason: `age ${age} at the first flight does not match ${declaredType}` }],
     );
+  }
+  if (options.lastFlightDate) {
+    const ageLast = ageAt(birthDate, options.lastFlightDate);
+    if (bandOf(ageLast)?.type !== declaredType) {
+      throw new ProblemDetailsException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'VALIDATION_FAILED',
+        'Passenger type changes before the last flight',
+        `Passenger born ${birthDate} is ${ageLast} year(s) old at the last flight date and can no longer be declared as ${declaredType}`,
+        [{ name: field, reason: `age ${ageLast} at the last flight does not match ${declaredType}` }],
+      );
+    }
   }
 }
 
