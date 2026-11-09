@@ -1,3 +1,4 @@
+import { registrarAccion } from '../../common/traza-acciones';
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -168,6 +169,7 @@ export class IdentidadService {
     if (!cliente) {
       // Same work and same answer as a wrong password, so timing and wording do not reveal which emails exist.
       await verifyPassword(dto.contrasena, await this.dummy());
+      registrarAccion({ tipo: 'acceso.login_fallido', agregadoId: 'desconocido', resumen: 'motivo=credenciales', estado: 'ERROR' });
       throw invalidCredentials();
     }
 
@@ -177,19 +179,23 @@ export class IdentidadService {
 
     if (!(await verifyPassword(dto.contrasena, cliente.hashContrasena))) {
       await this.registrarFallo(cliente);
+      registrarAccion({ tipo: 'acceso.login_fallido', agregadoId: cliente.clienteId, resumen: 'motivo=credenciales', estado: 'ERROR' });
       throw invalidCredentials();
     }
 
     if (cliente.intentosFallidos > 0 || cliente.bloqueadoHasta) {
       await this.clientes.update(cliente.clienteId, { intentosFallidos: 0, bloqueadoHasta: null });
     }
+    registrarAccion({ tipo: 'acceso.login', agregadoId: cliente.clienteId, resumen: `roles=${cliente.roles.join('|')}`, actor: { id: cliente.clienteId, tipo: cliente.roles.includes('ADMIN') ? 'ADMIN' : 'CUSTOMER' } });
     return this.tokens.sign({ ownerId: cliente.clienteId, kind: 'customer', roles: cliente.roles });
   }
 
   /** RF-CHK-001: buying without an account uses a short-lived guest identity. */
   invitado(ip: string): SignedToken {
     assertWithinLimit(this.guestLimiter, `guest:${ip}`, 'Too many guest sessions');
-    return this.tokens.sign({ ownerId: `guest:${randomBytes(16).toString('hex')}`, kind: 'guest', roles: [] });
+    const ownerId = `guest:${randomBytes(16).toString('hex')}`;
+    registrarAccion({ tipo: 'acceso.invitado', agregadoId: ownerId, resumen: 'sesion de invitado', actor: { id: ownerId, tipo: 'GUEST' } });
+    return this.tokens.sign({ ownerId, kind: 'guest', roles: [] });
   }
 
   async obtener(auth: AuthClaims, id: string): Promise<ClienteViewDto> {

@@ -1847,6 +1847,300 @@ paths:
       summary: Cotización de cancelación de mostrador (ADMIN)
       tags:
         - E-commerce · Back-office
+  /admin/trazabilidad:
+    get:
+      description: >-
+        Eventos, sagas con sus pasos y cambios administrativos en una sola lista, de lo más reciente a lo más antiguo. Paginación por cursor
+        (`antes` = `siguiente`).
+      operationId: TrazabilidadController_listar
+      parameters:
+        - description: Todo lo que hizo una misma petición (X-Correlation-Id / correlation_id).
+          in: query
+          name: correlationId
+          required: false
+          schema:
+            type: string
+        - description: 'Número de orden (ORD-…) o localizador (PNR): trae toda la traza de esa compra o reserva.'
+          in: query
+          name: numero
+          required: false
+          schema:
+            type: string
+        - description: Entidad (orden, booking, pago, oferta, hold, vuelo, cliente…); con `id`, filtra por el agregado.
+          in: query
+          name: entidad
+          required: false
+          schema:
+            type: string
+        - description: Identificador del agregado de la entidad.
+          in: query
+          name: id
+          required: false
+          schema:
+            type: string
+        - description: 'Quién lo hizo: cuenta (sub verificado) o partner:<cliente>[:user:<id>].'
+          in: query
+          name: actor
+          required: false
+          schema:
+            type: string
+        - description: Tipo exacto de evento (booking.cancelled), de saga (COMPRA) o de cambio administrativo (vuelo.CREAR).
+          in: query
+          name: tipo
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: fuente
+          required: false
+          schema:
+            enum:
+              - evento
+              - saga
+              - admin
+            type: string
+        - in: query
+          name: desde
+          required: false
+          schema:
+            format: date
+            type: string
+        - in: query
+          name: hasta
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: 'Cursor: solo lo anterior a este instante (el `siguiente` de la página previa).'
+          in: query
+          name: antes
+          required: false
+          schema:
+            format: date-time
+            type: string
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 50
+            maximum: 200
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          description: Página de la línea de tiempo.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Línea de tiempo unificada de la trazabilidad (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/trazabilidad/export.csv:
+    get:
+      description: Mismos filtros que la lista; hasta 5000 filas, las más recientes primero. Sin datos personales.
+      operationId: TrazabilidadController_exportCsv
+      parameters:
+        - description: Todo lo que hizo una misma petición (X-Correlation-Id / correlation_id).
+          in: query
+          name: correlationId
+          required: false
+          schema:
+            type: string
+        - description: 'Número de orden (ORD-…) o localizador (PNR): trae toda la traza de esa compra o reserva.'
+          in: query
+          name: numero
+          required: false
+          schema:
+            type: string
+        - description: Entidad (orden, booking, pago, oferta, hold, vuelo, cliente…); con `id`, filtra por el agregado.
+          in: query
+          name: entidad
+          required: false
+          schema:
+            type: string
+        - description: Identificador del agregado de la entidad.
+          in: query
+          name: id
+          required: false
+          schema:
+            type: string
+        - description: 'Quién lo hizo: cuenta (sub verificado) o partner:<cliente>[:user:<id>].'
+          in: query
+          name: actor
+          required: false
+          schema:
+            type: string
+        - description: Tipo exacto de evento (booking.cancelled), de saga (COMPRA) o de cambio administrativo (vuelo.CREAR).
+          in: query
+          name: tipo
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: fuente
+          required: false
+          schema:
+            enum:
+              - evento
+              - saga
+              - admin
+            type: string
+        - in: query
+          name: desde
+          required: false
+          schema:
+            format: date
+            type: string
+        - in: query
+          name: hasta
+          required: false
+          schema:
+            format: date
+            type: string
+        - description: 'Cursor: solo lo anterior a este instante (el `siguiente` de la página previa).'
+          in: query
+          name: antes
+          required: false
+          schema:
+            format: date-time
+            type: string
+        - in: query
+          name: limite
+          required: false
+          schema:
+            default: 50
+            maximum: 200
+            minimum: 1
+            type: number
+      responses:
+        '200':
+          description: CSV UTF-8 con BOM.
+        '400':
+          content:
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Exportar la línea de tiempo en CSV (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/trazabilidad/flujo:
+    get:
+      description: >-
+        Nodos y flechas ordenadas por tiempo, dibujados con lo que se registró (eventos, pasos de saga, cambios administrativos y llamadas
+        salientes). Indique correlationId o numero (orden o PNR).
+      operationId: TrazabilidadController_flujo
+      parameters:
+        - in: query
+          name: correlationId
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: numero
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Nodos y aristas del flujo.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Flujo entre componentes de una petición o compra (ADMIN)
+      tags:
+        - E-commerce · Back-office
+  /admin/trazabilidad/mapa:
+    get:
+      description: Cuántas veces habló cada par de componentes en el periodo y cuántas salieron mal. Días de Ecuador.
+      operationId: TrazabilidadController_mapa
+      parameters:
+        - in: query
+          name: desde
+          required: false
+          schema:
+            format: date
+            type: string
+        - in: query
+          name: hasta
+          required: false
+          schema:
+            format: date
+            type: string
+      responses:
+        '200':
+          description: Nodos y enlaces agregados.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Petición inválida
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: No autenticado
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailsDto'
+          description: Prohibido
+      security:
+        - bearer: []
+      summary: Mapa general de la comunicación entre componentes (ADMIN)
+      tags:
+        - E-commerce · Back-office
   /admin/usuarios:
     get:
       description: Más recientes primero, con búsqueda por correo o nombre y filtro por rol. Nunca incluye contraseñas ni tokens.

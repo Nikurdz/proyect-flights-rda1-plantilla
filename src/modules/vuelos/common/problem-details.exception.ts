@@ -114,7 +114,7 @@ export class ProblemDetailsException extends HttpException {
   readonly retryAfterSeconds?: number;
 
   /** How the same failure reads on /api/v2 when the v2 contract uses another status or code (v1 stays as it was). */
-  v2?: { status?: number; code: ProblemDetailsCode };
+  v2?: { status?: number; code: ProblemDetailsCode; title?: string; detail?: string };
 
   constructor(
     status: HttpStatus,
@@ -139,8 +139,8 @@ export class ProblemDetailsException extends HttpException {
   }
 
   /** Declares the status/code the v2 contract uses for this failure. */
-  forV2(code: ProblemDetailsCode, status?: number): this {
-    this.v2 = { code, status };
+  forV2(code: ProblemDetailsCode, status?: number, text?: { title?: string; detail?: string }): this {
+    this.v2 = { code, status, ...text };
     return this;
   }
 }

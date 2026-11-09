@@ -1,3 +1,4 @@
+import { registrarAccion } from '../common/traza-acciones';
 import { HttpStatus, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, FindOptionsWhere, Like, Repository } from 'typeorm';
@@ -88,6 +89,7 @@ export class WebhooksService implements OnModuleInit {
         active: true,
         apiVersion,
       }));
+    registrarAccion({ tipo: 'webhook.suscrito', agregadoId: saved.id, resumen: `eventos=${request.events.length} version=${apiVersion}` });
     return saved;
   }
 
@@ -105,6 +107,7 @@ export class WebhooksService implements OnModuleInit {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'NOT_FOUND', 'Webhook not found', `Webhook ${id} was not found.`);
     }
     await this.subscriptions.update({ id }, { active: false });
+    registrarAccion({ tipo: 'webhook.eliminado', agregadoId: id, resumen: 'suscripcion desactivada' });
     // Whatever was still waiting for this subscription is dropped with it.
     await this.deliveries.delete({ subscriptionId: id, status: 'PENDING' });
   }

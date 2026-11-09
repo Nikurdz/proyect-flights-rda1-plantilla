@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { AuthClaims } from '../auth/token.service';
-import { mapBookingUniqueViolation } from '../common/db-errors';
+import { mapBookingUniqueViolation, seatTakenProblem } from '../common/db-errors';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { seatExists } from '../common/seat-grid';
@@ -75,7 +75,7 @@ export class SeatChangeV2Service {
             }
             const key = `${item.segmentId}:${item.seatNumber}`;
             if (taken.has(key)) {
-              throw new ProblemDetailsException(HttpStatus.CONFLICT, 'SEAT_TAKEN', 'Asiento repetido', `El asiento ${item.seatNumber} se pidió para más de un pasajero.`);
+              throw seatTakenProblem(item.seatNumber, item.segmentId);
             }
             taken.add(key);
 
@@ -88,7 +88,7 @@ export class SeatChangeV2Service {
           for (const change of changes.filter((c) => c.previousSeatNumber !== c.seatNumber)) {
             const occupied = await manager.findOne(SeatAssignment, { where: { vueloId: change.segmentId, seatNumber: change.seatNumber } });
             if (occupied && !(occupied.bookingId === bookingId && leaving.has(`${change.segmentId}:${change.seatNumber}`))) {
-              throw new ProblemDetailsException(HttpStatus.CONFLICT, 'SEAT_TAKEN', 'Asiento ocupado', `El asiento ${change.seatNumber} ya está ocupado.`);
+              throw seatTakenProblem(change.seatNumber, change.segmentId);
             }
           }
 

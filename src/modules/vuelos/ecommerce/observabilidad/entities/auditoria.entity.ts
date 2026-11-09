@@ -11,6 +11,7 @@ import { Mercado } from '../../mercados/entities/mercado.entity';
 @Index('IDX_auditoria_transacciones_correlacion', ['correlationId'])
 @Index('IDX_auditoria_transacciones_tipo', ['tipo', 'ocurridoEn'])
 @Index('IDX_auditoria_transacciones_agregado', ['agregadoId'])
+@Index('IDX_auditoria_transacciones_numero', ['numero'])
 export class AuditoriaTransaccion {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -41,6 +42,27 @@ export class AuditoriaTransaccion {
   // The identifiers of the event (order number, locator, state…), without personal data.
   @Column({ type: 'varchar', length: 300 })
   resumen: string;
+
+  // Who caused it (verified `sub` and kind: CUSTOMER, GUEST, PARTNER, ADMIN); null for jobs and consumers.
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  actorId: string | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  actorTipo: string | null;
+
+  // What the event is about (orden, booking, pago, oferta, hold, vuelo, cliente…) and its public number (order number or locator).
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  entidad: string | null;
+
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  numero: string | null;
+
+  // The components that talk (see common/topologia.ts): who announces it and who reacts.
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  origen: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  destino: string | null;
 
   @Column({ type: 'timestamptz', precision: 3 })
   ocurridoEn: Date;

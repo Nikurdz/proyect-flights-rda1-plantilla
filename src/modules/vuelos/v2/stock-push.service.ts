@@ -1,3 +1,4 @@
+import { registrarAccion } from '../common/traza-acciones';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
@@ -212,9 +213,11 @@ export class StockPushService implements OnModuleInit, OnModuleDestroy {
       this.counters.updates += result.updates;
       this.counters.changes += result.changes;
       runtimeMetrics.recordJob('stock-push', { durationMs: Date.now() - startedAt, result: { ...result } });
+      if (result.updates + result.changes > 0) registrarAccion({ tipo: 'llamada.stock_push', agregadoId: correlation, resumen: `vuelos=${result.updates + result.changes}`, correlationId: correlation });
       runtimeMetrics.setIntegration('booking-stock', { vuelosEnviadosAlgunaVez: this.lastPushed.size, vuelosEnEspera: this.waitingCount(), contadores: { ...this.counters } });
     } catch (error) {
       this.counters.failures += 1;
+      registrarAccion({ tipo: 'llamada.stock_push', agregadoId: correlation, resumen: 'motivo=error_de_envio', estado: 'ERROR', correlationId: correlation });
       const message = error instanceof Error ? error.message : String(error);
       runtimeMetrics.recordJob('stock-push', { durationMs: Date.now() - startedAt, error: message });
       runtimeMetrics.setIntegration('booking-stock', { ultimoError: { en: new Date().toISOString(), mensaje: message.slice(0, 300) }, contadores: { ...this.counters } });

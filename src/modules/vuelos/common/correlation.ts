@@ -6,7 +6,27 @@ import { Observable } from 'rxjs';
 import { activityGate, isProbePath } from './activity-gate';
 import { runtimeMetrics } from './runtime-metrics';
 
-const storage = new AsyncLocalStorage<{ correlationId: string; idempotentReplay?: boolean }>();
+/** Who is acting: the verified account of the request. Jobs and consumers have none (the trail calls them SYSTEM). */
+export type ActorKind = 'CUSTOMER' | 'GUEST' | 'PARTNER' | 'ADMIN' | 'SYSTEM';
+export interface Actor {
+  id: string;
+  tipo: ActorKind;
+}
+
+/** Where the request came from (never stored with personal data: the address and a short user agent). */
+export interface RequestOrigin {
+  ip: string | null;
+  userAgent: string | null;
+}
+
+interface CallContext {
+  correlationId: string;
+  idempotentReplay?: boolean;
+  actor?: Actor;
+  origin?: RequestOrigin;
+}
+
+const storage = new AsyncLocalStorage<CallContext>();
 
 export const CORRELATION_HEADER = 'x-correlation-id';
 
@@ -39,8 +59,24 @@ export function wasIdempotentReplay(): boolean {
   return storage.getStore()?.idempotentReplay === true;
 }
 
-export function runWithCorrelation<T>(correlationId: string, fn: () => T): T {
-  return storage.run({ correlationId }, fn);
+export function runWithCorrelation<T>(correlationId: string, fn: () => T, context: Omit<CallContext, 'correlationId'> = {}): T {
+  return storage.run({ ...context, correlationId }, fn);
+}
+
+/** The actor and origin of the current request, when there is one. */
+export function currentActor(): Actor | null {
+  return storage.getStore()?.actor ?? null;
+}
+
+export function currentOrigin(): RequestOrigin | null {
+  return storage.getStore()?.origin ?? null;
+}
+
+/** Kind of actor of verified claims: a partner service token, an administrator, a guest or a customer. */
+export function actorOf(claims: { ownerId: string; kind?: string; roles?: string[] } | undefined | null): Actor | undefined {
+  if (!claims?.ownerId) return undefined;
+  const tipo: ActorKind = claims.kind === 'service' || claims.ownerId.startsWith('partner:') ? 'PARTNER' : claims.roles?.includes('ADMIN') ? 'ADMIN' : claims.ownerId.startsWith('guest:') ? 'GUEST' : 'CUSTOMER';
+  return { id: claims.ownerId.slice(0, 100), tipo };
 }
 
 const SAFE_ID = /^[A-Za-z0-9._-]{8,100}$/;
@@ -79,6 +115,9 @@ export class CorrelationInterceptor implements NestInterceptor {
 
     const startedAt = Date.now();
     return new Observable((subscriber) => {
+      // The guards ran before this interceptor, so the verified claims are on the request already.
+      const actor = actorOf((request as Request & { auth?: { ownerId: string; kind?: string; roles?: string[] } }).auth);
+      const origin: RequestOrigin = { ip: request.ip?.slice(0, 64) ?? null, userAgent: request.headers['user-agent']?.toString().slice(0, 200) ?? null };
       runWithCorrelation(correlationId, () => {
         next.handle().subscribe({
           next: (value) => subscriber.next(value),
@@ -96,7 +135,7 @@ export class CorrelationInterceptor implements NestInterceptor {
             subscriber.complete();
           },
         });
-      });
+      }, { actor, origin });
     });
   }
 }

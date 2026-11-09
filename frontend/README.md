@@ -39,7 +39,7 @@ Aplicación web (SPA) de la plataforma de venta de vuelos directos **RAM Allianc
 
 ## GraphQL
 
-`/graphql` queda fuera del prefijo `api/v1`. `src/api/graphql.ts` es un cliente mínimo con `fetch` que reutiliza el token y convierte `errors[0].extensions.code` en el mismo `ProblemDetailsError` del cliente REST (un `UNAUTHORIZED` cierra la sesión igual que un 401). Solo lo usa la consola de Auditoría.
+`/graphql` queda fuera del prefijo `api/v1`. `src/api/graphql.ts` es un cliente mínimo con `fetch` que reutiliza el token y convierte `errors[0].extensions.code` en el mismo `ProblemDetailsError` del cliente REST (un `UNAUTHORIZED` cierra la sesión igual que un 401). La consola de Trazabilidad (`/admin/auditoria`) ya no lo usa: lee los endpoints REST `admin/trazabilidad*` (`api/endpoints/trazabilidad.ts`) y dibuja el flujo con `features/admin/TraceFlowGraph.tsx` (SVG propio, sondeo cada 10 s con el panel abierto).
 
 ## Errores
 

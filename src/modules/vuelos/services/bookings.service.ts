@@ -7,7 +7,7 @@ import { documentHashOf, ensureTravellers } from '../common/travellers';
 import { assertInfantAssociations, assertNoDuplicatePassengers, assertPassengerTypeMatchesAge, assertValidNationalIds } from '../common/business-rules';
 import { decodeCursor, encodeCursor } from '../common/cursor.util';
 import { toIso, utcDayRange } from '../common/date.util';
-import { mapBookingUniqueViolation } from '../common/db-errors';
+import { mapBookingUniqueViolation, seatTakenProblem } from '../common/db-errors';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { findHold } from '../common/hold-loader';
 import { formatMinorUnits, toMinorUnits } from '../common/money.util';
@@ -187,6 +187,14 @@ export class BookingsService {
 
     if (await manager.exists(Booking, { where: { paymentReference: request.payment.paymentReference } })) {
       throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PAYMENT_REFERENCE_INVALID', 'Payment already used', 'This paymentReference is already attached to another booking.').forV2('PAYMENT_REFERENCE_INVALID', HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    // A seat sold to another booking answers 409 SEAT_TAKEN naming it, before the hold is consumed or anything is written
+    // (the unique index stays the last guarantee against a race).
+    for (const seat of request.passengers.flatMap((p) => p.assignedSeats ?? [])) {
+      if (await manager.exists(SeatAssignment, { where: { vueloId: seat.segmentId, seatNumber: seat.seatNumber } })) {
+        throw seatTakenProblem(seat.seatNumber, seat.segmentId);
+      }
     }
 
     const consumed = await manager.update(FlightHold, { holdId: hold.holdId, status: 'HELD' }, { status: 'CONSUMED' });

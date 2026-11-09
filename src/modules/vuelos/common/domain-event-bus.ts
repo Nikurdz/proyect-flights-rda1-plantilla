@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
-import { currentCorrelationId } from './correlation';
+import { Actor, currentActor, currentCorrelationId } from './correlation';
 import { activityGate } from './activity-gate';
 import { eventSchemaMode, eventSchemas } from './event-schemas';
 import { runtimeMetrics } from './runtime-metrics';
@@ -16,6 +16,8 @@ export interface DomainEvent<T = unknown> {
   correlationId: string;
   aggregateId: string;
   payload: T;
+  /** Who caused it (the verified account of the request); absent for jobs and consumers. */
+  actor?: Actor;
 }
 
 export type DomainEventHandler = (event: DomainEvent) => Promise<void> | void;
@@ -73,6 +75,7 @@ export class DomainEventBus {
       correlationId: currentCorrelationId(),
       aggregateId,
       payload,
+      ...(currentActor() ? { actor: currentActor()! } : {}),
     };
 
     this.logger.log(`${type} aggregate=${aggregateId} [${event.correlationId}]`);

@@ -1,3 +1,4 @@
+import { registrarAccion } from '../common/traza-acciones';
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -131,12 +132,14 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
 
     if (!error) {
       await repo.update({ deliveryId: delivery.deliveryId }, { status: 'DELIVERED', attempts: delivery.attempts, lastStatusCode: statusCode, lastError: null, deliveredAt: new Date() });
+      this.traza(delivery, 'OK', `http=${statusCode}`);
       return 'delivered';
     }
 
     const retryIn = RETRY_DELAYS_MS[delivery.attempts - 1];
     if (retryIn === undefined) {
       await repo.update({ deliveryId: delivery.deliveryId }, { status: 'DEAD', attempts: delivery.attempts, lastStatusCode: statusCode, lastError: error.slice(0, 300) });
+      this.traza(delivery, 'ERROR', `http=${statusCode ?? 'sin-respuesta'} agotado`);
       return 'dead';
     }
     await repo.update(
@@ -144,5 +147,11 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
       { attempts: delivery.attempts, lastStatusCode: statusCode, lastError: error.slice(0, 300), nextAttemptAt: new Date(now.getTime() + retryIn) },
     );
     return 'failed';
+  }
+
+  /** One row in the trail for the outcome of a delivery (not for each retry): the webhook is how a partner hears about us. */
+  private traza(delivery: WebhookDelivery, estado: 'OK' | 'ERROR', resumen: string): void {
+    const correlationId = (delivery.payload as { correlationid?: unknown } | null)?.correlationid;
+    registrarAccion({ tipo: 'llamada.webhook', agregadoId: delivery.eventId, resumen: `${delivery.eventType} ${resumen}`, estado, ...(typeof correlationId === 'string' && correlationId ? { correlationId } : {}) });
   }
 }

@@ -35,6 +35,8 @@ export class VuelosProblemDetailsV2Filter extends VuelosProblemDetailsFilter {
     return {
       ...body,
       type: `https://api.booking.local/errors/${code.toLowerCase().replace(/_/g, '-')}`,
+      title: override?.title ?? body.title,
+      detail: override?.detail ?? body.detail,
       status,
       code,
       instance: request.originalUrl.split('?')[0],

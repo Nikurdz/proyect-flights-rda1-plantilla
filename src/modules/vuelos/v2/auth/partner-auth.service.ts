@@ -1,3 +1,4 @@
+import { registrarAccion } from '../../common/traza-acciones';
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -41,11 +42,17 @@ export class PartnerAuthService {
   /** OAuth2 `client_credentials`: the partner proves who it is and gets a token limited to the scopes it asks for (or all it may use). */
   async issue(grantType: string | undefined, clientId: string | undefined, clientSecret: string | undefined, requestedScope: string | undefined): Promise<OAuthTokenResponse> {
     if (grantType !== 'client_credentials') throw new OAuthError('unsupported_grant_type', 400, 'Only client_credentials is supported.');
-    if (!clientId || !clientSecret) throw new OAuthError('invalid_client', 401, 'Client authentication failed.');
+    if (!clientId || !clientSecret) {
+      registrarAccion({ tipo: 'oauth2.token_fallido', agregadoId: 'sin-cliente', resumen: 'motivo=sin_credenciales', estado: 'ERROR' });
+      throw new OAuthError('invalid_client', 401, 'Client authentication failed.');
+    }
 
     const client = await this.clients.findOneBy({ clientId });
     const valid = await verifyPassword(clientSecret, client?.secretHash ?? (await (decoy ??= hashPassword('decoy-secret'))));
-    if (!client || !client.activo || !valid) throw new OAuthError('invalid_client', 401, 'Client authentication failed.');
+    if (!client || !client.activo || !valid) {
+      registrarAccion({ tipo: 'oauth2.token_fallido', agregadoId: clientId.slice(0, 60), resumen: 'motivo=cliente_invalido', estado: 'ERROR' });
+      throw new OAuthError('invalid_client', 401, 'Client authentication failed.');
+    }
 
     const allowed = client.scopes.split(' ').filter((s) => (PARTNER_SCOPES as readonly string[]).includes(s));
     const requested = requestedScope ? requestedScope.split(' ').filter(Boolean) : allowed;
@@ -53,6 +60,7 @@ export class PartnerAuthService {
     if (outside.length > 0) throw new OAuthError('invalid_scope', 400, `Scope not allowed for this client: ${outside.join(' ')}.`);
 
     const signed = this.tokens.sign({ ownerId: client.clientId, kind: 'service', roles: [], scopes: requested });
+    registrarAccion({ tipo: 'oauth2.token', agregadoId: client.clientId, resumen: `scopes=${requested.length}`, actor: { id: client.clientId, tipo: 'PARTNER' } });
     return { access_token: signed.accessToken, token_type: 'Bearer', expires_in: signed.expiresIn, scope: requested.join(' ') };
   }
 

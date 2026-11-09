@@ -307,8 +307,14 @@ export class VuelosV2Controller {
   @RequiresScope('flights:read')
   @ApiBearerAuth()
   @ApiOperation({ operationId: 'getCancellationQuote', summary: 'Cotizar la cancelación' })
-  getCancellationQuote(@CurrentAuth() auth: AuthClaims, @Param('bookingId', ParseUUIDPipe) bookingId: string) {
-    return this.cancellationService.quote(auth.ownerId, bookingId);
+  async getCancellationQuote(@CurrentAuth() auth: AuthClaims, @Param('bookingId', ParseUUIDPipe) bookingId: string) {
+    try {
+      return await this.cancellationService.quote(auth.ownerId, bookingId);
+    } catch (error) {
+      // A booking that is already cancelled is not "not confirmed" in v2: it cannot be cancelled (same mapping as cancel).
+      if (error instanceof ProblemDetailsException && !error.v2 && (error.getResponse() as ProblemDetailsBody).code === 'BOOKING_NOT_CONFIRMED') error.forV2('BOOKING_NOT_CANCELLABLE');
+      throw error;
+    }
   }
 
   @Post('bookings/:bookingId/cancel')
@@ -323,7 +329,7 @@ export class VuelosV2Controller {
       outcome = await this.cancellationService.cancelWithEvent(auth, key, bookingId, body);
     } catch (error) {
       // v2 names "the booking is not in a state that can be cancelled" BOOKING_NOT_CANCELLABLE.
-      if (error instanceof ProblemDetailsException && (error.getResponse() as ProblemDetailsBody).code === 'BOOKING_NOT_CONFIRMED') error.forV2('BOOKING_NOT_CANCELLABLE');
+      if (error instanceof ProblemDetailsException && !error.v2 && (error.getResponse() as ProblemDetailsBody).code === 'BOOKING_NOT_CONFIRMED') error.forV2('BOOKING_NOT_CANCELLABLE');
       throw error;
     }
     const { response, event } = outcome;

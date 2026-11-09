@@ -171,7 +171,13 @@ export class BookingViewV2Service {
       ...base,
       cabins: base.cabins.map((cabin) => ({
         ...cabin,
-        rows: cabin.rows.map((row) => ({ ...row, seats: row.seats.map((seat) => ({ ...seat, status: statuses.get(seat.seatNumber) ?? 'AVAILABLE' })) })),
+        rows: cabin.rows.map((row) => ({
+          ...row,
+          seats: row.seats.map((seat) => {
+            const status = statuses.get(seat.seatNumber) ?? 'AVAILABLE';
+            return { ...seat, status, isAvailable: status === 'AVAILABLE' }; // a sold seat (BOOKED, TICKETED, CHECKED_IN, BOARDED) is never available
+          }),
+        })),
       })),
     };
   }

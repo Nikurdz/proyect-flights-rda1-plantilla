@@ -46,7 +46,14 @@ export class PartnerAuthGuard implements CanActivate {
       granted = (claims.scopes ?? []).filter((s) => (PARTNER_SCOPES as readonly string[]).includes(s));
       const userId = request.headers['x-user-id'];
       const partner = `partner:${claims.ownerId}`;
-      claims.ownerId = typeof userId === 'string' && USER_ID.test(userId) ? `${partner}:user:${userId}` : partner;
+      // A malformed X-User-Id used to be ignored, which silently moved the call to the partner-level owner and made the
+      // partner's own bookings "not found": refuse it so the mistake is visible.
+      if (typeof userId === 'string' && userId !== '' && !USER_ID.test(userId)) {
+        throw new ProblemDetailsException(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'X-User-Id inválido', 'X-User-Id admite de 1 a 50 caracteres: letras, números y . _ : @ -', [
+          { name: 'X-User-Id', reason: 'must match [A-Za-z0-9._:@-]{1,50}' },
+        ]);
+      }
+      claims.ownerId = typeof userId === 'string' && userId !== '' ? `${partner}:user:${userId}` : partner;
       const roles = request.headers['x-user-roles'];
       if (typeof roles === 'string') claims.roles = roles.split(',').map((r) => r.trim()).filter(Boolean);
     } else {

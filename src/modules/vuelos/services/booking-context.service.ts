@@ -40,11 +40,14 @@ export class BookingContextService {
   async load(manager: EntityManager, ownerId: string, bookingId: string, options: { lock?: boolean; asAdmin?: boolean } = {}): Promise<BookingContext> {
     const booking = await manager.findOne(Booking, { where: { bookingId }, ...(options.lock ? { lock: { mode: 'pessimistic_write' as const } } : {}) });
     if (!booking) {
-      throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'BOOKING_NOT_CONFIRMED', 'Booking not found', `Booking ${bookingId} was not found.`);
+      throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'BOOKING_NOT_CONFIRMED', 'Booking not found', `Booking ${bookingId} was not found.`).forV2('NOT_FOUND', HttpStatus.NOT_FOUND);
     }
     if (!options.asAdmin && booking.ownerId !== ownerId) {
       // v1 answers 403 (unchanged); contract v2 answers 404 so a partner's user cannot tell that someone else's booking exists.
-      throw new ProblemDetailsException(HttpStatus.FORBIDDEN, 'FORBIDDEN', 'Booking belongs to another user', 'You do not have access to this booking.').forV2('NOT_FOUND', HttpStatus.NOT_FOUND);
+      throw new ProblemDetailsException(HttpStatus.FORBIDDEN, 'FORBIDDEN', 'Booking belongs to another user', 'You do not have access to this booking.').forV2('NOT_FOUND', HttpStatus.NOT_FOUND, {
+        title: 'Reserva no encontrada',
+        detail: `No existe la reserva ${bookingId} para este usuario: use el mismo X-User-Id con el que se creó la reserva.`,
+      });
     }
     return this.complete(manager, booking);
   }
