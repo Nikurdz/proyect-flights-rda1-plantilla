@@ -12,7 +12,7 @@ import { hashPassword } from '../ecommerce/identidad/password.util';
 import { seedEcommerce } from '../ecommerce/seed/ecommerce.seed';
 import { PartnerClient } from '../entities/partner-client.entity';
 import { PARTNER_SCOPES } from '../v2/auth/scopes';
-import { seedDemoScenarios, seedFlights } from './flights.seed';
+import { DOMESTIC_HORIZON_DAYS, seedDemoScenarios, seedFlights } from './flights.seed';
 
 // Entities are discovered by glob so every sub-domain of this module is covered without a
 // list to maintain. The same glob works for ts-node (.ts) and the compiled build (.js).
@@ -38,7 +38,8 @@ async function main(): Promise<void> {
     return `${seconds} s`;
   };
 
-  const flights = await seedFlights(dataSource);
+  const domesticHorizonDays = Number(process.env.SEED_DOMESTIC_HORIZON_DAYS) || DOMESTIC_HORIZON_DAYS;
+  const flights = await seedFlights(dataSource, new Date(), { domesticHorizonDays });
   console.log(`Flights: ${flights.families} fare families; flights created this run: ${flights.flights} (${took()}).`);
 
   // Flights left full on purpose for the demo; SEED_DEMO_SCENARIOS=false turns it off.

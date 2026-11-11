@@ -331,9 +331,9 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     it('returns an empty result with nearby dates instead of an error when a day has no flights (RF-SHP-024)', async () => {
       const date = dayAhead(35);
       const start = new Date(`${date}T00:00:00.000Z`);
-      await ds.getRepository(Vuelo).createQueryBuilder().delete().where('"codigoVuelo" = :n AND "fechaSalida" >= :a AND "fechaSalida" < :b', { n: 'LA2402', a: start, b: new Date(start.getTime() + 86_400_000) }).execute();
+      await ds.getRepository(Vuelo).createQueryBuilder().delete().where('"codigoVuelo" = :n AND "fechaSalida" >= :a AND "fechaSalida" < :b', { n: 'LA2550', a: start, b: new Date(start.getTime() + 86_400_000) }).execute(); // GYE -> SCY: the only flight of the day on that route
 
-      const res = await disponibilidad({ origin: 'UIO', destination: 'GYE', outbound: date, adt: 1 }).expect(200);
+      const res = await disponibilidad({ origin: 'GYE', destination: 'SCY', outbound: date, adt: 1 }).expect(200);
       expect(res.body.sinDisponibilidad).toBe(true);
       expect(res.body.trayectos[0].itinerarios).toEqual([]);
       const alternatives: { fecha: string }[] = res.body.trayectos[0].fechasAlternativas;

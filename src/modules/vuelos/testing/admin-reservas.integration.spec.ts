@@ -95,7 +95,7 @@ describeIntegration('Admin counter: reservations of every channel against a real
     expect(item.pasajeros[0]).toMatchObject({ documento: '*******065', tipoDocumento: 'NATIONAL_ID' });
     expect(item.pasajeros[0].travellerId).toBeDefined();
     expect(JSON.stringify(item)).not.toContain(CEDULA);
-    expect(item.vuelos[0]).toMatchObject({ codigoVuelo: 'LA2402', origen: 'UIO', destino: 'GYE' });
+    expect(item.vuelos[0]).toMatchObject({ codigoVuelo: expect.stringMatching(/^(LA|AV)\d+$/), origen: 'UIO', destino: 'GYE' }); // several carriers fly UIO-GYE
 
     for (const query of [{ pnr: booking.pnr }, { paymentReference: item.paymentReference }, { documento: CEDULA }, { documento: CEDULA, canal: 'SOCIO' }]) {
       const found = await api().get('/api/v1/admin/reservas').query(query).set(bearer(adminToken)).expect(200);

@@ -90,7 +90,7 @@ export const SCHEDULE: ScheduleEntry[] = [
 // Departure hours are LOCAL times converted to UTC with a fixed offset per airport (approximate:
 // no daylight-saving changes). A deliberate, documented simplification, not a real timetable.
 const UTC_OFFSET: Record<string, number> = {
-  BOG: -5, MDE: -5, CLO: -5, CTG: -5, UIO: -5, GYE: -5, CUE: -5, LOH: -5, GPS: -6, LIM: -5, CUZ: -5,
+  BOG: -5, MDE: -5, CLO: -5, CTG: -5, UIO: -5, GYE: -5, CUE: -5, LOH: -5, MEC: -5, ESM: -5, LGQ: -5, OCC: -5, GPS: -6, SCY: -6, LIM: -5, CUZ: -5,
   PTY: -5, SCL: -3, EZE: -3, GRU: -3, MIA: -4, MAD: 1,
 };
 
@@ -124,6 +124,18 @@ const ROUTES: RoutePair[] = [
   { a: 'BOG', b: 'CTG', carrier: 'AV', number: 150, durationMinutes: 75, priceUsd: 96, capacity: 180, hoursA: [7, 15], hoursB: [9, 17] },
   { a: 'UIO', b: 'CUE', carrier: 'LA', number: 2420, durationMinutes: 45, priceUsd: 62, capacity: 96, hoursA: [7, 16], hoursB: [9, 18] },
   { a: 'UIO', b: 'LOH', carrier: 'LA', number: 2470, durationMinutes: 60, priceUsd: 75, capacity: 96, hoursA: [7, 17], hoursB: [9, 19] },
+  // --- Ecuador, domestic: more frequencies and more cities (their own flight-number series, so the original UIO<->GYE flights stay as they are). ---
+  { a: 'UIO', b: 'GYE', carrier: 'LA', number: 2500, durationMinutes: 50, priceUsd: 74, capacity: 144, hoursA: [6, 9, 13, 16, 19], hoursB: [7, 10, 14, 17, 20] },
+  { a: 'UIO', b: 'GYE', carrier: 'AV', number: 400, durationMinutes: 50, priceUsd: 78, capacity: 144, hoursA: [8, 15], hoursB: [9, 16] },
+  { a: 'GYE', b: 'CUE', carrier: 'LA', number: 2510, durationMinutes: 45, priceUsd: 58, capacity: 96, hoursA: [7, 14, 18], hoursB: [9, 16, 20] },
+  { a: 'UIO', b: 'CUE', carrier: 'AV', number: 410, durationMinutes: 45, priceUsd: 64, capacity: 96, hoursA: [10, 19], hoursB: [12, 21] },
+  { a: 'UIO', b: 'MEC', carrier: 'LA', number: 2520, durationMinutes: 40, priceUsd: 66, capacity: 96, hoursA: [7, 15], hoursB: [9, 17] },
+  { a: 'UIO', b: 'ESM', carrier: 'LA', number: 2530, durationMinutes: 40, priceUsd: 64, capacity: 96, hoursA: [8, 16], hoursB: [10, 18] },
+  { a: 'UIO', b: 'LGQ', carrier: 'LA', number: 2540, durationMinutes: 40, priceUsd: 62, capacity: 96, hoursA: [7, 14], hoursB: [9, 16] },
+  { a: 'UIO', b: 'OCC', carrier: 'AV', number: 420, durationMinutes: 35, priceUsd: 58, capacity: 96, hoursA: [8, 15], hoursB: [10, 17] },
+  { a: 'GYE', b: 'SCY', carrier: 'LA', number: 2550, durationMinutes: 120, priceUsd: 196, capacity: 150, hoursA: [8], hoursB: [13] },
+  { a: 'UIO', b: 'SCY', carrier: 'AV', number: 430, durationMinutes: 200, priceUsd: 238, capacity: 150, hoursA: [7], hoursB: [13] },
+  { a: 'GPS', b: 'SCY', carrier: 'LA', number: 2560, durationMinutes: 40, priceUsd: 90, capacity: 96, hoursA: [9, 14], hoursB: [10, 15] },
   { a: 'GYE', b: 'LOH', carrier: 'LA', number: 2480, durationMinutes: 50, priceUsd: 68, capacity: 96, hoursA: [8, 16], hoursB: [10, 18] },
   { a: 'GYE', b: 'GPS', carrier: 'LA', number: 2430, durationMinutes: 105, priceUsd: 190, capacity: 150, hoursA: [8], hoursB: [13] },
   { a: 'UIO', b: 'GPS', carrier: 'LA', number: 2440, durationMinutes: 195, priceUsd: 235, capacity: 150, hoursA: [7], hoursB: [13] },
@@ -183,6 +195,11 @@ function expandRoutes(routes: RoutePair[]): ScheduleEntry[] {
 
 export const NETWORK: ScheduleEntry[] = [...SCHEDULE, ...expandRoutes(ROUTES)];
 
+/** Airports of Ecuador: a flight between two of them is domestic. */
+export const ECUADOR = new Set(['UIO', 'GYE', 'CUE', 'LOH', 'MEC', 'ESM', 'LGQ', 'OCC', 'GPS', 'SCY']);
+
+export const isDomestic = (entry: Pick<ScheduleEntry, 'origenIATA' | 'destinoIATA'>): boolean => ECUADOR.has(entry.origenIATA) && ECUADOR.has(entry.destinoIATA);
+
 /** Fare multiplier by weekday (UTC), Sunday first: dearer Friday-Sunday, cheaper Tuesday-Wednesday. */
 const WEEKDAY_FACTOR = [1.1, 1.0, 0.92, 0.92, 1.0, 1.12, 1.05];
 
@@ -194,6 +211,8 @@ function hash01(text: string): number {
 }
 
 export const HORIZON_DAYS = 45;
+/** How far ahead the domestic (Ecuador) flights are created when the seed runs for real (SEED_DOMESTIC_HORIZON_DAYS). */
+export const DOMESTIC_HORIZON_DAYS = 180;
 const CAPACITY = 180;
 const INSERT_BATCH = 500;
 
@@ -205,9 +224,12 @@ function utcDateAtHour(daysAhead: number, hour: number, now: Date): Date {
 /**
  * Idempotent: fare families are upserted by code; flights are keyed by (codigoVuelo, fechaSalida)
  * and inserted only when missing, so re-running never duplicates a flight and never resets the
- * inventory of one that already has bookings. Each run extends the schedule HORIZON_DAYS ahead.
+ * inventory of one that already has bookings. Each run extends the schedule HORIZON_DAYS ahead (the domestic flights as far as
+ * `domesticHorizonDays`), creating only what lies after the last flight of each code.
  */
-export async function seedFlights(dataSource: DataSource, now: Date = new Date()): Promise<{ families: number; flights: number }> {
+export async function seedFlights(dataSource: DataSource, now: Date = new Date(), options: { domesticHorizonDays?: number } = {}): Promise<{ families: number; flights: number }> {
+  // Domestic flights may reach further than the rest of the network; the integration suites keep the default (45) so they seed fast.
+  const domesticHorizon = Math.max(HORIZON_DAYS, options.domesticHorizonDays ?? HORIZON_DAYS);
   await dataSource.getRepository(FareFamily).upsert(FARE_FAMILIES, ['code']);
 
   // The airports and airlines the flights point at. Inserted only when missing: an airline an admin renamed keeps its name.
@@ -222,10 +244,18 @@ export async function seedFlights(dataSource: DataSource, now: Date = new Date()
     .orIgnore()
     .execute();
 
+  // Incremental: only the days after the last flight each code already has are generated, so a start-up of a seeded database
+  // (every Azure start runs the seed, against a distant database) sends about one day of rows instead of the whole horizon.
+  // A new code or a longer horizon fills itself in, and a flight an admin deleted is not brought back.
+  const lastRows = await dataSource.getRepository(Vuelo).createQueryBuilder('v').select('v.codigoVuelo', 'codigo').addSelect('MAX(v.fechaSalida)', 'ultima').groupBy('v.codigoVuelo').getRawMany<{ codigo: string; ultima: Date | string }>();
+  const lastByCode = new Map(lastRows.map((r) => [r.codigo, new Date(r.ultima).getTime()]));
+
   const rows: Partial<Vuelo>[] = [];
-  for (let day = 1; day <= HORIZON_DAYS; day++) {
+  for (let day = 1; day <= domesticHorizon; day++) {
     for (const entry of NETWORK) {
+      if (day > HORIZON_DAYS && !isDomestic(entry)) continue;
       const departure = utcDateAtHour(day, entry.hour, now);
+      if (departure.getTime() <= (lastByCode.get(entry.codigoVuelo) ?? Number.NEGATIVE_INFINITY)) continue;
       const capacity = entry.capacity ?? CAPACITY;
       let price = entry.precioBase;
       let open = entry.initialAvailable;

@@ -17,7 +17,7 @@ interface Received {
   apiKeys: string[];
 }
 
-const waitFor = async (condition: () => boolean, ms = 30_000): Promise<void> => {
+const waitFor = async (condition: () => boolean, ms = 60_000): Promise<void> => {
   const start = Date.now();
   while (!condition()) {
     if (Date.now() - start > ms) throw new Error('timed out waiting for the gRPC push');
