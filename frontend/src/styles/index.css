@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-airline-sand text-slate-800 font-sans;
+  }
+
+  /* Accessible visible focus ring */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand-gold ring-offset-2;
+  }
+}
+
+@layer components {
+  .brand-header-bg {
+    @apply bg-brand-black;
+  }
+
+  .brand-hero-bg {
+    background: linear-gradient(135deg, #05070a 0%, #0b0e14 55%, #0f172a 100%);
+  }
+
+  /* Prose for the legal and help pages */
+  .legal-prose h2 {
+    @apply mt-8 mb-3 text-lg font-bold text-brand-black;
+  }
+  .legal-prose h3 {
+    @apply mt-5 mb-2 text-sm font-bold uppercase tracking-wide text-slate-700;
+  }
+  .legal-prose p {
+    @apply mb-3 text-sm leading-relaxed text-slate-700;
+  }
+  .legal-prose ul {
+    @apply mb-4 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-slate-700;
+  }
+  .legal-prose a {
+    @apply font-semibold text-brand-gold-dark underline underline-offset-2 hover:text-brand-black;
+  }
+  .legal-prose table {
+    @apply mb-4 w-full border-collapse text-sm;
+  }
+  .legal-prose th {
+    @apply border-b border-slate-300 bg-slate-100 px-3 py-2 text-left text-xs font-bold uppercase tracking-wide text-slate-600;
+  }
+  .legal-prose td {
+    @apply border-b border-slate-200 px-3 py-2 align-top text-slate-700;
+  }
+}
+
+/* Print styles for the order receipt and the legal pages */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  header,
+  footer,
+  .no-print,
+  button:not(.print-include) {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-card {
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+}

@@ -1,0 +1,37 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { RolesGuard } from '../../auth/roles.guard';
+import { Booking } from '../../entities/booking.entity';
+import { SeatAssignment } from '../../entities/seat-assignment.entity';
+import { Vuelo } from '../../entities/vuelo.entity';
+import { VuelosCoreModule } from '../../vuelos-core.module';
+import { OrdenesModule } from '../ordenes/ordenes.module';
+import { IdentidadModule } from '../identidad/identidad.module';
+import { AuditoriaCambio } from '../mercados/entities/auditoria-cambio.entity';
+import { AdminController } from './admin.controller';
+import { AdminService } from './admin.service';
+import { AeropuertosAdminController } from './aeropuertos-admin.controller';
+import { BookingConciliacionController } from './booking-conciliacion.controller';
+import { BookingConciliacionService } from './booking-conciliacion.service';
+import { AeropuertosAdminService } from './aeropuertos-admin.service';
+import { ReservasAdminController } from './reservas-admin.controller';
+import { ReservasAdminService } from './reservas-admin.service';
+import { DashboardController } from './dashboard.controller';
+import { UsuariosController } from './usuarios.controller';
+import { UsuariosService } from './usuarios.service';
+import { VuelosAdminService } from './vuelos-admin.service';
+import { DashboardService } from './dashboard.service';
+import { HealthController, ObservabilidadController } from './observabilidad.controller';
+import { ObservabilidadService } from './observabilidad.service';
+import { TrazabilidadController } from './trazabilidad.controller';
+import { TrazabilidadService } from './trazabilidad.service';
+import { WebhooksAdminController } from './webhooks-admin.controller';
+import { WebhooksAdminService } from './webhooks-admin.service';
+
+@Module({
+  imports: [VuelosCoreModule, OrdenesModule, IdentidadModule, TypeOrmModule.forFeature([Vuelo, SeatAssignment, Booking, AuditoriaCambio])],
+  controllers: [AdminController, TrazabilidadController, AeropuertosAdminController, BookingConciliacionController, ReservasAdminController, WebhooksAdminController, ObservabilidadController, DashboardController, UsuariosController, HealthController],
+  providers: [AdminService, TrazabilidadService, AeropuertosAdminService, BookingConciliacionService, ReservasAdminService, WebhooksAdminService, VuelosAdminService, UsuariosService, ObservabilidadService, DashboardService, RolesGuard],
+  exports: [AdminService],
+})
+export class AdminModule {}

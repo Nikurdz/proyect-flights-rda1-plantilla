@@ -1,0 +1,555 @@
+import { randomInt } from 'node:crypto';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
+import type { AuthClaims } from '../auth/token.service';
+import { documentHashOf, ensureTravellers } from '../common/travellers';
+import { assertInfantAssociations, assertNoDuplicatePassengers, assertPassengerTypeMatchesAge, assertValidNationalIds } from '../common/business-rules';
+import { decodeCursor, encodeCursor } from '../common/cursor.util';
+import { toIso, utcDayRange } from '../common/date.util';
+import { mapBookingUniqueViolation, seatTakenProblem } from '../common/db-errors';
+import { DomainEventBus } from '../common/domain-event-bus';
+import { assertNotHeldByAnotherHold, lockSeats, releaseHoldSeats } from '../common/held-seats';
+import { findHold } from '../common/hold-loader';
+import { formatMinorUnits, toMinorUnits } from '../common/money.util';
+import { PassengerBreakdown, PassengerType, countFor, PASSENGER_TYPES } from '../common/pricing.util';
+import type { ProblemDetailsBody, ProblemDetailsCode } from '../common/problem-details.exception';
+import { ProblemDetailsException } from '../common/problem-details.exception';
+import { assertSeatPick } from '../common/seat-rules';
+import { buildTicketCode } from '../common/ticket-qr';
+import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
+import { BaggagePurchase } from '../entities/baggage-purchase.entity';
+import { Booking } from '../entities/booking.entity';
+import { BookingCambio } from '../entities/booking-cambio.entity';
+import { FlightHold } from '../entities/flight-hold.entity';
+import { FlightHoldItem } from '../entities/flight-hold-item.entity';
+import { Passenger } from '../entities/passenger.entity';
+import { SeatAssignment } from '../entities/seat-assignment.entity';
+import { Ticket } from '../entities/ticket.entity';
+import { Localidad } from '../ecommerce/catalogo/entities/localidad.entity';
+import { Vuelo } from '../entities/vuelo.entity';
+import type {
+  BookingDetailResponseDto,
+  BookingListResponseDto,
+  BookingRequestDto,
+  ListBookingsQueryDto,
+  TicketResponseDto,
+} from '../dto/booking.dto';
+import { IdempotencyService } from './idempotency.service';
+import { OffersService } from './offers.service';
+
+const PNR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid confusion
+const BOOKING_ROUTE = 'POST /bookings';
+
+/** Rules that differ between contract versions; v1 callers pass none. */
+export interface BookingOptions {
+  /** Contract v2: international trips need a passport for every passenger. */
+  passportForInternational?: boolean;
+}
+
+export interface BookingOutcome {
+  response: BookingDetailResponseDto;
+  holdId: string;
+  /** The partner's own order id (`salesChannel.partnerOrderId`), carried by the booking's events. */
+  partnerOrderId?: string | null;
+}
+
+@Injectable()
+export class BookingsService {
+  constructor(
+    @InjectRepository(Booking) private readonly bookings: Repository<Booking>,
+    @InjectRepository(Ticket) private readonly tickets: Repository<Ticket>,
+    private readonly offersService: OffersService,
+    private readonly idempotency: IdempotencyService,
+    private readonly events: DomainEventBus,
+    @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
+  ) {}
+
+  /**
+   * Creates the booking and issues one e-ticket per passenger as a single unit: the hold is
+   * locked, validated, consumed and the booking/passengers/tickets/seats written in ONE
+   * transaction (and the idempotency record completed in that same transaction). Nothing is
+   * visible unless everything succeeded, and two concurrent requests for one hold serialise
+   * on the row lock, so exactly one wins.
+   */
+  async createBooking(auth: AuthClaims, idempotencyKey: string, request: BookingRequestDto, options: BookingOptions = {}): Promise<BookingDetailResponseDto> {
+    let outcome;
+    try {
+      outcome = await this.idempotency.execute<BookingOutcome>(
+        { key: idempotencyKey, route: BOOKING_ROUTE, ownerId: auth.ownerId, body: request },
+        HttpStatus.CREATED,
+        async (manager) => {
+          try {
+            return await this.createBookingWithin(manager, auth.ownerId, request, options);
+          } catch (error) {
+            throw mapBookingUniqueViolation(error);
+          }
+        },
+      );
+    } catch (error) {
+      // The failed transaction rolled back, so an overdue hold is still marked HELD: expire
+      // it now (releasing its seats) rather than leaving that to the next sweep.
+      if (error instanceof ProblemDetailsException && (error.getResponse() as { code?: string }).code === 'QUOTE_EXPIRED') {
+        await this.offersService.expireIfDue(request.holdId);
+      }
+      if (error instanceof ProblemDetailsException) {
+        await this.announceFailed(auth.ownerId, request.holdId, (error.getResponse() as ProblemDetailsBody).code);
+      }
+      throw error;
+    }
+
+    if (!outcome.replayed) {
+      await this.announceConfirmed(auth.ownerId, outcome.result);
+    }
+    return outcome.result.response;
+  }
+
+  /**
+   * Publishes booking.confirmed, then the ticket events; call it only after the transaction that created the
+   * booking committed. Tickets are issued synchronously inside that transaction, so `ticket_issuing` and
+   * `ticket_issued` are announced together, once the issuance is a fact.
+   */
+  async announceConfirmed(ownerId: string, outcome: BookingOutcome): Promise<void> {
+    const base = {
+      bookingId: outcome.response.bookingId,
+      pnr: outcome.response.pnr,
+      holdId: outcome.holdId,
+      ownerId,
+      partnerOrderId: outcome.partnerOrderId,
+      grandTotal: outcome.response.grandTotal,
+      ticketNumbers: (outcome.response.tickets ?? []).map((t) => t.eTicketNumber),
+      tickets: (outcome.response.tickets ?? []).map((t) => ({ ticketId: t.ticketId, eTicketNumber: t.eTicketNumber, passengerId: t.passengerId })),
+    };
+    await this.events.publish('booking.confirmed', outcome.response.bookingId, { ...base, status: 'CONFIRMED' });
+    await this.events.publish('booking.ticket_issuing', outcome.response.bookingId, { ...base, status: 'TICKET_ISSUING' });
+    await this.events.publish('booking.ticket_issued', outcome.response.bookingId, { ...base, status: 'CONFIRMED' });
+  }
+
+  /**
+   * Publishes booking.failed (and booking.ticket_failed when the failure is in the ticketing step) for a booking
+   * that could not be created although its hold was valid. There is no booking yet, so the event names the hold.
+   */
+  async announceFailed(ownerId: string, holdId: string, failureCode: string): Promise<void> {
+    const ISSUANCE_FAILURES = ['SEAT_TAKEN', 'PNR_CREATION_FAILED', 'TICKET_ISSUANCE_FAILED', 'PAYMENT_REFERENCE_INVALID'];
+    if (!ISSUANCE_FAILURES.includes(failureCode)) return;
+    const payload = { holdId, ownerId, status: 'FAILED', failureCode };
+    await this.events.publish('booking.failed', holdId, payload);
+    if (failureCode === 'PNR_CREATION_FAILED' || failureCode === 'TICKET_ISSUANCE_FAILED') {
+      await this.events.publish('booking.ticket_failed', holdId, payload);
+    }
+  }
+
+  /**
+   * The booking itself, run inside the caller's transaction (see createBooking for the guarantees).
+   * Public so the e-commerce order saga can issue the booking and update its own order atomically.
+   * The caller publishes the domain event with announceConfirmed() once its transaction commits.
+   */
+  async createBookingWithin(manager: EntityManager, ownerId: string, request: BookingRequestDto, options: BookingOptions = {}): Promise<BookingOutcome> {
+    const hold = await findHold(manager, request.holdId, { lock: true });
+    if (!hold) {
+      throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'OFFER_NO_LONGER_AVAILABLE', 'Hold not found', `Hold ${request.holdId} was not found.`);
+    }
+    if (hold.ownerId !== ownerId) {
+      throw new ProblemDetailsException(HttpStatus.FORBIDDEN, 'FORBIDDEN', 'Hold belongs to another user', 'You do not have access to this hold.');
+    }
+    this.assertHoldUsable(hold);
+
+    const vuelos = await manager.find(Vuelo, { where: { id: In(hold.inventory.map((i) => i.vueloId)) } });
+    if (vuelos.length !== hold.inventory.length) {
+      throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight no longer available', 'A flight of this hold no longer exists.');
+    }
+    const ordered = [...vuelos].sort((a, b) => new Date(a.fechaSalida).getTime() - new Date(b.fechaSalida).getTime());
+    const firstFlight = ordered[0];
+    const lastFlight = ordered[ordered.length - 1];
+
+    if (vuelos.some((v) => v.estado === 'CANCELLED')) {
+      throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight cancelled', 'A flight of this hold was cancelled.').forV2('FLIGHT_CANCELLED', HttpStatus.CONFLICT);
+    }
+    // A hold taken before departure must not turn into a booking once the flight has left.
+    if (new Date(firstFlight.fechaSalida).getTime() <= Date.now()) {
+      throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight already departed', `Flight ${firstFlight.codigoVuelo} has already departed.`);
+    }
+
+    this.validatePassengers(request, hold.passengersBreakdown, firstFlight, lastFlight, vuelos, hold.itinerarySelections.map((s) => s.itineraryId));
+    if (options.passportForInternational) await this.assertPassportForInternational(manager, request, vuelos);
+    // After the passport rule (an international trip asks for a passport first): an Ecuadorian national ID must be a real cédula.
+    assertValidNationalIds(request.passengers);
+
+    // Booking charged the customer: when it says how much, it must be what the hold priced.
+    const paid = request.payment.amount;
+    if (paid && (paid.currency !== hold.currency || toMinorUnits(paid.total) !== hold.lockedPriceMinor)) {
+      throw new ProblemDetailsException(
+        HttpStatus.CONFLICT,
+        'AMOUNT_MISMATCH',
+        'Amount does not match the held price',
+        `The payment reports ${paid.total} ${paid.currency} but the hold was priced at ${formatMinorUnits(hold.lockedPriceMinor)} ${hold.currency}.`,
+      ).forV2('AMOUNT_MISMATCH', HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    if (await manager.exists(Booking, { where: { paymentReference: request.payment.paymentReference } })) {
+      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PAYMENT_REFERENCE_INVALID', 'Payment already used', 'This paymentReference is already attached to another booking.').forV2('PAYMENT_REFERENCE_INVALID', HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    // A seat sold to another booking, or set aside by ANOTHER active hold, answers 409 SEAT_TAKEN naming it, before
+    // the hold is consumed or anything is written: this hold stays HELD (the unique index stays the last guarantee
+    // against a race). The seats are locked first so a hold cannot set one aside while this booking sells it.
+    const requestedSeats = request.passengers.flatMap((p) => p.assignedSeats ?? []);
+    await lockSeats(manager, requestedSeats);
+    for (const seat of requestedSeats) {
+      if (await manager.exists(SeatAssignment, { where: { vueloId: seat.segmentId, seatNumber: seat.seatNumber } })) {
+        throw seatTakenProblem(seat.seatNumber, seat.segmentId);
+      }
+    }
+    await assertNotHeldByAnotherHold(manager, requestedSeats, hold.holdId);
+
+    const consumed = await manager.update(FlightHold, { holdId: hold.holdId, status: 'HELD' }, { status: 'CONSUMED' });
+    if (consumed.affected !== 1) {
+      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BOOKING_NOT_CONFIRMED', 'Hold already consumed', `Hold ${hold.holdId} was already used to create a booking.`).forV2('HOLD_ALREADY_CONSUMED');
+    }
+    // A consumed hold sets nothing aside: its seats are given back here, before the sold seats are written, so the ones
+    // the booking keeps go from HELD to BOOKED/TICKETED. The booking decides the seats: one the hold had set aside
+    // but no passenger of the request was assigned (or a request with no `assignedSeats` at all) is simply free
+    // again, because a held seat names no passenger it could be given to.
+    await releaseHoldSeats(manager, hold.holdId);
+
+    const booking = await manager.save(
+      manager.create(Booking, {
+        pnr: await this.generateUniquePnr(manager),
+        holdId: hold.holdId,
+        status: 'CONFIRMED',
+        ownerId,
+        totalMinor: hold.lockedPriceMinor,
+        currency: hold.currency,
+        paymentReference: request.payment.paymentReference,
+        paymentProvider: request.payment.provider ?? null,
+        channelPartnerId: request.salesChannel?.partnerId ?? null,
+        channelPartnerOrderId: request.salesChannel?.partnerOrderId ?? null,
+        channelPackageId: request.salesChannel?.packageId ?? null,
+        channelPromotionApplied: request.salesChannel?.promotionApplied ?? false,
+        channelDiscountPercentage: request.salesChannel?.discountPercentage ?? null,
+      }),
+    );
+
+    // One traveller per travel document, however many bookings the person has.
+    const travellers = await ensureTravellers(manager, request.passengers);
+    const savedPassengers = await manager.save(
+      request.passengers.map((p) =>
+        manager.create(Passenger, {
+          bookingId: booking.bookingId,
+          travellerId: travellers.get(documentHashOf(p))!,
+          clientPassengerId: p.passengerId,
+          associatedAdultClientId: p.associatedAdultId ?? null,
+          passengerType: p.passengerType as PassengerType,
+          firstName: p.firstName,
+          lastName: p.lastName,
+          documentType: p.documentType,
+          documentNumber: p.documentNumber,
+          nationality: p.nationality,
+          birthDate: p.birthDate,
+          gender: p.gender,
+          contactEmail: p.contact.email,
+          contactPhone: p.contact.phone,
+        }),
+      ),
+    );
+
+    const seatRows = request.passengers.flatMap((p, index) =>
+      (p.assignedSeats ?? []).map((seat) =>
+        manager.create(SeatAssignment, {
+          vueloId: seat.segmentId,
+          seatNumber: seat.seatNumber,
+          bookingId: booking.bookingId,
+          passengerId: savedPassengers[index].passengerId,
+        }),
+      ),
+    );
+    if (seatRows.length > 0) {
+      await manager.save(seatRows);
+    }
+
+    // Extra bags bought with the booking are covered by the booking's own payment.
+    const baggageRows = request.passengers.flatMap((p, index) =>
+      (p.extraBaggage ?? []).map((bag) => {
+        const leg = hold.itinerarySelections.findIndex((s) => s.itineraryId === bag.itineraryId);
+        return manager.create(BaggagePurchase, {
+          bookingId: booking.bookingId,
+          passengerId: savedPassengers[index].passengerId,
+          itineraryId: bag.itineraryId,
+          vueloId: hold.inventory[leg].vueloId,
+          quantity: bag.quantity,
+          unitPriceMinor: this.config.postSale.baggagePriceMinor,
+          totalMinor: this.config.postSale.baggagePriceMinor * bag.quantity,
+          currency: hold.currency,
+          paymentReference: request.payment.paymentReference,
+        });
+      }),
+    );
+    if (baggageRows.length > 0) {
+      await manager.save(baggageRows);
+    }
+
+    const issuedAt = new Date();
+    const issuedTickets: Ticket[] = [];
+    for (const passenger of savedPassengers) {
+      issuedTickets.push(
+        await manager.save(
+          manager.create(Ticket, {
+            bookingId: booking.bookingId,
+            passengerId: passenger.passengerId,
+            eTicketNumber: await this.generateUniqueETicketNumber(manager),
+            status: 'ISSUED',
+            issuedAt,
+          }),
+        ),
+      );
+    }
+
+    return { response: this.toBookingDetail(booking, issuedTickets, []), holdId: hold.holdId, partnerOrderId: booking.channelPartnerOrderId };
+  }
+
+  private assertHoldUsable(hold: FlightHold): void {
+    if (hold.status === 'CONSUMED') {
+      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BOOKING_NOT_CONFIRMED', 'Hold already consumed', `Hold ${hold.holdId} was already used to create a booking.`);
+    }
+    if (hold.status !== 'HELD') {
+      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold is no longer active', `Hold ${hold.holdId} has status ${hold.status}.`).forV2('HOLD_EXPIRED');
+    }
+    if (hold.expiresAt.getTime() <= Date.now()) {
+      throw new ProblemDetailsException(HttpStatus.GONE, 'QUOTE_EXPIRED', 'Hold expired', `Hold ${hold.holdId} expired at ${toIso(hold.expiresAt)}.`).forV2('HOLD_EXPIRED');
+    }
+  }
+
+  /** Contract v2: a trip that crosses a border needs a passport for every traveller (a national id is not enough). */
+  private async assertPassportForInternational(manager: EntityManager, request: BookingRequestDto, vuelos: Vuelo[]): Promise<void> {
+    const iatas = [...new Set(vuelos.flatMap((v) => [v.origenIATA, v.destinoIATA]))];
+    const countries = new Map((await manager.find(Localidad, { where: { iata: In(iatas) } })).map((l) => [l.iata, l.pais]));
+    const international = vuelos.some((v) => countries.has(v.origenIATA) && countries.has(v.destinoIATA) && countries.get(v.origenIATA) !== countries.get(v.destinoIATA));
+    if (!international) return;
+    const without = request.passengers.find((p) => p.documentType !== 'PASSPORT');
+    if (without) {
+      throw new ProblemDetailsException(
+        HttpStatus.UNPROCESSABLE_ENTITY,
+        'VALIDATION_FAILED',
+        'Passport required',
+        `Passenger ${without.passengerId} needs a passport: the trip crosses a border.`,
+        [{ name: 'passengers.documentType', reason: 'a passport is required on international trips' }],
+      ).forV2('PASSPORT_REQUIRED_INTERNATIONAL');
+    }
+  }
+
+  private validatePassengers(
+    request: BookingRequestDto,
+    breakdown: PassengerBreakdown,
+    firstFlight: Vuelo,
+    lastFlight: Vuelo,
+    vuelos: Vuelo[],
+    itineraryIds: string[],
+  ): void {
+    const fail = (title: string, detail: string, invalid?: { name: string; reason: string }, v2Code?: ProblemDetailsCode) => {
+      const problem = new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'VALIDATION_FAILED', title, detail, invalid ? [invalid] : undefined);
+      throw v2Code ? problem.forV2(v2Code) : problem;
+    };
+
+    // The party must be exactly the one that was priced and held.
+    for (const type of PASSENGER_TYPES) {
+      const provided = request.passengers.filter((p) => p.passengerType === type).length;
+      if (provided !== countFor(breakdown, type)) {
+        fail(
+          'Passengers do not match the hold',
+          `The hold was priced for ${countFor(breakdown, type)} ${type} passenger(s) but ${provided} were provided.`,
+          { name: 'passengers', reason: `expected ${countFor(breakdown, type)} ${type}` },
+          'PASSENGER_COUNT_MISMATCH',
+        );
+      }
+    }
+
+    // Extra baggage bought with the booking: it must be for a leg of the hold, not for a lap infant, within the cap.
+    for (const passenger of request.passengers) {
+      const perLeg = new Map<string, number>();
+      for (const bag of passenger.extraBaggage ?? []) {
+        if (!itineraryIds.includes(bag.itineraryId)) {
+          fail('Baggage itinerary not part of the hold', `itineraryId ${bag.itineraryId} is not part of this booking.`, { name: 'passengers.extraBaggage.itineraryId', reason: 'does not belong to the hold' });
+        }
+        if (passenger.passengerType === 'INFANT') {
+          fail('Infants cannot carry baggage', `Passenger ${passenger.passengerId} is a lap infant.`, { name: 'passengers.extraBaggage', reason: 'a lap infant has no baggage allowance' });
+        }
+        perLeg.set(bag.itineraryId, (perLeg.get(bag.itineraryId) ?? 0) + bag.quantity);
+        if ((perLeg.get(bag.itineraryId) ?? 0) > this.config.postSale.baggageMaxPerLeg) {
+          throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BAGGAGE_LIMIT_EXCEEDED', 'Baggage limit exceeded', `A passenger can have at most ${this.config.postSale.baggageMaxPerLeg} extra bag(s) per leg.`);
+        }
+      }
+    }
+
+    assertNoDuplicatePassengers(request.passengers);
+
+    const firstDate = toIso(firstFlight.fechaSalida);
+    for (const passenger of request.passengers) {
+      assertPassengerTypeMatchesAge(passenger.passengerType as PassengerType, passenger.birthDate, firstDate, { field: 'passengers.birthDate', lastFlightDate: toIso(lastFlight.fechaSalida) });
+      if (passenger.documentExpiryDate && new Date(passenger.documentExpiryDate) < new Date(lastFlight.fechaSalida)) {
+        fail('Travel document expired', `The document of ${passenger.firstName} ${passenger.lastName} expires before the last flight.`, {
+          name: 'passengers.documentExpiryDate',
+          reason: 'expires before the trip ends',
+        }, 'DOCUMENT_EXPIRED');
+      }
+    }
+
+    assertInfantAssociations(request.passengers);
+
+    // Seats: lap infants take none, each seat belongs to a held segment, exists in the cabin, and is unique.
+    const requested = new Set<string>();
+    for (const passenger of request.passengers) {
+      const perSegment = new Set<string>();
+      for (const seat of passenger.assignedSeats ?? []) {
+        if (passenger.passengerType === 'INFANT') {
+          throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'INFANT_SEAT_NOT_ALLOWED', 'Infants cannot have a seat', `Infant ${passenger.passengerId} travels on a lap and cannot be assigned a seat.`);
+        }
+        assertSeatPick(seat, vuelos, requested, {
+          segmentStatus: HttpStatus.UNPROCESSABLE_ENTITY,
+          segmentField: 'passengers.assignedSeats.segmentId',
+          owner: 'hold',
+          duplicateDetail: (seatNumber) => `Seat ${seatNumber} is assigned to more than one passenger.`,
+        });
+        if (perSegment.has(seat.segmentId)) {
+          fail('Several seats on one segment', `Passenger ${passenger.passengerId} has more than one seat on a segment.`, { name: 'passengers.assignedSeats', reason: 'one seat per segment' });
+        }
+        perSegment.add(seat.segmentId);
+      }
+    }
+  }
+
+  async getBookingDetail(ownerId: string, bookingId: string): Promise<BookingDetailResponseDto> {
+    const booking = await this.findOwnedBookingOrThrow(ownerId, bookingId);
+    const tickets = await this.tickets.find({ where: { bookingId } });
+    const cambios = await this.bookings.manager.find(BookingCambio, { where: { bookingId }, order: { cambiadoEn: 'ASC' } });
+    return this.toBookingDetail(booking, tickets, cambios);
+  }
+
+  async getBookingTickets(ownerId: string, bookingId: string): Promise<TicketResponseDto[]> {
+    const booking = await this.findOwnedBookingOrThrow(ownerId, bookingId);
+    const tickets = await this.tickets.find({ where: { bookingId } });
+    return tickets.map((t) => this.toTicketDto(t, booking.pnr));
+  }
+
+  async getTicketDetail(ownerId: string, bookingId: string, ticketId: string): Promise<TicketResponseDto> {
+    const booking = await this.findOwnedBookingOrThrow(ownerId, bookingId);
+    const ticket = await this.tickets.findOne({ where: { bookingId, ticketId } });
+    if (!ticket) {
+      throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'BOOKING_NOT_CONFIRMED', 'Ticket not found', `Ticket ${ticketId} was not found for booking ${bookingId}.`);
+    }
+    return this.toTicketDto(ticket, booking.pnr);
+  }
+
+  async listBookings(ownerId: string, query: ListBookingsQueryDto): Promise<BookingListResponseDto> {
+    const limit = query.limit ?? 10;
+    const qb = this.bookings.createQueryBuilder('b').where('b.ownerId = :ownerId', { ownerId });
+
+    if (query.pnr) qb.andWhere('b.pnr = :pnr', { pnr: query.pnr });
+    if (query.status) qb.andWhere('b.status = :status', { status: query.status });
+    if (query.createdFrom) qb.andWhere('b.createdAt >= :from', { from: utcDayRange(query.createdFrom).start });
+    if (query.createdTo) qb.andWhere('b.createdAt < :to', { to: utcDayRange(query.createdTo).end });
+    if (query.cursor) {
+      const { createdAt, id: bookingId } = decodeCursor(query.cursor);
+      qb.andWhere('(b."createdAt", b."bookingId") < (:cursorCreatedAt, :cursorId)', {
+        cursorCreatedAt: createdAt,
+        cursorId: bookingId,
+      });
+    }
+
+    const rows = await qb.orderBy('b.createdAt', 'DESC').addOrderBy('b.bookingId', 'DESC').take(limit + 1).getMany();
+    const page = rows.slice(0, limit);
+
+    // The route comes from the first leg of each booking's hold (there is no copy of it on the booking).
+    const firstLegs = page.length
+      ? await this.bookings.manager
+          .createQueryBuilder(FlightHoldItem, 'i')
+          .innerJoin(Vuelo, 'v', 'v.id = i."vueloId"')
+          .select('i."holdId"', 'holdId')
+          .addSelect('v."origenIATA"', 'origin')
+          .addSelect('v."destinoIATA"', 'destination')
+          .addSelect('v."fechaSalida"', 'departure')
+          .where('i."holdId" IN (:...holdIds) AND i."orden" = 0', { holdIds: page.map((b) => b.holdId) })
+          .getRawMany<{ holdId: string; origin: string; destination: string; departure: Date }>()
+      : [];
+    const legOf = new Map(firstLegs.map((leg) => [leg.holdId, leg]));
+
+    return {
+      items: page.map((b) => ({
+        bookingId: b.bookingId,
+        pnr: b.pnr,
+        status: b.status,
+        origin: legOf.get(b.holdId)?.origin ?? '',
+        destination: legOf.get(b.holdId)?.destination ?? '',
+        departureDate: legOf.get(b.holdId) ? toIso(legOf.get(b.holdId)!.departure).slice(0, 10) : '',
+        grandTotal: { currency: b.currency, total: formatMinorUnits(b.totalMinor) },
+      })),
+      ...(rows.length > limit ? { nextCursor: encodeCursor(page[page.length - 1].createdAt, page[page.length - 1].bookingId) } : {}),
+    };
+  }
+
+  private async findOwnedBookingOrThrow(ownerId: string, bookingId: string): Promise<Booking> {
+    const booking = await this.bookings.findOne({ where: { bookingId } });
+    if (!booking) {
+      throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'BOOKING_NOT_CONFIRMED', 'Booking not found', `Booking ${bookingId} was not found.`);
+    }
+    if (booking.ownerId !== ownerId) {
+      throw new ProblemDetailsException(HttpStatus.FORBIDDEN, 'FORBIDDEN', 'Booking belongs to another user', 'You do not have access to this booking.');
+    }
+    return booking;
+  }
+
+  private toBookingDetail(booking: Booking, tickets: Ticket[], cambios: BookingCambio[]): BookingDetailResponseDto {
+    return {
+      bookingId: booking.bookingId,
+      pnr: booking.pnr,
+      status: booking.status,
+      grandTotal: { currency: booking.currency, total: formatMinorUnits(booking.totalMinor) },
+      createdAt: toIso(booking.createdAt),
+      updatedAt: toIso(booking.updatedAt),
+      tickets: tickets.map((t) => this.toTicketDto(t, booking.pnr)),
+      ...(cambios.length ? { changes: cambios.map((c) => ({ changedAt: c.cambiadoEn.toISOString(), description: c.descripcion })) } : {}),
+    };
+  }
+
+  /** The contract detail of a booking, for operations that return it after changing it. */
+  async detailOf(manager: EntityManager, booking: Booking): Promise<BookingDetailResponseDto> {
+    const tickets = await manager.find(Ticket, { where: { bookingId: booking.bookingId } });
+    const cambios = await manager.find(BookingCambio, { where: { bookingId: booking.bookingId }, order: { cambiadoEn: 'ASC' } });
+    return this.toBookingDetail(booking, tickets, cambios);
+  }
+
+  private toTicketDto(ticket: Ticket, pnr: string): TicketResponseDto {
+    return {
+      ticketId: ticket.ticketId,
+      bookingId: ticket.bookingId,
+      passengerId: ticket.passengerId,
+      eTicketNumber: ticket.eTicketNumber,
+      status: ticket.status,
+      issuedAt: ticket.issuedAt ? toIso(ticket.issuedAt) : null,
+      // Signed text for the passenger's QR code (no personal data); see common/ticket-qr.ts.
+      qrPayload: ticket.eTicketNumber ? buildTicketCode(this.config.jwtSecret, ticket.eTicketNumber, pnr) : null,
+    };
+  }
+
+  private async generateUniquePnr(manager: EntityManager): Promise<string> {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      let pnr = '';
+      for (let i = 0; i < 6; i++) {
+        pnr += PNR_ALPHABET[randomInt(PNR_ALPHABET.length)];
+      }
+      if (!(await manager.exists(Booking, { where: { pnr } }))) return pnr;
+    }
+    throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PNR_CREATION_FAILED', 'Could not allocate a record locator', 'Retry the request with the same Idempotency-Key.');
+  }
+
+  async generateUniqueETicketNumber(manager: EntityManager): Promise<string> {
+    // 13 digits, no airline-prefix table in this phase — a documented simplification.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      let digits = '';
+      for (let i = 0; i < 13; i++) {
+        digits += randomInt(10).toString();
+      }
+      if (!(await manager.exists(Ticket, { where: { eTicketNumber: digits } }))) return digits;
+    }
+    throw new ProblemDetailsException(HttpStatus.CONFLICT, 'TICKET_ISSUANCE_FAILED', 'Could not allocate an e-ticket number', 'Retry the request with the same Idempotency-Key.');
+  }
+}

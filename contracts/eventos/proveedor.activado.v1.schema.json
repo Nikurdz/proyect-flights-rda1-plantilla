@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/proveedor.activado/1",
+  "title": "proveedor.activado",
+  "description": "Proveedor reactivado (kill-switch apagado).",
+  "x-event-type": "proveedor.activado",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "proveedorId"
+  ],
+  "properties": {
+    "proveedorId": {
+      "type": "string"
+    }
+  }
+}

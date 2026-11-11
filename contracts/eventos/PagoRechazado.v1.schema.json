@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/PagoRechazado/1",
+  "title": "PagoRechazado",
+  "description": "Pago rechazado por la pasarela o por antifraude.",
+  "x-event-type": "PagoRechazado",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "pagoId",
+    "motivo"
+  ],
+  "properties": {
+    "pagoId": {
+      "type": "string"
+    },
+    "ofertaId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "motivo": {
+      "type": "string"
+    }
+  }
+}

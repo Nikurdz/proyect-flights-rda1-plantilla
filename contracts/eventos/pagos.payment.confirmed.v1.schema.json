@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/pagos.payment.confirmed/1",
+  "title": "pagos.payment.confirmed",
+  "description": "Booking cobró al cliente: la aerolínea emite los boletos de la reserva (evento entrante, contrato v2).",
+  "x-event-type": "pagos.payment.confirmed",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "paymentReference",
+    "bookingId"
+  ],
+  "properties": {
+    "paymentReference": {
+      "type": "string"
+    },
+    "bookingId": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "object",
+      "required": [
+        "currency",
+        "total"
+      ],
+      "properties": {
+        "currency": {
+          "type": "string"
+        },
+        "total": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

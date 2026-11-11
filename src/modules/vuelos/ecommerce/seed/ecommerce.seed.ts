@@ -1,0 +1,263 @@
+import { randomInt } from 'node:crypto';
+import { DataSource, Not } from 'typeorm';
+import { Localidad } from '../catalogo/entities/localidad.entity';
+import { ClienteRol, Rol } from '../identidad/entities/cliente-rol.entity';
+import { Cliente } from '../identidad/entities/cliente.entity';
+import { hashPassword } from '../identidad/password.util';
+import { ConfiguracionMercado, Mercado } from '../mercados/entities/mercado.entity';
+import { cargarMercado, escribirConfiguracion } from '../mercados/mercado-loader';
+import { PlantillaNotificacion } from '../notificaciones/entities/plantilla.entity';
+import { normalizarTexto } from '../common/texto.util';
+
+// Single market, USD only. All values below are EXAMPLE data for the prototype (legal entity, URLs,
+// instalment plans). Real values come from the business through the admin API (RF-ADM-001).
+type MercadoSeed = Pick<Mercado, 'codigo' | 'pais' | 'nombre' | 'idiomaPorDefecto' | 'moneda' | 'tipoCambioDesdeUsd' | 'activo'> & { configuracion: ConfiguracionMercado };
+
+const MERCADOS: MercadoSeed[] = [
+  {
+    codigo: 'ec',
+    pais: 'EC',
+    nombre: 'Ecuador',
+    idiomaPorDefecto: 'es',
+    moneda: 'USD',
+    tipoCambioDesdeUsd: 1,
+    activo: true,
+    configuracion: {
+      idiomas: ['es'],
+      productosBuscador: ['VUELOS'],
+      // RF-PAY-002: Visa, Mastercard and Amex everywhere; Diners in EC, CO, BR, CL and AR.
+      mediosPago: [{ tipo: 'TARJETA', marcas: ['VISA', 'MASTERCARD', 'AMEX', 'DINERS'], cuotasPermitidas: [1, 3, 6, 12], productos: ['PASAJE', 'ADICIONAL'] }],
+      // A-13 (arrepentimiento in Ecuador) is an open legal question: nothing configured yet.
+      reglasRegulatorias: {},
+      textosLegales: {
+        razonSocial: 'RAM Alliance (proyecto académico, sin venta real)',
+        terminos: { version: '2026-10', url: '/terminos' },
+        privacidad: { version: '2026-10', url: '/privacidad' },
+        condicionesTransporte: { version: '2026-10', url: '/condiciones-transporte' },
+      },
+      identificacionesFiscales: [
+        { tipo: 'CEDULA', etiqueta: 'Cédula (10 dígitos)', patron: '\\d{10}' },
+        { tipo: 'RUC', etiqueta: 'RUC (13 dígitos)', patron: '\\d{13}' },
+        { tipo: 'PASAPORTE', etiqueta: 'Pasaporte', patron: '[A-Za-z0-9]{5,20}' },
+      ],
+    },
+  },
+];
+
+type LocalidadSeed = [iata: string, ciudad: string, nombre: string, pais: string, paisNombre: string, zona: string];
+
+const LOCALIDADES: LocalidadSeed[] = [
+  ['BOG', 'Bogotá', 'El Dorado', 'CO', 'Colombia', 'America/Bogota'],
+  ['MDE', 'Medellín', 'José María Córdova', 'CO', 'Colombia', 'America/Bogota'],
+  ['CLO', 'Cali', 'Alfonso Bonilla Aragón', 'CO', 'Colombia', 'America/Bogota'],
+  ['CTG', 'Cartagena', 'Rafael Núñez', 'CO', 'Colombia', 'America/Bogota'],
+  ['UIO', 'Quito', 'Mariscal Sucre', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['GYE', 'Guayaquil', 'José Joaquín de Olmedo', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['CUE', 'Cuenca', 'Mariscal Lamar', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['GPS', 'Galápagos', 'Seymour (Baltra)', 'EC', 'Ecuador', 'Pacific/Galapagos'],
+  // Aeropuertos de Ecuador con código IATA (Wikipedia «List of airports in Ecuador»); Machala y Portoviejo figuran como cerrados.
+  ['LOH', 'Loja', 'Camilo Ponce Enríquez (Catamayo)', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['MEC', 'Manta', 'Eloy Alfaro', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['ESM', 'Esmeraldas', 'Carlos Concha Torres (Tachina)', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['LTX', 'Latacunga', 'Cotopaxi', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['SNC', 'Salinas', 'General Ulpiano Páez', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['ETR', 'Santa Rosa', 'Santa Rosa', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['TUA', 'Tulcán', 'Teniente Coronel Luis A. Mantilla', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['ATF', 'Ambato', 'Chachoan', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['BHA', 'Bahía de Caráquez', 'Los Perales', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['OCC', 'Coca', 'Francisco de Orellana', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['MRR', 'Macará', 'José María Velasco Ibarra', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['XMS', 'Macas', 'Edmundo Carvajal', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['MCH', 'Machala', 'General Manuel Serrano (cerrado)', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['LGQ', 'Lago Agrio', 'Lago Agrio (Nueva Loja)', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['PVO', 'Portoviejo', 'Reales Tamarindos (cerrado)', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['PYO', 'Putumayo', 'Putumayo', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['WSE', 'Santa Cecilia', 'Santa Cecilia', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['PTZ', 'Shell', 'Río Amazonas', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['SUQ', 'Sucúa', 'Sucúa', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['TSC', 'Taisha', 'Taisha', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['TPC', 'Tarapoa', 'Tarapoa', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['TNW', 'Tena', 'Jumandy', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['TPN', 'Tiputini', 'Tiputini', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['JIP', 'Jipijapa', 'Jipijapa', 'EC', 'Ecuador', 'America/Guayaquil'],
+  ['SCY', 'San Cristóbal (Galápagos)', 'San Cristóbal', 'EC', 'Ecuador', 'Pacific/Galapagos'],
+  ['LIM', 'Lima', 'Jorge Chávez', 'PE', 'Perú', 'America/Lima'],
+  ['CUZ', 'Cusco', 'Alejandro Velasco Astete', 'PE', 'Perú', 'America/Lima'],
+  ['SCL', 'Santiago', 'Arturo Merino Benítez', 'CL', 'Chile', 'America/Santiago'],
+  ['EZE', 'Buenos Aires', 'Ministro Pistarini (Ezeiza)', 'AR', 'Argentina', 'America/Argentina/Buenos_Aires'],
+  ['AEP', 'Buenos Aires', 'Jorge Newbery (Aeroparque)', 'AR', 'Argentina', 'America/Argentina/Buenos_Aires'],
+  ['GRU', 'São Paulo', 'Guarulhos', 'BR', 'Brasil', 'America/Sao_Paulo'],
+  ['GIG', 'Río de Janeiro', 'Galeão', 'BR', 'Brasil', 'America/Sao_Paulo'],
+  ['MVD', 'Montevideo', 'Carrasco', 'UY', 'Uruguay', 'America/Montevideo'],
+  ['ASU', 'Asunción', 'Silvio Pettirossi', 'PY', 'Paraguay', 'America/Asuncion'],
+  ['LPB', 'La Paz', 'El Alto', 'BO', 'Bolivia', 'America/La_Paz'],
+  ['PTY', 'Ciudad de Panamá', 'Tocumen', 'PA', 'Panamá', 'America/Panama'],
+  ['MEX', 'Ciudad de México', 'Benito Juárez', 'MX', 'México', 'America/Mexico_City'],
+  ['CUN', 'Cancún', 'Cancún', 'MX', 'México', 'America/Cancun'],
+  ['MIA', 'Miami', 'Miami International', 'US', 'Estados Unidos', 'America/New_York'],
+  ['JFK', 'Nueva York', 'John F. Kennedy', 'US', 'Estados Unidos', 'America/New_York'],
+  ['MAD', 'Madrid', 'Adolfo Suárez Madrid-Barajas', 'ES', 'España', 'Europe/Madrid'],
+];
+
+const PIE = '\n\n{{razonSocial}}\nTérminos y condiciones: {{urlTerminos}}';
+
+const PLANTILLAS: Partial<PlantillaNotificacion>[] = [
+  {
+    tipo: 'CONFIRMACION_COMPRA',
+    idioma: 'es',
+    version: 1,
+    asunto: 'Confirmación de tu compra {{numeroOrden}}',
+    cuerpo:
+      'Hola {{nombre}},\n\n¡Tu compra fue confirmada!\n\nNúmero de orden: {{numeroOrden}}\nCódigo de reserva (PNR): {{pnr}}\n\nItinerario:\n{{itinerario}}\n\nPasajeros y billetes electrónicos:\n{{pasajeros}}\n\nTotal pagado: {{total}}\n\nPuedes gestionar tu viaje con el número de orden o el código de reserva y el apellido del pasajero.' +
+      PIE,
+  },
+  {
+    tipo: 'CONFIRMACION_COMPRA',
+    idioma: 'en',
+    version: 1,
+    asunto: 'Your purchase {{numeroOrden}} is confirmed',
+    cuerpo:
+      'Hello {{nombre}},\n\nYour purchase is confirmed!\n\nOrder number: {{numeroOrden}}\nBooking reference (PNR): {{pnr}}\n\nItinerary:\n{{itinerario}}\n\nPassengers and e-tickets:\n{{pasajeros}}\n\nTotal paid: {{total}}\n\nManage your trip with the order number or booking reference and the passenger surname.' +
+      PIE,
+  },
+  {
+    tipo: 'EMISION_FALLIDA',
+    idioma: 'es',
+    version: 1,
+    asunto: 'No pudimos emitir tu orden {{numeroOrden}}',
+    cuerpo:
+      'Hola,\n\nNo pudimos emitir los billetes de tu orden {{numeroOrden}}. La autorización de tu pago fue liberada: no se te cobró.\n\nPuedes volver a intentar la compra o elegir otro vuelo.' +
+      PIE,
+  },
+  {
+    tipo: 'VERIFICACION_CORREO',
+    idioma: 'es',
+    version: 1,
+    asunto: 'Confirma tu correo',
+    cuerpo: 'Hola {{nombre}},\n\nConfirma tu correo con este enlace (vale 24 horas):\n{{enlace}}\n\nSi no creaste una cuenta, ignora este mensaje.' + PIE,
+  },
+  {
+    tipo: 'CUENTA_BLOQUEADA',
+    idioma: 'es',
+    version: 1,
+    asunto: 'Bloqueamos temporalmente tu cuenta',
+    cuerpo:
+      'Hola {{nombre}},\n\nDetectamos varios intentos fallidos de inicio de sesión y bloqueamos tu cuenta por {{minutos}} minutos. Si no fuiste tú, recupera tu acceso.' + PIE,
+  },
+];
+
+/**
+ * The airport catalogue. Flights point at it by IATA code, so the flight seed runs it too (whichever runs first
+ * creates the rows; the other finds them). Returns the insert result: `raw` holds the codes created by this run.
+ */
+export async function seedLocalidades(dataSource: DataSource) {
+  return dataSource
+    .createQueryBuilder()
+    .insert()
+    .into(Localidad)
+    .values(
+      LOCALIDADES.map(([iata, ciudad, nombre, pais, paisNombre, zonaHoraria]) => ({
+        iata,
+        ciudad,
+        nombre,
+        pais,
+        paisNombre,
+        zonaHoraria,
+        ciudadNorm: normalizarTexto(ciudad),
+        nombreNorm: normalizarTexto(nombre),
+      })),
+    )
+    .orIgnore()
+    .returning('"iata"')
+    .execute();
+}
+
+/**
+ * Idempotent and non-destructive: reference data is inserted only when missing, so a re-run (the
+ * deployment runs this on every start) never overwrites what an admin edited through the API.
+ */
+export async function seedEcommerce(dataSource: DataSource, admin?: { correo: string; contrasena: string }): Promise<Record<string, number>> {
+  // The market row, then its configuration (languages, payment methods, legal texts…) in its own tables. The
+  // configuration is written only for a market that was just created: an existing one may have been edited by an admin.
+  const mercados = await dataSource
+    .createQueryBuilder()
+    .insert()
+    .into(Mercado)
+    .values(MERCADOS.map(({ configuracion, ...mercado }) => ({ ...mercado, razonSocial: configuracion.textosLegales.razonSocial })))
+    .orIgnore()
+    .returning('"codigo"')
+    .execute();
+  for (const creado of (mercados.raw as { codigo: string }[]) ?? []) {
+    const definicion = MERCADOS.find((m) => m.codigo === creado.codigo)!;
+    await dataSource.transaction((manager) => escribirConfiguracion(manager, definicion.codigo, definicion.configuracion));
+  }
+
+  // The platform sells in USD only: a market with another currency (an earlier seed had COP) stays
+  // on record for old orders but can no longer be sold from.
+  await dataSource.getRepository(Mercado).update({ moneda: Not('USD') }, { activo: false });
+
+  // An earlier seed wrote placeholder legal data (a made-up company and example.com links). Replace it
+  // only while it is still exactly that: anything an admin edited since is left alone.
+  const ecuador = await cargarMercado(dataSource.manager, 'ec');
+  if (ecuador?.textosLegales.razonSocial.startsWith('Booking Hub') && ecuador.textosLegales.terminos.url.includes('example.com')) {
+    await dataSource.transaction((manager) => escribirConfiguracion(manager, 'ec', { textosLegales: MERCADOS[0].configuracion.textosLegales }));
+  }
+
+  // The roles an account can hold (a catalog, so the account-role rows are checked against it).
+  await dataSource
+    .createQueryBuilder()
+    .insert()
+    .into(Rol)
+    .values([
+      { codigo: 'CUSTOMER', descripcion: 'Cliente de la plataforma' },
+      { codigo: 'ADMIN', descripcion: 'Administrador del back-office' },
+    ])
+    .orIgnore()
+    .execute();
+
+  const localidades = await seedLocalidades(dataSource);
+
+  const repoPlantillas = dataSource.getRepository(PlantillaNotificacion);
+  let plantillas = 0;
+  for (const plantilla of PLANTILLAS) {
+    const existe = await repoPlantillas.exist({ where: { tipo: plantilla.tipo, idioma: plantilla.idioma, version: plantilla.version } });
+    if (!existe) {
+      await repoPlantillas.save(repoPlantillas.create({ ...plantilla, mercado: null, activa: true }));
+      plantillas++;
+    }
+  }
+
+  let administradores = 0;
+  if (admin) {
+    const repoClientes = dataSource.getRepository(Cliente);
+    if (!(await repoClientes.exist({ where: { correo: admin.correo.toLowerCase() } }))) {
+      let digits = '';
+      for (let i = 0; i < 9; i++) digits += randomInt(10).toString();
+      await repoClientes.save(
+        repoClientes.create({
+          correo: admin.correo.toLowerCase(),
+          correoVerificado: true,
+          hashContrasena: await hashPassword(admin.contrasena),
+          nombres: 'Admin',
+          apellidos: 'Sistema',
+          fechaNacimiento: '1990-01-01',
+          telefono: null,
+          numeroSocio: `LP${digits}`,
+          mercadoPreferido: 'ec',
+          idiomaPreferido: 'es',
+          terminosVersionAceptada: '2026-10',
+          terminosAceptadosEn: new Date(),
+          rolesRef: ['CUSTOMER', 'ADMIN'].map((rol) => dataSource.manager.create(ClienteRol, { rol })),
+        }),
+      );
+      administradores = 1;
+    }
+  }
+
+  return {
+    mercados: Array.isArray(mercados.raw) ? mercados.raw.length : 0,
+    localidades: Array.isArray(localidades.raw) ? localidades.raw.length : 0,
+    plantillas,
+    administradores,
+  };
+}

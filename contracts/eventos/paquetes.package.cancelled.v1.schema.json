@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/paquetes.package.cancelled/1",
+  "title": "paquetes.package.cancelled",
+  "description": "Se canceló el paquete: compensación, se cancela la parte de vuelo (evento entrante).",
+  "x-event-type": "paquetes.package.cancelled",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "packageId",
+    "bookingId"
+  ],
+  "properties": {
+    "packageId": {
+      "type": "string"
+    },
+    "bookingId": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  }
+}

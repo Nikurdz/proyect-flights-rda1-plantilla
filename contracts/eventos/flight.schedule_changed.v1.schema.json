@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/flight.schedule_changed/1",
+  "title": "flight.schedule_changed",
+  "description": "Vuelo reprogramado por la aerolínea (administración).",
+  "x-event-type": "flight.schedule_changed",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "vueloId",
+    "codigoVuelo",
+    "status",
+    "newDepartureAt"
+  ],
+  "properties": {
+    "vueloId": {
+      "type": "string"
+    },
+    "codigoVuelo": {
+      "type": "string"
+    },
+    "ownerIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "type": "string"
+    },
+    "newDepartureAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

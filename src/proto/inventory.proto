@@ -1,0 +1,40 @@
+// Stock synchronisation with Booking Prototipo (contract v2, section 9). Shared with the autos vertical.
+syntax = "proto3";
+
+package inventory;
+
+service InventoryStockService {
+  rpc PushStockUpdate (StockUpdateMessage) returns (StockUpdateAck);
+  rpc StreamInventoryChanges (stream StockChangeEvent) returns (StreamSummary);
+}
+
+message StockUpdateMessage {
+  string service_id = 1;      // "vuelos" or the node code (e.g. "NODE_VUE_ECOAIRLINES")
+  string item_id = 2;         // flight number + cabin, e.g. "AV1632-ECONOMY"
+  string date = 3;            // flight date YYYY-MM-DD
+  string time_slot = 4;       // departure time HH:mm
+  int32 available_units = 5;  // free seats (AVAILABLE) in that cabin
+  int64 timestamp = 6;        // epoch ms
+}
+
+message StockUpdateAck {
+  bool success = 1;
+  string message = 2;
+  int64 processed_at = 3;
+}
+
+message StockChangeEvent {
+  string event_id = 1;
+  string service_id = 2;
+  string item_id = 3;
+  string date = 4;
+  string time_slot = 5;
+  int32 delta = 6;            // -N when holding/selling, +N when releasing/cancelling
+  int64 timestamp = 7;
+}
+
+message StreamSummary {
+  int32 total_events_processed = 1;
+  bool is_synchronized = 2;
+  string last_sync_hash = 3;
+}

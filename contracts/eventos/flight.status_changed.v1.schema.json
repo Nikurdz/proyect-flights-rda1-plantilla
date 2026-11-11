@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ram-alliance.example/eventos/flight.status_changed/1",
+  "title": "flight.status_changed",
+  "description": "Cambio de estado operativo de un vuelo (retraso, abordaje, salida, llegada, desvío, cancelación).",
+  "x-event-type": "flight.status_changed",
+  "x-schema-version": "1.0.0",
+  "type": "object",
+  "required": [
+    "vueloId",
+    "codigoVuelo",
+    "status",
+    "previousStatus"
+  ],
+  "properties": {
+    "vueloId": {
+      "type": "string"
+    },
+    "codigoVuelo": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "previousStatus": {
+      "type": "string"
+    },
+    "delayMinutes": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "estimatedDepartureAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "departureGate": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ownerIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

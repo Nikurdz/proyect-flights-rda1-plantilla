@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [vuelos]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: booking_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/booking_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the schema compatibility check compares with the base branch
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Fail-fast order: cheapest first.
+      - run: npm run lint
+      - name: Event contracts stay backward compatible
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            npm run contract:events:check -- "$BASE_SHA"
+          else
+            echo "No base commit to compare with; skipping."
+          fi
+      - run: npm test -- --ci
+      - run: npm run build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

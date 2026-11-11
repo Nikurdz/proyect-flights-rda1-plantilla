@@ -1,0 +1,82 @@
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { toIso, todayUtc, utcDayRange } from '../common/date.util';
+import { ProblemDetailsException } from '../common/problem-details.exception';
+import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
+import { Vuelo } from '../entities/vuelo.entity';
+
+@Injectable()
+export class FlightStatusService {
+  constructor(
+    @InjectRepository(Vuelo) private readonly vuelos: Repository<Vuelo>,
+    @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
+  ) {}
+
+  /** Status of the flight that departs on `date` (a UTC calendar day), derived from its schedule. */
+  async getStatus(flightNumber: string, requestedDate?: string) {
+    const qb = this.vuelos.createQueryBuilder('v').where('v."codigoVuelo" = :flightNumber', { flightNumber });
+    if (requestedDate) {
+      const { start, end } = utcDayRange(requestedDate);
+      qb.andWhere('v."fechaSalida" >= :start AND v."fechaSalida" < :end', { start, end });
+    } else {
+      // No date given: today's flight, or else the next one that operates.
+      qb.andWhere('v."fechaSalida" >= :today', { today: utcDayRange(todayUtc()).start }).orderBy('v."fechaSalida"', 'ASC');
+    }
+    const vuelo = await qb.getOne();
+    const date = requestedDate ?? (vuelo ? toIso(vuelo.fechaSalida).slice(0, 10) : todayUtc());
+
+    if (!vuelo) {
+      throw new ProblemDetailsException(
+        HttpStatus.NOT_FOUND,
+        'FLIGHT_STATUS_NOT_AVAILABLE',
+        'Flight not found',
+        `No flight ${flightNumber} operates on ${date}.`,
+      );
+    }
+
+    const departure = new Date(vuelo.fechaSalida);
+    const arrival = new Date(vuelo.fechaLlegada);
+    const now = Date.now();
+
+    let status: string;
+    if (vuelo.estado !== 'SCHEDULED') {
+      // Set by operations (PATCH status): it wins over the clock.
+      status = vuelo.estado;
+    } else if (now < departure.getTime() - this.config.postSale.boardingWindowMinutes * 60_000) {
+      status = 'SCHEDULED';
+    } else if (now < departure.getTime()) {
+      status = 'BOARDING';
+    } else if (now < arrival.getTime()) {
+      status = 'DEPARTED';
+    } else {
+      status = 'ARRIVED';
+    }
+
+    return {
+      flightNumber: vuelo.codigoVuelo,
+      date,
+      marketingCarrier: vuelo.codigoAerolinea,
+      operatingCarrier: vuelo.codigoAerolinea,
+      departure: {
+        iataCode: vuelo.origenIATA,
+        terminal: null,
+        gate: vuelo.puertaSalida,
+        scheduledAt: toIso(departure),
+        estimatedAt: vuelo.salidaEstimada ? toIso(vuelo.salidaEstimada) : null,
+        actualAt: null,
+      },
+      arrival: {
+        iataCode: vuelo.destinoIATA,
+        terminal: null,
+        scheduledAt: toIso(arrival),
+        estimatedAt: vuelo.llegadaEstimada ? toIso(vuelo.llegadaEstimada) : null,
+        actualAt: null,
+      },
+      aircraft: null,
+      status,
+      delayMinutes: vuelo.retrasoMinutos,
+      updatedAt: vuelo.estadoActualizadoEn ? toIso(vuelo.estadoActualizadoEn) : null,
+    };
+  }
+}

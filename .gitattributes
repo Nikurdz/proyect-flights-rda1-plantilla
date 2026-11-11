@@ -1,0 +1,4 @@
+# Los scripts de shell y el Dockerfile deben quedar con LF aunque Git en Windows convierta a CRLF:
+# un .sh con CRLF falla en Git Bash y en el contenedor.
+*.sh text eol=lf
+Dockerfile text eol=lf

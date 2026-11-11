@@ -1,0 +1,101 @@
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { bigintNumber } from '../common/bigint.transformer';
+import { BookingCambio } from './booking-cambio.entity';
+import { FlightHold } from './flight-hold.entity';
+
+export type BookingStatus =
+  | 'PENDING'
+  | 'PENDING_PAYMENT'
+  | 'TICKET_ISSUING'
+  | 'CONFIRMED'
+  | 'FAILED'
+  | 'CHANGE_PENDING'
+  | 'CANCELLATION_PENDING'
+  | 'CANCELLED';
+
+export const BOOKING_STATUSES: BookingStatus[] = [
+  'PENDING',
+  'PENDING_PAYMENT',
+  'TICKET_ISSUING',
+  'CONFIRMED',
+  'FAILED',
+  'CHANGE_PENDING',
+  'CANCELLATION_PENDING',
+  'CANCELLED',
+];
+
+@Entity('vuelos_bookings')
+@Index('IDX_vuelos_bookings_owner_created', ['ownerId', 'createdAt', 'bookingId'])
+@Index('IDX_vuelos_bookings_partner_order', ['channelPartnerOrderId'])
+export class Booking {
+  @PrimaryGeneratedColumn('uuid')
+  bookingId: string;
+
+  // Six-character alphanumeric locator, per the SRS's PNR definition.
+  @Column({ type: 'varchar', length: 6, unique: true })
+  pnr: string;
+
+  // The hold this booking consumed: it also holds the booking's legs (flights, fares, seats), so the route is not copied here.
+  @Column({ type: 'uuid', unique: true })
+  holdId: string;
+
+  @OneToOne(() => FlightHold, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'holdId' })
+  hold?: FlightHold;
+
+  @Column({ type: 'varchar', length: 30, default: 'PENDING' })
+  status: BookingStatus;
+
+  // Verified `sub` of the authenticated caller (see auth/jwt-auth.guard.ts).
+  @Column({ type: 'varchar', length: 100 })
+  ownerId: string;
+
+  @Column({ type: 'bigint', transformer: bigintNumber })
+  totalMinor: number;
+
+  @Column({ type: 'varchar', length: 3 })
+  currency: string;
+
+  // What the cancellation gave back and kept, in `currency` (null while not cancelled, and for bookings cancelled before
+  // these columns existed). The reconciliation with a partner compares them with what it refunded.
+  @Column({ type: 'bigint', nullable: true, transformer: bigintNumber })
+  refundMinor?: number | null;
+
+  @Column({ type: 'bigint', nullable: true, transformer: bigintNumber })
+  penaltyMinor?: number | null;
+
+  // One payment can back at most one booking.
+  @Column({ type: 'varchar', length: 100, unique: true })
+  paymentReference: string;
+
+  // Who processed the payment (`payment.provider` of contract v2, e.g. BOOKING_PROTOTIPO); null when the caller did not say.
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  paymentProvider?: string | null;
+
+  // Sales channel of contract v2 (who sold it: the partner, its order, a package, the promotion applied). All optional.
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  channelPartnerId?: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  channelPartnerOrderId?: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  channelPackageId?: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  channelPromotionApplied?: boolean;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true, transformer: { to: (v: number | null) => v, from: (v: string | null) => (v === null ? null : Number(v)) } })
+  channelDiscountPercentage?: number | null;
+
+  // Millisecond precision so the (createdAt, bookingId) pagination cursor round-trips exactly.
+  @CreateDateColumn({ type: 'timestamp', precision: 3 })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamp', precision: 3 })
+  updatedAt: Date;
+
+  // History shown in BookingDetail.changes (date changes, flight reschedules, cancellation), one row per change.
+  @OneToMany(() => BookingCambio, (cambio) => cambio.booking, { cascade: true })
+  cambios?: BookingCambio[];
+}

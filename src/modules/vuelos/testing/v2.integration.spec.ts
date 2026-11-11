@@ -1,0 +1,757 @@
+import { createHmac, randomUUID } from 'node:crypto';
+import * as http from 'node:http';
+import { AddressInfo } from 'node:net';
+import { INestApplication } from '@nestjs/common';
+import request = require('supertest');
+import { DataSource } from 'typeorm';
+import { signWebhookBodyV2 } from '../common/safe-http';
+import { FlightHoldSeat } from '../entities/flight-hold-seat.entity';
+import { Vuelo } from '../entities/vuelo.entity';
+import { WebhookSubscription, WebhookSubscriptionEvent } from '../entities/webhook-subscription.entity';
+import { seedFlights } from '../seed/flights.seed';
+import { DomainEventBus } from '../common/domain-event-bus';
+import { OffersService } from '../services/offers.service';
+import { WebhookDispatcherService } from '../services/webhook-dispatcher.service';
+import { PartnerAuthService } from '../v2/auth/partner-auth.service';
+import { ContractV2Validator } from './contract-v2-validator';
+import { IntegrationApp, createIntegrationApp, describeIntegration } from './integration-app';
+
+jest.setTimeout(180_000);
+
+const V2 = '/api/v2/vuelos';
+const dayAhead = (days: number): string => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+const CLIENT = 'booking-prototipo';
+const SECRET = 'a-partner-secret-of-24-chars!';
+
+describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () => {
+  let ctx: IntegrationApp;
+  let contract: ContractV2Validator; // every real answer below is also checked against the schemas of the contract we hand to Booking
+  let app: INestApplication;
+  let ds: DataSource;
+  let server: http.Server;
+  let hookUrl: string;
+  const received: { headers: http.IncomingHttpHeaders; body: string }[] = [];
+  let day = 5;
+
+  const api = () => request(app.getHttpServer());
+
+  async function tokenFor(scope?: string): Promise<string> {
+    const res = await api()
+      .post('/api/v2/oauth2/token')
+      .type('form')
+      .send({ grant_type: 'client_credentials', client_id: CLIENT, client_secret: SECRET, ...(scope ? { scope } : {}) })
+      .expect(200);
+    return res.body.access_token as string;
+  }
+  const bearer = (token: string, userId?: string) => ({ Authorization: `Bearer ${token}`, ...(userId ? { 'X-User-Id': userId } : {}) });
+
+  const pax = (id: string, overrides: Record<string, unknown> = {}) => ({
+    passengerId: id,
+    passengerType: 'ADULT',
+    firstName: `Name${id}`,
+    lastName: 'Tapia',
+    documentType: 'PASSPORT',
+    documentNumber: `DOC${id.toUpperCase()}1234`,
+    nationality: 'EC',
+    birthDate: '1990-05-05',
+    gender: 'M',
+    contact: { email: `${id}@example.com`, phone: '+593999999999' },
+    ...overrides,
+  });
+
+  async function searchOffer(date: string, origin = 'BOG', destination = 'SCL') {
+    const res = await api()
+      .post(`${V2}/search`)
+      .set('X-Device-Fingerprint', 'it-device')
+      .send({ itineraries: [{ origin, destination, departureDate: date }], passengers: { adults: 1 } })
+      .expect(200);
+    return res.body.offers[0] as { offerId: string; itineraries: { itineraryId: string }[] };
+  }
+
+  async function hold(token: string, userId: string, date: string, extra: Record<string, unknown> = {}) {
+    const offer = await searchOffer(date);
+    const key = randomUUID();
+    const body = {
+      offerId: offer.offerId,
+      itinerarySelections: offer.itineraries.map((i) => ({ itineraryId: i.itineraryId, cabinClass: 'ECONOMY', fareBrand: 'FULL' })),
+      passengersBreakdown: { adults: 1 },
+      ...extra,
+    };
+    const res = await api().post(`${V2}/offers/hold`).set(bearer(token, userId)).set('Idempotency-Key', key).send(body);
+    return { res, key, body, offer };
+  }
+
+  async function book(token: string, userId: string, holdId: string, overrides: Record<string, unknown> = {}) {
+    return api()
+      .post(`${V2}/bookings`)
+      .set(bearer(token, userId))
+      .set('Idempotency-Key', randomUUID())
+      .send({ holdId, passengers: [pax('a1')], payment: { paymentReference: `pay_${randomUUID().slice(0, 12)}` }, ...overrides });
+  }
+
+  beforeAll(async () => {
+    contract = await ContractV2Validator.load();
+    server = http.createServer((req, res) => {
+      let data = '';
+      req.on('data', (c) => (data += c));
+      req.on('end', () => {
+        received.push({ headers: req.headers, body: data });
+        res.statusCode = 200;
+        res.end('ok');
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    hookUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/hook`;
+
+    ctx = await createIntegrationApp({ WEBHOOKS_ALLOW_PRIVATE_HOSTS: 'true', BOOKING_WEBHOOK_URL: hookUrl, BOOKING_WEBHOOK_SECRET: 'a-secret-of-sixteen-chars' });
+    app = ctx.app;
+    ds = ctx.dataSource;
+    await seedFlights(ds);
+    await app.get(PartnerAuthService).upsert(CLIENT, SECRET);
+  });
+
+  afterAll(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await ctx?.close();
+  });
+
+  describe('PartnerOAuth2 and errors', () => {
+    it('issues a token only to a client that proves its secret, limited to the scopes it asks for', async () => {
+      const wrong = await api().post('/api/v2/oauth2/token').type('form').send({ grant_type: 'client_credentials', client_id: CLIENT, client_secret: 'nope-nope-nope-nope-nope' });
+      expect(wrong.status).toBe(401);
+      expect(wrong.body.error).toBe('invalid_client');
+      contract.check('post', '/oauth2/token', 401, wrong.body);
+      expect((await api().post('/api/v2/oauth2/token').type('form').send({ grant_type: 'password' })).body.error).toBe('unsupported_grant_type');
+
+      const ok = await api().post('/api/v2/oauth2/token').type('form').send({ grant_type: 'client_credentials', client_id: CLIENT, client_secret: SECRET, scope: 'flights:read' }).expect(200);
+      expect(ok.body).toMatchObject({ token_type: 'Bearer', scope: 'flights:read' });
+      expect(ok.headers['cache-control']).toBe('no-store');
+      contract.check('post', '/oauth2/token', 200, ok.body);
+
+      // HTTP Basic works too, and asking for a scope the client does not have is refused.
+      const basic = `Basic ${Buffer.from(`${CLIENT}:${SECRET}`).toString('base64')}`;
+      await api().post('/api/v2/oauth2/token').set('Authorization', basic).type('form').send({ grant_type: 'client_credentials' }).expect(200);
+      await app.get(PartnerAuthService).upsert('read-only-client', 'another-secret-of-24-chars!!', ['flights:read']);
+      const outside = await api().post('/api/v2/oauth2/token').type('form').send({ grant_type: 'client_credentials', client_id: 'read-only-client', client_secret: 'another-secret-of-24-chars!!', scope: 'flights:book' });
+      expect(outside.body.error).toBe('invalid_scope');
+    });
+
+    it('answers ProblemDetails v2 (instance, correlation_id, timestamp) and echoes the correlation id, also on 401 and 403', async () => {
+      const correlation = 'corr-vuelos-test-1';
+      const anonymous = await api().get(`${V2}/bookings`).set('X-Correlation-Id', correlation);
+      expect(anonymous.status).toBe(401);
+      expect(anonymous.headers['content-type']).toContain('application/problem+json');
+      expect(anonymous.headers['x-correlation-id']).toBe(correlation);
+      expect(anonymous.headers['x-request-id']).toBeDefined();
+      expect(anonymous.body).toMatchObject({ code: 'UNAUTHORIZED', instance: `${V2}/bookings`, correlation_id: correlation });
+      contract.check('get', '/vuelos/bookings', 401, anonymous.body, anonymous.headers['content-type']);
+      expect(new Date(anonymous.body.timestamp).toString()).not.toBe('Invalid Date');
+
+      const readOnly = await tokenFor('flights:read');
+      const forbidden = await api().post(`${V2}/offers/hold`).set(bearer(readOnly, 'u1')).set('Idempotency-Key', randomUUID()).send({});
+      expect(forbidden.status).toBe(403);
+      expect(forbidden.body).toMatchObject({ code: 'FORBIDDEN', instance: `${V2}/offers/hold` });
+      contract.check('post', '/vuelos/offers/hold', 403, forbidden.body, forbidden.headers['content-type']);
+      expect(forbidden.body.correlation_id).toBe(forbidden.headers['x-correlation-id']);
+    });
+
+    it('keeps /api/v1 exactly as it was: v1 tokens do not work as partner tokens and v1 errors stay v1', async () => {
+      const v1 = await api().get('/api/v1/bookings');
+      expect(v1.status).toBe(401);
+      expect(v1.body.instance).toBeUndefined();
+    });
+  });
+
+  describe('booking flow with a partner token', () => {
+    it('holds with a chosen ttl, replays idempotently (200 + Idempotent-Replayed), and rejects a reused key with 409', async () => {
+      const token = await tokenFor();
+      const created = await hold(token, 'user-1', dayAhead(day++), { ttlMinutes: 10 });
+      expect(created.res.status).toBe(201);
+      expect(created.res.headers['x-request-id']).toBeDefined();
+      expect(created.res.headers.location).toBe(`${V2}/offers/hold/${created.res.body.holdId}`);
+      expect(created.res.body).toMatchObject({ status: 'HELD', ttlMinutes: 10 });
+      contract.check('post', '/vuelos/offers/hold', 201, created.res.body);
+      expect(created.res.body._links.release).toMatchObject({ method: 'DELETE' });
+
+      const replay = await api().post(`${V2}/offers/hold`).set(bearer(token, 'user-1')).set('Idempotency-Key', created.key).send(created.body);
+      expect(replay.status).toBe(200);
+      expect(replay.headers['idempotent-replayed']).toBe('true');
+      expect(replay.body.holdId).toBe(created.res.body.holdId);
+      contract.check('post', '/vuelos/offers/hold', 200, replay.body);
+
+      const reused = await api().post(`${V2}/offers/hold`).set(bearer(token, 'user-1')).set('Idempotency-Key', created.key).send({ ...created.body, passengersBreakdown: { adults: 2 } });
+      expect(reused.status).toBe(409);
+      expect(reused.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
+      contract.check('post', '/vuelos/offers/hold', 409, reused.body, reused.headers['content-type']);
+
+      const tooLong = await hold(token, 'user-1', dayAhead(day++), { ttlMinutes: 90 });
+      expect(tooLong.res.status).toBe(400);
+
+      // Releasing twice is fine; a hold that already expired answers 204 too.
+      await api().delete(`${V2}/offers/hold/${created.res.body.holdId}`).set(bearer(token, 'user-1')).expect(204);
+      await api().delete(`${V2}/offers/hold/${created.res.body.holdId}`).set(bearer(token, 'user-1')).expect(204);
+    });
+
+    it('treats documentExpiryDate as optional for a passport and validates it only when it comes', async () => {
+      const token = await tokenFor();
+      const held = await hold(token, 'user-expiry', dayAhead(day++));
+      const holdId = held.res.body.holdId as string;
+      const withExpiry = (value: unknown) => book(token, 'user-expiry', holdId, { passengers: [pax('a1', { documentExpiryDate: value })] });
+
+      // Present and too early: still rejected, and nothing is consumed.
+      const expired = await withExpiry('2020-01-01');
+      expect(expired.status).toBe(422);
+      expect(expired.body.code).toBe('DOCUMENT_EXPIRED');
+      // Present but not a date: a real validation error that names the field.
+      const garbage = await withExpiry('not-a-date');
+      expect(garbage.status).toBe(400);
+      expect(JSON.stringify(garbage.body)).toContain('documentExpiryDate');
+      // "Not sent" in the ways a client commonly says it: null and an empty string are the same as leaving it out.
+      const nulo = await withExpiry(null);
+      expect([nulo.status, nulo.body.code]).toEqual([201, undefined]);
+    });
+
+    it('also accepts an empty documentExpiryDate and a passport that omits it', async () => {
+      const token = await tokenFor();
+      const held = await hold(token, 'user-expiry-2', dayAhead(day++));
+      const holdId = held.res.body.holdId as string;
+      const vacio = await book(token, 'user-expiry-2', holdId, { passengers: [pax('a1', { documentExpiryDate: '' })] });
+      expect(vacio.status).toBe(201);
+      const omitido = await hold(token, 'user-expiry-3', dayAhead(day++));
+      const sinFecha = await book(token, 'user-expiry-3', omitido.res.body.holdId as string, { passengers: [pax('a1')] });
+      expect(sinFecha.status).toBe(201);
+    });
+
+    it('books with the sales channel, checks the amount, keeps users apart and serves v2 tickets', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const held = await hold(token, 'user-2', date);
+      const holdId = held.res.body.holdId as string;
+
+      const wrongAmount = await book(token, 'user-2', holdId, { payment: { paymentReference: `pay_${randomUUID().slice(0, 12)}`, amount: { currency: 'USD', total: '1.00' } } });
+      expect(wrongAmount.status).toBe(422);
+      expect(wrongAmount.body.code).toBe('AMOUNT_MISMATCH');
+      contract.check('post', '/vuelos/bookings', 422, wrongAmount.body, wrongAmount.headers['content-type']);
+
+      // BOG-SCL crosses a border: v2 wants a passport (v1 does not check it).
+      const nationalId = await book(token, 'user-2', holdId, { passengers: [pax('a1', { documentType: 'NATIONAL_ID' })] });
+      expect(nationalId.status).toBe(422);
+      expect(nationalId.body.code).toBe('PASSPORT_REQUIRED_INTERNATIONAL');
+
+      const booked = await book(token, 'user-2', holdId, {
+        payment: { paymentReference: `pay_${randomUUID().slice(0, 12)}`, amount: held.res.body.lockedPrice, provider: 'BOOKING_PROTOTIPO' },
+        salesChannel: { partnerId: 'booking', partnerOrderId: 'ORD-9', packageId: null, promotionApplied: false },
+      });
+      expect(booked.status).toBe(201);
+      expect(booked.headers.location).toBe(`${V2}/bookings/${booked.body.bookingId}`);
+      contract.check('post', '/vuelos/bookings', 201, booked.body);
+      expect(booked.body).toMatchObject({ status: 'CONFIRMED', holdId, salesChannel: { partnerOrderId: 'ORD-9', promotionApplied: false } });
+      expect(booked.body._links.cancel).toBeDefined();
+      const bookingId = booked.body.bookingId as string;
+
+      // Another user of the same partner cannot see it; the same user can.
+      expect((await api().get(`${V2}/bookings/${bookingId}`).set(bearer(token, 'user-3'))).status).toBe(404);
+      await api().get(`${V2}/bookings/${bookingId}`).set(bearer(token, 'user-2')).expect(200);
+      const list = await api().get(`${V2}/bookings`).set(bearer(token, 'user-2')).expect(200);
+      expect(list.body.items.some((b: { bookingId: string }) => b.bookingId === bookingId)).toBe(true);
+      expect(list.body.nextCursor).toBeNull();
+      contract.check('get', '/vuelos/bookings', 200, list.body);
+
+      const envelope = await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-2')).expect(200);
+      expect(envelope.body.bookingId).toBe(bookingId);
+      contract.check('get', '/vuelos/bookings/{bookingId}/tickets', 200, envelope.body);
+      const tickets = { body: envelope.body.tickets };
+      expect(tickets.body).toHaveLength(1);
+      expect(tickets.body[0]).toMatchObject({ passengerId: 'a1', passengerName: 'Namea1 Tapia', status: 'ISSUED' });
+      expect(tickets.body[0].qrPayload).toBeUndefined();
+      expect(tickets.body[0].segments[0]).toMatchObject({ departureIataCode: 'BOG', arrivalIataCode: 'SCL', status: 'ISSUED' });
+      const ticket = await api().get(`${V2}/bookings/${bookingId}/tickets/${tickets.body[0].ticketId}`).set(bearer(token, 'user-2')).expect(200);
+      expect(ticket.body.eTicketNumber).toBe(tickets.body[0].eTicketNumber);
+      contract.check('get', '/vuelos/bookings/{bookingId}/tickets/{ticketId}', 200, ticket.body);
+
+      // Issuing again is a no-op: already issued answers 200 with issued 0.
+      const again = await api().post(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-2')).expect(200);
+      expect(again.body).toMatchObject({ issued: 0, status: 'CONFIRMED' });
+      expect(again.body.tickets).toHaveLength(1);
+      contract.check('post', '/vuelos/bookings/{bookingId}/tickets', 200, again.body);
+    });
+
+    it('changes seats atomically (swap), shows the status per seat, and refuses infants, other cabins and taken seats', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const held = await hold(token, 'user-4', date);
+      const booked = await book(token, 'user-4', held.res.body.holdId);
+      const bookingId = booked.body.bookingId as string;
+      const segment = (await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-4'))).body.tickets[0].segments[0].segmentId as string;
+
+      const move = await api().put(`${V2}/bookings/${bookingId}/seats`).set(bearer(token, 'user-4')).set('Idempotency-Key', randomUUID()).send({ seats: [{ passengerId: 'a1', segmentId: segment, seatNumber: '14C' }] });
+      expect(move.status).toBe(200);
+      expect(move.body.seats[0]).toMatchObject({ seatNumber: '14C', previousSeatNumber: null, status: 'TICKETED' });
+      expect(move.body.amountCharged.total).toBe('0.00');
+      contract.check('put', '/vuelos/bookings/{bookingId}/seats', 200, move.body);
+
+      const map = await api().get(`${V2}/offers/${held.offer.offerId}/seatmap`).query({ segmentId: segment }).expect(200);
+      const seats = map.body.cabins[0].rows.flatMap((r: { seats: { seatNumber: string; status: string; isAvailable: boolean }[] }) => r.seats);
+      contract.check('get', '/vuelos/offers/{offerId}/seatmap', 200, map.body);
+      expect(seats.find((s: { seatNumber: string }) => s.seatNumber === '14C')).toMatchObject({ status: 'TICKETED', isAvailable: false });
+      expect(seats.find((s: { seatNumber: string }) => s.seatNumber === '14D').status).toBe('AVAILABLE');
+
+      const other = await api().put(`${V2}/bookings/${bookingId}/seats`).set(bearer(token, 'user-4')).set('Idempotency-Key', randomUUID()).send({ seats: [{ passengerId: 'a1', segmentId: segment, seatNumber: '14D' }] }).expect(200);
+      expect(other.body.seats[0].previousSeatNumber).toBe('14C');
+      const freed = (await api().get(`${V2}/offers/${held.offer.offerId}/seatmap`).query({ segmentId: segment }).expect(200)).body.cabins[0].rows.flatMap((r: { seats: { seatNumber: string; status: string }[] }) => r.seats);
+      expect(freed.find((s: { seatNumber: string }) => s.seatNumber === '14C').status).toBe('AVAILABLE');
+
+      const nonexistent = await api().put(`${V2}/bookings/${bookingId}/seats`).set(bearer(token, 'user-4')).set('Idempotency-Key', randomUUID()).send({ seats: [{ passengerId: 'a1', segmentId: segment, seatNumber: '99F' }] });
+      expect(nonexistent.status).toBe(422);
+      expect(nonexistent.body.code).toBe('SEAT_CABIN_MISMATCH');
+
+      // A seat held by another booking is taken, and the first booking keeps its seat (all or none).
+      const heldB = await hold(token, 'user-5', date);
+      const bookedB = await book(token, 'user-5', heldB.res.body.holdId);
+      await api().put(`${V2}/bookings/${bookedB.body.bookingId}/seats`).set(bearer(token, 'user-5')).set('Idempotency-Key', randomUUID()).send({ seats: [{ passengerId: 'a1', segmentId: segment, seatNumber: '14C' }] }).expect(200);
+      const taken = await api().put(`${V2}/bookings/${bookingId}/seats`).set(bearer(token, 'user-4')).set('Idempotency-Key', randomUUID()).send({ seats: [{ passengerId: 'a1', segmentId: segment, seatNumber: '14C' }] });
+      expect(taken.status).toBe(409);
+      expect(taken.body.code).toBe('SEAT_TAKEN');
+      const kept = (await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-4')).expect(200)).body.tickets[0].segments[0].seatNumber;
+      expect(kept).toBe('14D');
+    });
+
+    it('cancels without a quote: the airline computes the refund and reports the inventory it restored', async () => {
+      const token = await tokenFor();
+      const held = await hold(token, 'user-6', dayAhead(day++));
+      const booked = await book(token, 'user-6', held.res.body.holdId);
+      const bookingId = booked.body.bookingId as string;
+      const vueloId = (await ds.query(`SELECT i."vueloId" FROM "${ctx.schema}"."vuelos_flight_hold_items" i WHERE i."holdId" = $1`, [held.res.body.holdId]))[0].vueloId as string;
+      const before = (await ds.getRepository(Vuelo).findOneByOrFail({ id: vueloId })).asientosDisponibles;
+
+      const key = randomUUID();
+      const cancelled = await api().post(`${V2}/bookings/${bookingId}/cancel`).set(bearer(token, 'user-6')).set('Idempotency-Key', key).send({ reasonCode: 'CUSTOMER_REQUEST' });
+      expect(cancelled.status).toBe(200);
+      expect(cancelled.body).toMatchObject({ bookingId, status: 'CANCELLED', reasonCode: 'CUSTOMER_REQUEST' });
+      expect(cancelled.body.refund).toMatchObject({ status: 'CALCULATED', currency: 'USD' });
+      expect(cancelled.body.refund.originalPaymentReference).toBeDefined();
+      expect(cancelled.body.inventoryRestoration).toMatchObject({ status: 'RESTORED', seatsReleased: 1, newSeatStatus: 'AVAILABLE' });
+      expect(cancelled.body.ticketsVoided).toHaveLength(1);
+      contract.check('post', '/vuelos/bookings/{bookingId}/cancel', 200, cancelled.body);
+      expect((await ds.getRepository(Vuelo).findOneByOrFail({ id: vueloId })).asientosDisponibles).toBe(before + 1);
+
+      const replay = await api().post(`${V2}/bookings/${bookingId}/cancel`).set(bearer(token, 'user-6')).set('Idempotency-Key', key).send({ reasonCode: 'CUSTOMER_REQUEST' });
+      expect(replay.status).toBe(200);
+      expect(replay.headers['idempotent-replayed']).toBe('true');
+
+      const second = await api().post(`${V2}/bookings/${bookingId}/cancel`).set(bearer(token, 'user-6')).set('Idempotency-Key', randomUUID()).send({});
+      expect(second.status).toBe(409);
+      expect(second.body.code).toBe('ALREADY_CANCELLED');
+      contract.check('post', '/vuelos/bookings/{bookingId}/cancel', 409, second.body, second.headers['content-type']);
+    });
+  });
+
+  describe('seats set aside by a hold (assignedSeats)', () => {
+    type Seat = { seatNumber: string; status: string; isAvailable: boolean };
+
+    /** A hold on the first flight of `date` that sets `seatNumbers` aside (one adult per seat, at least one). */
+    async function holdSeats(token: string, userId: string, date: string, seatNumbers: string[], extra: Record<string, unknown> = {}) {
+      const offer = await searchOffer(date);
+      const segmentId = (await api().get(`${V2}/offers/${offer.offerId}/seatmap`).expect(200)).body.segmentId as string;
+      const body = {
+        offerId: offer.offerId,
+        itinerarySelections: offer.itineraries.map((i) => ({ itineraryId: i.itineraryId, cabinClass: 'ECONOMY', fareBrand: 'FULL' })),
+        passengersBreakdown: { adults: Math.max(1, seatNumbers.length) },
+        assignedSeats: seatNumbers.map((seatNumber) => ({ segmentId, seatNumber })),
+        ...extra,
+      };
+      const res = await api().post(`${V2}/offers/hold`).set(bearer(token, userId)).set('Idempotency-Key', randomUUID()).send(body);
+      return { res, body, offer, segmentId };
+    }
+
+    /** One seat of the v2 seat map (the answer is checked against the contract). */
+    async function seatOf(offerId: string, segmentId: string, seatNumber: string): Promise<Seat> {
+      const map = await api().get(`${V2}/offers/${offerId}/seatmap`).query({ segmentId }).expect(200);
+      contract.check('get', '/vuelos/offers/{offerId}/seatmap', 200, map.body);
+      return (map.body.cabins[0].rows.flatMap((r: { seats: Seat[] }) => r.seats) as Seat[]).find((s) => s.seatNumber === seatNumber)!;
+    }
+    const heldRows = (segmentId: string, seatNumber: string) => ds.getRepository(FlightHoldSeat).count({ where: { vueloId: segmentId, seatNumber } });
+    const freeSeats = (segmentId: string) => ds.getRepository(Vuelo).findOneByOrFail({ id: segmentId }).then((v) => v.asientosDisponibles);
+
+    it('holds the seats (201), shows them HELD, refuses them to a second hold (409 SEAT_TAKEN) and frees them on release', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const first = await holdSeats(token, 'seat-u1', date, ['7A']);
+      expect(first.res.status).toBe(201);
+      contract.check('post', '/vuelos/offers/hold', 201, first.res.body);
+      const { segmentId } = first;
+
+      expect(await seatOf(first.offer.offerId, segmentId, '7A')).toMatchObject({ status: 'HELD', isAvailable: false });
+      expect(await seatOf(first.offer.offerId, segmentId, '7B')).toMatchObject({ status: 'AVAILABLE', isAvailable: true });
+      // v1 has no `status`: a held seat is simply not available.
+      const v1 = await api().get(`/api/v1/offers/${first.offer.offerId}/seatmap`).query({ segmentId }).expect(200);
+      const v1Seat = v1.body.cabins[0].rows.flatMap((r: { seats: Record<string, unknown>[] }) => r.seats).find((s: Record<string, unknown>) => s.seatNumber === '7A');
+      expect(v1Seat).toEqual(expect.objectContaining({ isAvailable: false }));
+      expect(v1Seat.status).toBeUndefined();
+
+      // Another user asks for the same seat: 409 naming it, and nothing of that hold is kept (no inventory taken).
+      const before = await freeSeats(segmentId);
+      const second = await holdSeats(token, 'seat-u2', date, ['7A']);
+      expect(second.segmentId).toBe(segmentId);
+      expect(second.res.status).toBe(409);
+      expect(second.res.body).toMatchObject({ code: 'SEAT_TAKEN', detail: `El asiento 7A del segmento ${segmentId} ya fue tomado.` });
+      contract.check('post', '/vuelos/offers/hold', 409, second.res.body, second.res.headers['content-type']);
+      expect(await freeSeats(segmentId)).toBe(before);
+
+      // Releasing the hold gives the seat back, and the second user can now hold it.
+      await api().delete(`${V2}/offers/hold/${first.res.body.holdId}`).set(bearer(token, 'seat-u1')).expect(204);
+      expect(await seatOf(first.offer.offerId, segmentId, '7A')).toMatchObject({ status: 'AVAILABLE', isAvailable: true });
+      expect(await heldRows(segmentId, '7A')).toBe(0);
+      const retry = await holdSeats(token, 'seat-u2', date, ['7A']);
+      expect(retry.res.status).toBe(201);
+    });
+
+    it('validates the seats of the hold: segment of the offer, a real seat, no repeats, one per seat-taking passenger', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const probe = await holdSeats(token, 'seat-v1', date, []);
+      expect(probe.res.status).toBe(201); // an empty list is a plain hold
+      const { segmentId } = probe;
+      const attempt = (assignedSeats: unknown, adults = 1) => holdSeats(token, 'seat-v1', date, [], { assignedSeats, passengersBreakdown: { adults } });
+
+      const foreign = await attempt([{ segmentId: randomUUID(), seatNumber: '8A' }]);
+      expect(foreign.res.status).toBe(400);
+      contract.check('post', '/vuelos/offers/hold', 400, foreign.res.body, foreign.res.headers['content-type']);
+
+      const missing = await attempt([{ segmentId, seatNumber: '999F' }]);
+      expect(missing.res.status).toBe(422);
+      expect(missing.res.body.code).toBe('SEAT_CABIN_MISMATCH');
+
+      const repeated = await attempt([{ segmentId, seatNumber: '8A' }, { segmentId, seatNumber: '8A' }], 2);
+      expect(repeated.res.status).toBe(409);
+      expect(repeated.res.body.code).toBe('SEAT_TAKEN');
+
+      const tooMany = await attempt([{ segmentId, seatNumber: '8A' }, { segmentId, seatNumber: '8B' }], 1);
+      expect(tooMany.res.status).toBe(422);
+
+      const malformed = await attempt([{ segmentId, seatNumber: 'A8' }]);
+      expect(malformed.res.status).toBe(400);
+
+      // None of the refused holds kept a seat.
+      expect(await ds.getRepository(FlightHoldSeat).count({ where: { vueloId: segmentId } })).toBe(0);
+    });
+
+    it('frees the seats of a hold that ran out, also before the sweeper has seen it', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const overdue = await holdSeats(token, 'seat-e1', date, ['9A', '9B']);
+      expect(overdue.res.status).toBe(201);
+      const { segmentId } = overdue;
+      expect((await seatOf(overdue.offer.offerId, segmentId, '9A')).status).toBe('HELD');
+
+      await ds.query(`UPDATE "${ctx.schema}"."vuelos_flight_holds" SET "expiresAt" = $1 WHERE "holdId" = $2`, [new Date(Date.now() - 60_000), overdue.res.body.holdId]);
+      // Not swept yet (its rows are still there), but an overdue hold holds nothing.
+      expect(await heldRows(segmentId, '9A')).toBe(1);
+      expect(await seatOf(overdue.offer.offerId, segmentId, '9A')).toMatchObject({ status: 'AVAILABLE', isAvailable: true });
+
+      // Another hold takes one of those seats right away.
+      const next = await holdSeats(token, 'seat-e2', date, ['9A']);
+      expect(next.res.status).toBe(201);
+      expect((await seatOf(next.offer.offerId, segmentId, '9A')).status).toBe('HELD');
+
+      // The sweep removes what was left of the overdue hold and leaves the new hold's seat alone.
+      await app.get(OffersService).expireDueHolds();
+      expect(await heldRows(segmentId, '9B')).toBe(0);
+      expect((await seatOf(next.offer.offerId, segmentId, '9A')).status).toBe('HELD');
+      expect((await seatOf(next.offer.offerId, segmentId, '9B')).status).toBe('AVAILABLE');
+    });
+
+    it('turns HELD into TICKETED when the hold is booked with that seat, and frees a held seat the booking does not assign', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const held = await holdSeats(token, 'seat-b1', date, ['10A']);
+      const { segmentId } = held;
+      const booked = await book(token, 'seat-b1', held.res.body.holdId, { passengers: [pax('a1', { assignedSeats: [{ segmentId, seatNumber: '10A' }] })] });
+      expect(booked.status).toBe(201);
+      expect(await seatOf(held.offer.offerId, segmentId, '10A')).toMatchObject({ status: 'TICKETED', isAvailable: false });
+      expect(await heldRows(segmentId, '10A')).toBe(0);
+
+      // The booking decides the seats: without `assignedSeats` the seat the hold had set aside is free again.
+      const loose = await holdSeats(token, 'seat-b2', date, ['10B']);
+      expect((await seatOf(loose.offer.offerId, segmentId, '10B')).status).toBe('HELD');
+      expect((await book(token, 'seat-b2', loose.res.body.holdId, { passengers: [pax('b2')] })).status).toBe(201);
+      expect(await seatOf(loose.offer.offerId, segmentId, '10B')).toMatchObject({ status: 'AVAILABLE', isAvailable: true });
+    });
+
+    it('refuses a booking (and a seat change) that asks for a seat another hold has set aside, and keeps that booking\'s hold HELD', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const owner = await holdSeats(token, 'seat-c1', date, ['11A']);
+      const { segmentId } = owner;
+      const other = await holdSeats(token, 'seat-c2', date, []);
+      const otherHoldId = other.res.body.holdId as string;
+
+      const refused = await book(token, 'seat-c2', otherHoldId, { passengers: [pax('c2', { assignedSeats: [{ segmentId, seatNumber: '11A' }] })] });
+      expect(refused.status).toBe(409);
+      expect(refused.body).toMatchObject({ code: 'SEAT_TAKEN', detail: `El asiento 11A del segmento ${segmentId} ya fue tomado.` });
+      contract.check('post', '/vuelos/bookings', 409, refused.body, refused.headers['content-type']);
+      const status = await api().get(`${V2}/offers/hold/${otherHoldId}`).set(bearer(token, 'seat-c2')).expect(200);
+      expect(status.body.status).toBe('HELD');
+      expect((await seatOf(owner.offer.offerId, segmentId, '11A')).status).toBe('HELD');
+
+      // The same hold books with another seat; moving to the held seat afterwards is refused too.
+      const booked = await book(token, 'seat-c2', otherHoldId, { passengers: [pax('c2', { assignedSeats: [{ segmentId, seatNumber: '11B' }] })] });
+      expect(booked.status).toBe(201);
+      const move = await api().put(`${V2}/bookings/${booked.body.bookingId}/seats`).set(bearer(token, 'seat-c2')).set('Idempotency-Key', randomUUID()).send({ seats: [{ passengerId: 'c2', segmentId, seatNumber: '11A' }] });
+      expect(move.status).toBe(409);
+      expect(move.body.code).toBe('SEAT_TAKEN');
+
+      // The owner of the held seat is not affected: it books it.
+      const mine = await book(token, 'seat-c1', owner.res.body.holdId, { passengers: [pax('c1', { assignedSeats: [{ segmentId, seatNumber: '11A' }] })] });
+      expect(mine.status).toBe(201);
+      expect((await seatOf(owner.offer.offerId, segmentId, '11A')).status).toBe('TICKETED');
+    });
+
+    it('two holds racing for one seat: exactly one is created, the other answers 409 and takes no inventory', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const offer = await searchOffer(date);
+      const segmentId = (await api().get(`${V2}/offers/${offer.offerId}/seatmap`).expect(200)).body.segmentId as string;
+      const before = await freeSeats(segmentId);
+      const body = {
+        offerId: offer.offerId,
+        itinerarySelections: offer.itineraries.map((i) => ({ itineraryId: i.itineraryId, cabinClass: 'ECONOMY', fareBrand: 'FULL' })),
+        passengersBreakdown: { adults: 1 },
+        assignedSeats: [{ segmentId, seatNumber: '12A' }],
+      };
+      const attempt = (userId: string) => api().post(`${V2}/offers/hold`).set(bearer(token, userId)).set('Idempotency-Key', randomUUID()).send(body);
+
+      const results = await Promise.all([attempt('seat-r1'), attempt('seat-r2'), attempt('seat-r3')]);
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409, 409]);
+      for (const lost of results.filter((r) => r.status === 409)) expect(lost.body.code).toBe('SEAT_TAKEN');
+      expect(await heldRows(segmentId, '12A')).toBe(1);
+      expect(await freeSeats(segmentId)).toBe(before - 1);
+    });
+  });
+
+  describe('promotions agreement', () => {
+    it('is 404 until the airline answers, is written with flights:admin, and bounds the discount of a sale', async () => {
+      const token = await tokenFor();
+      await api().get(`${V2}/promociones/contrato`).set(bearer(token)).expect(404);
+      const readOnly = await tokenFor('flights:read');
+      await api().put(`${V2}/promociones/contrato`).set(bearer(readOnly)).set('Idempotency-Key', randomUUID()).send({ permite_promociones: true, porcentaje_descuento_maximo: 10 }).expect(403);
+
+      const put = await api()
+        .put(`${V2}/promociones/contrato`)
+        .set(bearer(token))
+        .set('Idempotency-Key', randomUUID())
+        .send({ permite_promociones: true, porcentaje_descuento_maximo: 12.5, rutas_habilitadas: ['BOG-SCL'], cabinas_habilitadas: ['ECONOMY'], destinos_habilitados: ['SCL'] });
+      expect(put.status).toBe(200);
+      expect(put.body).toMatchObject({ vertical: 'VUELOS', permite_promociones: true, porcentaje_descuento_maximo: 12.5, rutas_habilitadas: ['BOG-SCL'] });
+      contract.check('put', '/vuelos/promociones/contrato', 200, put.body);
+      expect((await api().get(`${V2}/promociones/contrato`).set(bearer(readOnly)).expect(200)).body.cabinas_habilitadas).toEqual(['ECONOMY']);
+
+      const held = await hold(token, 'user-7', dayAhead(day++));
+      const over = await book(token, 'user-7', held.res.body.holdId, { salesChannel: { partnerId: 'booking', promotionApplied: true, discountPercentage: 40 } });
+      expect(over.status).toBe(422);
+      expect(over.body.code).toBe('PROMOTION_DISCOUNT_OUT_OF_RANGE');
+      const within = await book(token, 'user-7', held.res.body.holdId, { salesChannel: { partnerId: 'booking', promotionApplied: true, discountPercentage: 10 } });
+      expect(within.status).toBe(201);
+      expect(within.body.salesChannel).toMatchObject({ promotionApplied: true, discountPercentage: 10 });
+    });
+  });
+
+  describe('operations', () => {
+    it('needs flights:ops, validates transitions, records a delay and lists occupancy', async () => {
+      const token = await tokenFor();
+      const readOnly = await tokenFor('flights:read');
+      const date = dayAhead(day++);
+      const flight = await ds.getRepository(Vuelo).createQueryBuilder('v').where('v."fechaSalida" >= :s AND v."fechaSalida" < :e', { s: `${date}T00:00:00Z`, e: `${date}T23:59:59Z` }).getOneOrFail();
+
+      const forbidden = await api().patch(`${V2}/flights/${flight.codigoVuelo}/status`).set(bearer(readOnly)).send({ date, status: 'BOARDING' });
+      expect(forbidden.status).toBe(403);
+
+      const noEstimate = await api().patch(`${V2}/flights/${flight.codigoVuelo}/status`).set(bearer(token)).send({ date, status: 'DELAYED' });
+      expect(noEstimate.status).toBe(400);
+
+      const estimate = new Date(new Date(flight.fechaSalida).getTime() + 45 * 60_000).toISOString();
+      const delayed = await api().patch(`${V2}/flights/${flight.codigoVuelo}/status`).set(bearer(token)).send({ date, status: 'DELAYED', estimatedDepartureAt: estimate, departureGate: 'B12', reason: 'Tráfico aéreo' }).expect(200);
+      expect(delayed.body).toMatchObject({ previousStatus: 'SCHEDULED', flight: { status: 'DELAYED', delayMinutes: 45 } });
+      expect(delayed.body.flight.departure).toMatchObject({ gate: 'B12', estimatedAt: estimate });
+      expect(delayed.body.eventId).toBeDefined();
+      contract.check('patch', '/vuelos/flights/{flightNumber}/status', 200, delayed.body);
+
+      // Public status shows it.
+      await api().get(`${V2}/flights/${flight.codigoVuelo}/status`).expect(400); // the date is required in v2
+      const publicStatus = await api().get(`${V2}/flights/${flight.codigoVuelo}/status`).query({ date }).expect(200);
+      expect(publicStatus.body).toMatchObject({ status: 'DELAYED', delayMinutes: 45 });
+      contract.check('get', '/vuelos/flights/{flightNumber}/status', 200, publicStatus.body);
+
+      // A cancelled flight cannot come back.
+      await api().patch(`${V2}/flights/${flight.codigoVuelo}/status`).set(bearer(token)).send({ date, status: 'CANCELLED', reason: 'Falla técnica' }).expect(200);
+      const back = await api().patch(`${V2}/flights/${flight.codigoVuelo}/status`).set(bearer(token)).send({ date, status: 'BOARDING' });
+      expect(back.status).toBe(409);
+      expect(back.body.code).toBe('INVALID_STATUS_TRANSITION');
+      await api().patch(`${V2}/flights/ZZ9999/status`).set(bearer(token)).send({ date, status: 'BOARDING' }).expect(404);
+
+      const ops = await api().get(`${V2}/operaciones/vuelos`).query({ date, origin: flight.origenIATA }).set(bearer(token)).expect(200);
+      expect(ops.body.date).toBe(date);
+      contract.check('get', '/vuelos/operaciones/vuelos', 200, ops.body);
+      const item = ops.body.items.find((i: { flightNumber: string }) => i.flightNumber === flight.codigoVuelo);
+      expect(item).toMatchObject({ status: 'CANCELLED', totalSeats: flight.capacidadTotal });
+      expect(item.cabins[0].seatsByStatus).toHaveProperty('AVAILABLE');
+      expect(item.alerts.map((a: { code: string }) => a.code)).toContain('CANCELLED');
+      await api().get(`${V2}/operaciones/vuelos`).query({ date }).set(bearer(readOnly)).expect(403);
+    });
+
+    it('reports the node health without a token', async () => {
+      const res = await api().get(`${V2}/health`).expect(200);
+      expect(res.body).toMatchObject({ status: 'HEALTHY', vertical: 'VUELOS' });
+      contract.check('get', '/vuelos/health', 200, res.body);
+      expect(res.body.dependencias[0]).toMatchObject({ nombre: 'postgresql', status: 'UP' });
+    });
+  });
+
+  describe('Booking from the environment', () => {
+    it('registers Booking as a v2 subscriber of every event (BOOKING_WEBHOOK_URL), owned by the partner, once', async () => {
+      const rows = await ds.getRepository(WebhookSubscription).find({ where: { ownerId: `partner:${CLIENT}`, url: hookUrl }, relations: { eventos: true } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].apiVersion).toBe(2);
+      expect(rows[0].events).toHaveLength(15);
+      expect(rows[0].secret).toBe('a-secret-of-sixteen-chars');
+      const raw = await ds.query(`SELECT secret FROM "${ctx.schema}"."vuelos_webhook_subscriptions" WHERE id = $1`, [rows[0].id]);
+      expect(raw[0].secret).not.toContain('a-secret-of-sixteen-chars'); // encrypted at rest
+    });
+  });
+
+  describe('events Booking sends us', () => {
+    it('payment.confirmed issues nothing twice, package.cancelled cancels the flight part, payment.failed marks or compensates, all idempotently', async () => {
+      const token = await tokenFor();
+      const bus = app.get(DomainEventBus);
+      const inbound = (type: string, data: Record<string, unknown>, id = randomUUID()) => bus.despachar({ id, type, schemaVersion: 1, occurredAt: new Date().toISOString(), market: null, correlationId: 'corr-booking-1', aggregateId: String(data.bookingId), payload: data });
+
+      const held = await hold(token, 'user-9', dayAhead(day++));
+      const booked = await book(token, 'user-9', held.res.body.holdId);
+      const bookingId = booked.body.bookingId as string;
+      const paymentReference = booked.body.paymentReference as string;
+
+      expect((await inbound('pagos.payment.confirmed', { paymentReference, bookingId })).fallos).toBe(0);
+      expect((await api().get(`${V2}/bookings/${bookingId}/tickets`).set(bearer(token, 'user-9')).expect(200)).body.tickets).toHaveLength(1);
+
+      // An invalid payload (no bookingId nor paymentReference named) is refused before it reaches a handler.
+      expect((await inbound('pagos.payment.confirmed', { paymentReference: 1 as unknown as string, bookingId })).fallos).toBe(1);
+
+      const cancelEvent = randomUUID();
+      expect((await inbound('paquetes.package.cancelled', { packageId: 'PKG-1', bookingId, reason: 'Hotel sin cupo' }, cancelEvent)).fallos).toBe(0);
+      expect((await api().get(`${V2}/bookings/${bookingId}`).set(bearer(token, 'user-9')).expect(200)).body.status).toBe('CANCELLED');
+      // Delivered twice: nothing more happens.
+      expect((await inbound('paquetes.package.cancelled', { packageId: 'PKG-1', bookingId, reason: 'Hotel sin cupo' }, cancelEvent)).fallos).toBe(0);
+
+      // A failed payment for a confirmed booking compensates it; for an unknown booking it only logs.
+      const held2 = await hold(token, 'user-9', dayAhead(day++));
+      const booked2 = await book(token, 'user-9', held2.res.body.holdId);
+      expect((await inbound('pagos.payment.failed', { paymentReference: booked2.body.paymentReference, bookingId: booked2.body.bookingId, failureReason: 'card_declined' })).fallos).toBe(0);
+      expect((await api().get(`${V2}/bookings/${booked2.body.bookingId}`).set(bearer(token, 'user-9')).expect(200)).body.status).toBe('CANCELLED');
+      expect((await inbound('pagos.payment.failed', { paymentReference: 'pay_unknown_0001', bookingId: randomUUID() })).fallos).toBe(0);
+    });
+  });
+
+  describe('Booking events over HTTP (no broker)', () => {
+    const SIGNING_SECRET = 'a-secret-of-sixteen-chars'; // BOOKING_WEBHOOK_SECRET of this suite
+    const sign = (body: string) => `sha256=${createHmac('sha256', SIGNING_SECRET).update(body).digest('hex')}`;
+    const cloudEvent = (type: string, data: Record<string, unknown>) => ({ specversion: '1.0', type: `ec.edu.epn.booking.${type}`, source: '/booking', id: randomUUID(), time: new Date().toISOString(), correlationid: 'corr-booking-http-1', data });
+    const post = (event: object, signature?: string) => {
+      const body = JSON.stringify(event);
+      return api().post(`${V2}/webhooks/booking`).set('Content-Type', 'application/json').set('X-Webhook-Signature', signature ?? sign(body)).send(body);
+    };
+
+    it('accepts a signed CloudEvent, refuses a bad signature or an unsupported type, and applies the effect once', async () => {
+      const token = await tokenFor();
+      const held = await hold(token, 'user-10', dayAhead(day++));
+      const booked = await book(token, 'user-10', held.res.body.holdId);
+      const bookingId = booked.body.bookingId as string;
+
+      const bad = await post(cloudEvent('paquetes.package.cancelled', { packageId: 'PKG-9', bookingId }), 'sha256=00');
+      expect(bad.status).toBe(401);
+      contract.check('post', '/vuelos/webhooks/booking', 401, bad.body, bad.headers['content-type']);
+      expect((await api().post(`${V2}/webhooks/booking`).send({})).status).toBe(401); // no signature at all
+
+      const unsupported = await post(cloudEvent('pagos.refund.done', { bookingId }));
+      expect(unsupported.status).toBe(400);
+      expect((await post({ hello: 'world' })).status).toBe(400);
+
+      const confirmed = await post(cloudEvent('pagos.payment.confirmed', { paymentReference: booked.body.paymentReference, bookingId }));
+      expect(confirmed.status).toBe(200);
+      contract.check('post', '/vuelos/webhooks/booking', 200, confirmed.body);
+
+      const cancel = cloudEvent('paquetes.package.cancelled', { packageId: 'PKG-9', bookingId, reason: 'Hotel sin cupo' });
+      expect((await post(cancel)).status).toBe(200);
+      expect((await api().get(`${V2}/bookings/${bookingId}`).set(bearer(token, 'user-10')).expect(200)).body.status).toBe('CANCELLED');
+      expect((await post(cancel)).status).toBe(200); // delivered twice: nothing more happens
+    });
+  });
+
+  describe('events', () => {
+    it('lists CloudEvents in order with a cursor, and delivers them signed over the body to a v2 webhook', async () => {
+      const token = await tokenFor();
+      const feed = await api().get(`${V2}/eventos`).query({ limit: 100 }).set(bearer(token)).expect(200);
+      expect(feed.body.events.length).toBeGreaterThan(0);
+      const sample = feed.body.events.find((e: { type: string }) => e.type.endsWith('booking.confirmed'));
+      expect(sample).toMatchObject({ specversion: '1.0', source: '/aerolineas/ram-alliance/vuelos' });
+      expect(sample.type).toBe('ec.edu.epn.booking.vuelos.booking.confirmed');
+      expect(sample.correlationid).toBeDefined();
+      expect(sample.data).toMatchObject({ status: 'CONFIRMED' });
+      // The cursor is the id of the last event of the page (what Booking keeps), not an opaque counter.
+      expect(feed.body.metadata.next_after).toBe(feed.body.events[feed.body.events.length - 1].id);
+      contract.check('get', '/vuelos/eventos', 200, feed.body);
+
+      const page1 = await api().get(`${V2}/eventos`).query({ limit: 2 }).set(bearer(token)).expect(200);
+      const page2 = await api().get(`${V2}/eventos`).query({ limit: 2, after: page1.body.metadata.next_after }).set(bearer(token)).expect(200);
+      expect(page2.body.events[0].id).not.toBe(page1.body.events[0].id);
+      const badCursor = await api().get(`${V2}/eventos`).query({ after: 'evt-nope' }).set(bearer(token));
+      expect(badCursor.status).toBe(400);
+      const filtered = await api().get(`${V2}/eventos`).query({ type: 'hold.created' }).set(bearer(token)).expect(200);
+      expect(filtered.body.events.every((e: { type: string }) => e.type.endsWith('hold.created'))).toBe(true);
+
+      // A partner webhook hears the events of the bookings of every one of its users. (Stored directly: registration insists on https.)
+      const repo = ds.getRepository(WebhookSubscription);
+      await repo.save(repo.create({ ownerId: `partner:${CLIENT}`, url: hookUrl, eventos: ['booking.confirmed'].map((evento) => ds.manager.create(WebhookSubscriptionEvent, { evento })), secret: 'a-secret-of-sixteen-chars', active: true, apiVersion: 2 }));
+      received.length = 0;
+      const held = await hold(token, 'user-8', dayAhead(day++));
+      const booked = await book(token, 'user-8', held.res.body.holdId);
+      expect(booked.status).toBe(201);
+      // Earlier bookings of this suite are queued for the partner subscription too: drain the queue in batches.
+      for (let round = 0; round < 15 && !received.some((r) => r.body.includes(booked.body.bookingId) && r.headers['x-webhook-event'] === 'booking.confirmed'); round++) {
+        await app.get(WebhookDispatcherService).process();
+      }
+      // The partner subscription (from the environment) also hears the earlier bookings of this suite: pick this booking's event.
+      const hit = received.find((r) => r.headers['x-webhook-event'] === 'booking.confirmed' && r.body.includes(booked.body.bookingId));
+      expect(hit).toBeDefined();
+      expect(hit!.headers['content-type']).toBe('application/cloudevents+json');
+      expect(hit!.headers['x-webhook-signature']).toBe(signWebhookBodyV2('a-secret-of-sixteen-chars', hit!.body));
+      const event = JSON.parse(hit!.body);
+      expect(event).toMatchObject({ specversion: '1.0', type: 'ec.edu.epn.booking.vuelos.booking.confirmed' });
+      expect(event.data.bookingId).toBe(booked.body.bookingId);
+      expect(hit!.headers['x-correlation-id']).toBe(event.correlationid);
+    });
+
+    it('registers a v2 webhook, lists it with active/createdAt, never returns the secret, and deletes it', async () => {
+      const token = await tokenFor();
+      const secret = 'a-secret-of-sixteen-chars';
+      const unknown = await api().post(`${V2}/webhooks`).set(bearer(token)).send({ url: hookUrl, events: ['nope'], secret });
+      expect(unknown.status).toBe(400);
+      const shortSecret = await api().post(`${V2}/webhooks`).set(bearer(token)).send({ url: hookUrl, events: ['hold.created'], secret: 'short' });
+      expect(shortSecret.status).toBe(400);
+
+      // This test app allows private hosts (WEBHOOKS_ALLOW_PRIVATE_HOSTS); production accepts https to public addresses only.
+      const created = await api().post(`${V2}/webhooks`).set(bearer(token)).send({ url: hookUrl, events: ['hold.created', 'flight.status_changed', 'booking.seat_changed'], secret }).expect(201);
+      expect(created.body).toMatchObject({ url: hookUrl, active: true, events: ['booking.seat_changed', 'flight.status_changed', 'hold.created'] });
+      expect(created.body.createdAt).toBeDefined();
+      contract.check('post', '/vuelos/webhooks', 201, created.body);
+      expect(JSON.stringify(created.body)).not.toContain(secret);
+      const listed = await api().get(`${V2}/webhooks`).set(bearer(token)).expect(200);
+      expect(listed.body.some((w: { id: string }) => w.id === created.body.id)).toBe(true);
+      expect(JSON.stringify(listed.body)).not.toContain(secret);
+      contract.check('get', '/vuelos/webhooks', 200, listed.body);
+      const row = await ds.getRepository(WebhookSubscription).findOneByOrFail({ id: created.body.id });
+      expect(row.apiVersion).toBe(2);
+      await api().delete(`${V2}/webhooks/${created.body.id}`).set(bearer(token)).expect(204);
+      await api().delete(`${V2}/webhooks/${created.body.id}`).set(bearer(token)).expect(404);
+    });
+  });
+});

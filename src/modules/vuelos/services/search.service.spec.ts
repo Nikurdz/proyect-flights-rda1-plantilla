@@ -1,0 +1,189 @@
+import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { AirportZones } from '../common/airport-zones';
+import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
+import { FareFamily } from '../entities/fare-family.entity';
+import { FlightOffer } from '../entities/flight-offer.entity';
+import { Vuelo } from '../entities/vuelo.entity';
+import { SearchService } from './search.service';
+
+const config: VuelosConfig = {
+  taxRate: 0.15,
+  currency: 'USD',
+  offerTtlMinutes: 15,
+  holdTtlMinutes: 15,
+  maxOfferCombinations: 5,
+  maxPassengersPerOrder: 9,
+  jwtSecret: 'x'.repeat(32),
+  jwtTtlSeconds: 3600,
+  dataEncryptionKey: Buffer.alloc(32, 1),
+  postSale: { baggagePriceMinor: 4000, baggageMaxPerLeg: 2, cutoffHours: 3, changeFeeMinor: 3000, cancelPenaltyPercent: 10, quoteTtlMinutes: 15, checkInOpensHours: 48, checkInClosesHours: 1, boardingWindowMinutes: 30 },
+  webhooks: { maxPerOwner: 10, allowPrivateHosts: false },
+  integraciones: { allowPrivateHosts: false, timeoutMs: 8000, maxResponseBytes: 2_000_000, syncMaxItems: 500, breakerResetMs: 30_000 },
+  nodeId: 'NODE_TEST',
+  nodeSource: '/aerolineas/test/vuelos',
+  stockGrpcUrl: '',
+  stockPush: { horizonDays: 14, fullResyncMinutes: 60 },
+  booking: { webhookUrl: '', webhookSecret: '', stockHttpUrl: '', stockApiKey: '', pagosApiKey: '' },
+};
+
+const vuelo = (id: string, precioBase: number): Vuelo => ({
+  id,
+  aerolinea: 'LATAM Airlines',
+  aerolineaRef: { codigo: 'LA', nombre: 'LATAM Airlines' },
+  codigoAerolinea: 'LA',
+  codigoVuelo: `LA${id}`,
+  origenIATA: 'BOG',
+  destinoIATA: 'SCL',
+  fechaSalida: new Date('2027-01-15T08:00:00.000Z'),
+  fechaLlegada: new Date('2027-01-15T13:00:00.000Z'),
+  precioBase,
+  asientosDisponibles: 40,
+  capacidadTotal: 180,
+  durationMinutes: 300,
+  estado: 'SCHEDULED',
+});
+
+const family = (code: string, priceMultiplier: number): FareFamily => ({
+  code,
+  name: code,
+  carryOnKg: 0,
+  checkedBags: 0,
+  changeable: false,
+  refundable: false,
+  seatSelectionIncluded: false,
+  upgradeEligible: false,
+  accrualFactor: 1,
+  priceMultiplier,
+});
+
+describe('SearchService', () => {
+  let service: SearchService;
+  let flights: Vuelo[];
+  let families: FareFamily[];
+
+  const queryBuilder = {
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    getMany: jest.fn(async () => flights),
+  };
+  const vuelosRepo = { createQueryBuilder: jest.fn(() => queryBuilder) };
+  const fareFamiliesRepo = { find: jest.fn(async () => families) };
+  const offersRepo = { create: jest.fn((data) => data), save: jest.fn(async (data) => data) };
+  const airportZones = { zoneOf: jest.fn(async (iata?: string) => (iata === 'GPS' ? 'Pacific/Galapagos' : 'America/Guayaquil')) };
+
+  const request = (passengers: Record<string, number>, legs = 1) => ({
+    itineraries: Array.from({ length: legs }, (_, i) => ({
+      origin: i % 2 === 0 ? 'BOG' : 'SCL',
+      destination: i % 2 === 0 ? 'SCL' : 'BOG',
+      departureDate: '2027-01-15',
+    })),
+    passengers: { adults: 1, youths: 0, children: 0, infants: 0, ...passengers },
+  });
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    flights = [vuelo('1', 300)];
+    families = [family('BASIC', 1)];
+
+    const module = await Test.createTestingModule({
+      providers: [
+        SearchService,
+        { provide: getRepositoryToken(Vuelo), useValue: vuelosRepo },
+        { provide: getRepositoryToken(FareFamily), useValue: fareFamiliesRepo },
+        { provide: getRepositoryToken(FlightOffer), useValue: offersRepo },
+        { provide: VUELOS_CONFIG, useValue: config },
+        { provide: AirportZones, useValue: airportZones },
+      ],
+    }).compile();
+
+    service = module.get(SearchService);
+  });
+
+  it('prices every passenger type present and totals the whole party (A2)', async () => {
+    const result = await service.search(request({ adults: 2, children: 1, infants: 1 }));
+
+    const pricing = result.offers[0].itineraries[0].pricingOptions[0];
+    const byType = Object.fromEntries(pricing.pricePerPassengerType.map((p) => [p.passengerType, p.price.total]));
+    // base 300: adult 300+15% = 345.00 / child 75% = 258.75 / infant 10% = 34.50
+    expect(byType).toEqual({ ADULT: '345.00', CHILD: '258.75', INFANT: '34.50' });
+    // 2 adults + 1 child + 1 infant
+    expect(result.offers[0].grandTotal.total).toBe('983.25');
+    expect(offersRepo.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an empty, differentiated result when no flight matches (RF-031)', async () => {
+    flights = [];
+    expect(await service.search(request({}))).toEqual({ totalOffers: 0, offers: [] });
+  });
+
+  it('fails with 503 instead of quoting "Infinity" when no fare families exist', async () => {
+    families = [];
+    await expect(service.search(request({}))).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('keeps the cheapest bundles when the combination cap truncates the list', async () => {
+    flights = [vuelo('1', 500), vuelo('2', 100), vuelo('3', 300)];
+    // The return leg flies the next day, so every pairing is in order and only the cap trims the list.
+    const nextDay = (v: Vuelo): Vuelo => ({ ...v, aerolinea: v.aerolinea, fechaSalida: new Date(v.fechaSalida.getTime() + 86_400_000), fechaLlegada: new Date(v.fechaLlegada.getTime() + 86_400_000) });
+    queryBuilder.getMany.mockResolvedValueOnce(flights).mockResolvedValueOnce(flights.map(nextDay));
+    const result = await service.search(request({}, 2));
+
+    expect(result.totalOffers).toBe(5); // 3 x 3 = 9 combinations, capped at 5
+    const totals = result.offers.map((o) => Number(o.grandTotal.total));
+    expect(totals).toEqual([...totals].sort((a, b) => a - b));
+    expect(totals[0]).toBe(230); // 2 x (100 + 15%)
+  });
+
+  it('drops a combination whose second leg leaves before the first one lands (M8)', async () => {
+    flights = [vuelo('1', 100)]; // 08:00-13:00 on both legs: the return would leave before the outbound lands
+    expect((await service.search(request({}, 2))).totalOffers).toBe(0);
+  });
+
+  it('rejects a request where origin equals destination (RN-01)', async () => {
+    await expect(
+      service.search({ itineraries: [{ origin: 'BOG', destination: 'BOG', departureDate: '2027-01-15' }], passengers: { adults: 1 } }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects more infants than adults (RN-04) and oversized groups (RN-05)', async () => {
+    await expect(service.search(request({ adults: 1, infants: 2 }))).rejects.toMatchObject({ status: 422 });
+    await expect(service.search(request({ adults: 9, children: 1 }))).rejects.toMatchObject({ status: 422 });
+  });
+
+  it('asks the catalog only for flights that can seat the whole party', async () => {
+    await service.search(request({ adults: 2, children: 1, infants: 1 }));
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(expect.stringContaining('asientosDisponibles'), { seatsNeeded: 3 });
+  });
+
+  it('reads the day in UTC by default and in the origin airport zone with originLocalDay', async () => {
+    const range = () => queryBuilder.andWhere.mock.calls.find(([sql]) => String(sql).includes(':start'))![1];
+
+    await service.findDirectFlights('UIO', 'GYE', '2027-01-15', 1);
+    expect(range()).toEqual({ start: new Date('2027-01-15T00:00:00.000Z'), end: new Date('2027-01-16T00:00:00.000Z') });
+
+    jest.clearAllMocks();
+    await service.findDirectFlights('UIO', 'GYE', '2027-01-15', 1, { originLocalDay: true });
+    expect(range()).toEqual({ start: new Date('2027-01-15T05:00:00.000Z'), end: new Date('2027-01-16T05:00:00.000Z') });
+
+    jest.clearAllMocks();
+    await service.findDirectFlights('GPS', 'SCY', '2027-01-15', 1, { originLocalDay: true });
+    expect(range()).toEqual({ start: new Date('2027-01-15T06:00:00.000Z'), end: new Date('2027-01-16T06:00:00.000Z') });
+  });
+
+  it('with originLocalDay, "today" is the date at each origin: late in the Ecuador evening the UTC date is already tomorrow', async () => {
+    // Only `Date` is faked: 19:30 in Ecuador on 15 January.
+    jest.useFakeTimers({ now: new Date('2027-01-16T00:30:00.000Z'), doNotFake: ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    try {
+      const today = { itineraries: [{ origin: 'UIO', destination: 'GYE', departureDate: '2027-01-15' }], passengers: { adults: 1 } };
+      await expect(service.search(today)).rejects.toMatchObject({ status: 400 }); // a UTC day: 15 January is already "the past"
+      await expect(service.search(today, { originLocalDay: true })).resolves.toMatchObject({ totalOffers: expect.any(Number) });
+      const yesterday = { ...today, itineraries: [{ ...today.itineraries[0], departureDate: '2027-01-14' }] };
+      await expect(service.search(yesterday, { originLocalDay: true })).rejects.toMatchObject({ status: 400 });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

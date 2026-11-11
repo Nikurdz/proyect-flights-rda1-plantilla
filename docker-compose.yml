@@ -13,5 +13,36 @@ services:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
 
+  # Local API gateway (edge rules in front of the API running on the host). Off by default: it only starts with
+  # `docker compose --profile gateway up -d kong`, so a plain `docker compose up -d` still starts just Postgres.
+  # Start the API with TRUST_PROXY=1 so its own limits see the real client address.
+  kong:
+    image: kong:3.9
+    profiles: ['gateway']
+    ports:
+      - '8000:8000'
+    environment:
+      KONG_DATABASE: 'off'
+      KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 'off'
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      # The secret the API signs tokens with (JWT_SECRET from .env). Empty here only so that a plain
+      # `docker compose up -d` without it still works; the gateway itself refuses to start without it.
+      JWT_SECRET: ${JWT_SECRET:-}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        [ -n "$$JWT_SECRET" ] || { echo 'JWT_SECRET is required to start the gateway' >&2; exit 1; }
+        ESC=$$(printf '%s' "$$JWT_SECRET" | sed 's/[\\&|]/\\&/g')
+        sed "s|__JWT_SECRET__|$$ESC|" /kong/kong.yml > /tmp/kong.yml
+        exec /docker-entrypoint.sh kong docker-start
+    volumes:
+      - ./deploy/gateway/kong.yml:/kong/kong.yml:ro
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    restart: unless-stopped
+
 volumes:
   pgdata:

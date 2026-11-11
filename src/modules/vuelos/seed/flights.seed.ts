@@ -1,0 +1,489 @@
+import { randomInt, randomUUID } from 'node:crypto';
+import { DataSource, EntityManager } from 'typeorm';
+import { seedLocalidades } from '../ecommerce/seed/ecommerce.seed';
+import { Aerolinea } from '../entities/aerolinea.entity';
+import { buildSeatGrid } from '../common/seat-grid';
+import { ensureTravellers } from '../common/travellers';
+import { Booking } from '../entities/booking.entity';
+import { Passenger } from '../entities/passenger.entity';
+import { Ticket } from '../entities/ticket.entity';
+import { FareFamily } from '../entities/fare-family.entity';
+import { FlightHold } from '../entities/flight-hold.entity';
+import { FlightHoldItem } from '../entities/flight-hold-item.entity';
+import { FlightOffer } from '../entities/flight-offer.entity';
+import { SeatAssignment } from '../entities/seat-assignment.entity';
+import { Vuelo } from '../entities/vuelo.entity';
+
+export const FARE_FAMILIES = [
+  {
+    code: 'BASIC',
+    name: 'Basic',
+    carryOnKg: 0,
+    checkedBags: 0,
+    changeable: false,
+    refundable: false,
+    seatSelectionIncluded: false,
+    upgradeEligible: false,
+    accrualFactor: 0.5, // RN-29: reduced accrual on the most restrictive economy family
+    priceMultiplier: 1.0,
+  },
+  {
+    code: 'LIGHT',
+    name: 'Light',
+    carryOnKg: 10,
+    checkedBags: 0,
+    changeable: false,
+    refundable: false,
+    seatSelectionIncluded: false,
+    upgradeEligible: true,
+    accrualFactor: 1.0,
+    priceMultiplier: 1.15,
+  },
+  {
+    code: 'FULL',
+    name: 'Full',
+    carryOnKg: 10,
+    checkedBags: 1,
+    changeable: true,
+    refundable: true,
+    seatSelectionIncluded: true,
+    upgradeEligible: true,
+    accrualFactor: 1.0,
+    priceMultiplier: 1.35,
+  },
+];
+
+interface ScheduleEntry {
+  aerolinea: string;
+  codigoAerolinea: string;
+  codigoVuelo: string;
+  origenIATA: string;
+  destinoIATA: string;
+  /** Departure hour, UTC. */
+  hour: number;
+  durationMinutes: number;
+  precioBase: number;
+  /** Seats open when the flight is first created (not reset on later runs). */
+  initialAvailable: number;
+  /** Seats of the aircraft (default 180). */
+  capacity?: number;
+  /** Vary the fare by weekday and the open seats by day (deterministically). */
+  varied?: boolean;
+}
+
+// The core entries: the SRS's own evidence route (BOG-SCL and back) plus a few domestic/regional
+// legs. Existing integration tests rely on them (LA1500 has only 5 seats; UIO<->GYE and BOG<->SCL
+// are served by these entries alone), so they stay as they are.
+export const SCHEDULE: ScheduleEntry[] = [
+  { aerolinea: 'LATAM Airlines', codigoAerolinea: 'LA', codigoVuelo: 'LA800', origenIATA: 'BOG', destinoIATA: 'SCL', hour: 8, durationMinutes: 300, precioBase: 320, initialAvailable: 42 },
+  { aerolinea: 'LATAM Airlines', codigoAerolinea: 'LA', codigoVuelo: 'LA1500', origenIATA: 'BOG', destinoIATA: 'SCL', hour: 16, durationMinutes: 300, precioBase: 298, initialAvailable: 5 },
+  { aerolinea: 'LATAM Airlines', codigoAerolinea: 'LA', codigoVuelo: 'LA801', origenIATA: 'SCL', destinoIATA: 'BOG', hour: 9, durationMinutes: 300, precioBase: 335, initialAvailable: 38 },
+  { aerolinea: 'LATAM Airlines', codigoAerolinea: 'LA', codigoVuelo: 'LA2402', origenIATA: 'UIO', destinoIATA: 'GYE', hour: 12, durationMinutes: 50, precioBase: 70, initialAvailable: 90 },
+  { aerolinea: 'LATAM Airlines', codigoAerolinea: 'LA', codigoVuelo: 'LA2403', origenIATA: 'GYE', destinoIATA: 'UIO', hour: 18, durationMinutes: 50, precioBase: 72, initialAvailable: 90 },
+  { aerolinea: 'LATAM Airlines', codigoAerolinea: 'LA', codigoVuelo: 'LA1411', origenIATA: 'UIO', destinoIATA: 'BOG', hour: 11, durationMinutes: 105, precioBase: 180, initialAvailable: 70 },
+  { aerolinea: 'LATAM Airlines', codigoAerolinea: 'LA', codigoVuelo: 'LA1412', origenIATA: 'BOG', destinoIATA: 'UIO', hour: 15, durationMinutes: 105, precioBase: 185, initialAvailable: 70 },
+  { aerolinea: 'Avianca', codigoAerolinea: 'AV', codigoVuelo: 'AV123', origenIATA: 'BOG', destinoIATA: 'MDE', hour: 10, durationMinutes: 55, precioBase: 95, initialAvailable: 60 },
+  { aerolinea: 'Avianca', codigoAerolinea: 'AV', codigoVuelo: 'AV456', origenIATA: 'BOG', destinoIATA: 'LIM', hour: 14, durationMinutes: 150, precioBase: 210, initialAvailable: 50 },
+];
+
+// --- Wider network: direct routes with a return leg, several carriers and daily frequencies. ---
+// Departure hours are LOCAL times converted to UTC with a fixed offset per airport (approximate:
+// no daylight-saving changes). A deliberate, documented simplification, not a real timetable.
+const UTC_OFFSET: Record<string, number> = {
+  BOG: -5, MDE: -5, CLO: -5, CTG: -5, UIO: -5, GYE: -5, CUE: -5, LOH: -5, MEC: -5, ESM: -5, LGQ: -5, OCC: -5, GPS: -6, SCY: -6, LIM: -5, CUZ: -5,
+  PTY: -5, SCL: -3, EZE: -3, GRU: -3, MIA: -4, MAD: 1,
+};
+
+const CARRIERS: Record<string, string> = {
+  LA: 'LATAM Airlines',
+  AV: 'Avianca',
+  CM: 'Copa Airlines',
+  G3: 'Gol Linhas Aéreas',
+  AR: 'Aerolíneas Argentinas',
+  UX: 'Air Europa',
+};
+
+interface RoutePair {
+  a: string;
+  b: string;
+  carrier: string;
+  /** First flight number; A->B takes number + 2i, B->A number + 2i + 1. */
+  number: number;
+  durationMinutes: number;
+  priceUsd: number;
+  capacity: number;
+  /** Local departure hours at A and at B (one flight per hour listed). */
+  hoursA: number[];
+  hoursB: number[];
+}
+
+// Bands (USD, base fare): domestic 60-100, regional 130-300, North America 280-390, Europe 780-830.
+const ROUTES: RoutePair[] = [
+  { a: 'BOG', b: 'MDE', carrier: 'AV', number: 130, durationMinutes: 55, priceUsd: 88, capacity: 180, hoursA: [7, 19], hoursB: [9, 21] },
+  { a: 'BOG', b: 'CLO', carrier: 'AV', number: 140, durationMinutes: 70, priceUsd: 84, capacity: 180, hoursA: [6, 12, 18], hoursB: [8, 14, 20] },
+  { a: 'BOG', b: 'CTG', carrier: 'AV', number: 150, durationMinutes: 75, priceUsd: 96, capacity: 180, hoursA: [7, 15], hoursB: [9, 17] },
+  { a: 'UIO', b: 'CUE', carrier: 'LA', number: 2420, durationMinutes: 45, priceUsd: 62, capacity: 96, hoursA: [7, 16], hoursB: [9, 18] },
+  { a: 'UIO', b: 'LOH', carrier: 'LA', number: 2470, durationMinutes: 60, priceUsd: 75, capacity: 96, hoursA: [7, 17], hoursB: [9, 19] },
+  // --- Ecuador, domestic: more frequencies and more cities (their own flight-number series, so the original UIO<->GYE flights stay as they are). ---
+  { a: 'UIO', b: 'GYE', carrier: 'LA', number: 2500, durationMinutes: 50, priceUsd: 74, capacity: 144, hoursA: [6, 9, 13, 16, 19], hoursB: [7, 10, 14, 17, 20] },
+  { a: 'UIO', b: 'GYE', carrier: 'AV', number: 400, durationMinutes: 50, priceUsd: 78, capacity: 144, hoursA: [8, 15], hoursB: [9, 16] },
+  { a: 'GYE', b: 'CUE', carrier: 'LA', number: 2510, durationMinutes: 45, priceUsd: 58, capacity: 96, hoursA: [7, 14, 18], hoursB: [9, 16, 20] },
+  { a: 'UIO', b: 'CUE', carrier: 'AV', number: 410, durationMinutes: 45, priceUsd: 64, capacity: 96, hoursA: [10, 19], hoursB: [12, 21] },
+  { a: 'UIO', b: 'MEC', carrier: 'LA', number: 2520, durationMinutes: 40, priceUsd: 66, capacity: 96, hoursA: [7, 15], hoursB: [9, 17] },
+  { a: 'UIO', b: 'ESM', carrier: 'LA', number: 2530, durationMinutes: 40, priceUsd: 64, capacity: 96, hoursA: [8, 16], hoursB: [10, 18] },
+  { a: 'UIO', b: 'LGQ', carrier: 'LA', number: 2540, durationMinutes: 40, priceUsd: 62, capacity: 96, hoursA: [7, 14], hoursB: [9, 16] },
+  { a: 'UIO', b: 'OCC', carrier: 'AV', number: 420, durationMinutes: 35, priceUsd: 58, capacity: 96, hoursA: [8, 15], hoursB: [10, 17] },
+  { a: 'GYE', b: 'SCY', carrier: 'LA', number: 2550, durationMinutes: 120, priceUsd: 196, capacity: 150, hoursA: [8], hoursB: [13] },
+  { a: 'UIO', b: 'SCY', carrier: 'AV', number: 430, durationMinutes: 200, priceUsd: 238, capacity: 150, hoursA: [7], hoursB: [13] },
+  { a: 'GPS', b: 'SCY', carrier: 'LA', number: 2560, durationMinutes: 40, priceUsd: 90, capacity: 96, hoursA: [9, 14], hoursB: [10, 15] },
+  { a: 'GYE', b: 'LOH', carrier: 'LA', number: 2480, durationMinutes: 50, priceUsd: 68, capacity: 96, hoursA: [8, 16], hoursB: [10, 18] },
+  { a: 'GYE', b: 'GPS', carrier: 'LA', number: 2430, durationMinutes: 105, priceUsd: 190, capacity: 150, hoursA: [8], hoursB: [13] },
+  { a: 'UIO', b: 'GPS', carrier: 'LA', number: 2440, durationMinutes: 195, priceUsd: 235, capacity: 150, hoursA: [7], hoursB: [13] },
+  { a: 'UIO', b: 'BOG', carrier: 'AV', number: 330, durationMinutes: 105, priceUsd: 176, capacity: 180, hoursA: [8, 17], hoursB: [10, 19] },
+  { a: 'GYE', b: 'BOG', carrier: 'AV', number: 340, durationMinutes: 110, priceUsd: 178, capacity: 180, hoursA: [9, 18], hoursB: [11, 20] },
+  { a: 'UIO', b: 'LIM', carrier: 'LA', number: 2450, durationMinutes: 120, priceUsd: 165, capacity: 180, hoursA: [9, 16], hoursB: [11, 18] },
+  { a: 'GYE', b: 'LIM', carrier: 'LA', number: 2460, durationMinutes: 130, priceUsd: 170, capacity: 180, hoursA: [10], hoursB: [13] },
+  { a: 'BOG', b: 'LIM', carrier: 'AV', number: 460, durationMinutes: 180, priceUsd: 205, capacity: 180, hoursA: [6, 16], hoursB: [8, 18] },
+  { a: 'LIM', b: 'CUZ', carrier: 'LA', number: 2300, durationMinutes: 85, priceUsd: 76, capacity: 180, hoursA: [6, 10, 14], hoursB: [8, 12, 16] },
+  { a: 'LIM', b: 'SCL', carrier: 'LA', number: 580, durationMinutes: 235, priceUsd: 232, capacity: 240, hoursA: [7, 15], hoursB: [10, 18] },
+  { a: 'SCL', b: 'EZE', carrier: 'LA', number: 440, durationMinutes: 120, priceUsd: 138, capacity: 180, hoursA: [8, 17], hoursB: [10, 19] },
+  { a: 'SCL', b: 'GRU', carrier: 'LA', number: 700, durationMinutes: 235, priceUsd: 262, capacity: 240, hoursA: [8, 18], hoursB: [10, 21] },
+  { a: 'EZE', b: 'GRU', carrier: 'AR', number: 1230, durationMinutes: 170, priceUsd: 222, capacity: 180, hoursA: [9, 17], hoursB: [12, 20] },
+  { a: 'BOG', b: 'PTY', carrier: 'CM', number: 200, durationMinutes: 105, priceUsd: 192, capacity: 150, hoursA: [8, 15], hoursB: [10, 17] },
+  { a: 'PTY', b: 'MIA', carrier: 'CM', number: 300, durationMinutes: 215, priceUsd: 284, capacity: 150, hoursA: [7, 15], hoursB: [11, 19] },
+  { a: 'BOG', b: 'MIA', carrier: 'AV', number: 20, durationMinutes: 215, priceUsd: 322, capacity: 240, hoursA: [6, 14], hoursB: [9, 17] },
+  { a: 'GYE', b: 'MIA', carrier: 'LA', number: 600, durationMinutes: 225, priceUsd: 338, capacity: 240, hoursA: [11], hoursB: [14] },
+  { a: 'UIO', b: 'MIA', carrier: 'LA', number: 610, durationMinutes: 230, priceUsd: 345, capacity: 240, hoursA: [10], hoursB: [13] },
+  { a: 'MDE', b: 'MIA', carrier: 'AV', number: 30, durationMinutes: 200, priceUsd: 304, capacity: 240, hoursA: [9], hoursB: [12] },
+  { a: 'LIM', b: 'MIA', carrier: 'LA', number: 620, durationMinutes: 300, priceUsd: 382, capacity: 240, hoursA: [8], hoursB: [14] },
+  { a: 'BOG', b: 'MAD', carrier: 'UX', number: 100, durationMinutes: 600, priceUsd: 786, capacity: 300, hoursA: [21], hoursB: [12] },
+  { a: 'UIO', b: 'MAD', carrier: 'UX', number: 110, durationMinutes: 610, priceUsd: 824, capacity: 300, hoursA: [20], hoursB: [12] },
+  { a: 'BOG', b: 'EZE', carrier: 'AR', number: 1300, durationMinutes: 345, priceUsd: 334, capacity: 180, hoursA: [8], hoursB: [14] },
+  { a: 'BOG', b: 'GRU', carrier: 'G3', number: 7300, durationMinutes: 380, priceUsd: 342, capacity: 180, hoursA: [9], hoursB: [15] },
+  { a: 'LIM', b: 'GRU', carrier: 'G3', number: 7700, durationMinutes: 300, priceUsd: 301, capacity: 180, hoursA: [8], hoursB: [14] },
+];
+
+const localToUtcHour = (localHour: number, airport: string): number => (((localHour - UTC_OFFSET[airport]) % 24) + 24) % 24;
+
+function expandRoutes(routes: RoutePair[]): ScheduleEntry[] {
+  const entries: ScheduleEntry[] = [];
+  for (const route of routes) {
+    const legs: [string, string, number[]][] = [
+      [route.a, route.b, route.hoursA],
+      [route.b, route.a, route.hoursB],
+    ];
+    legs.forEach(([from, to, hours], direction) => {
+      hours.forEach((localHour, index) => {
+        entries.push({
+          aerolinea: CARRIERS[route.carrier],
+          codigoAerolinea: route.carrier,
+          codigoVuelo: `${route.carrier}${route.number + index * 2 + direction}`,
+          origenIATA: from,
+          destinoIATA: to,
+          hour: localToUtcHour(localHour, from),
+          durationMinutes: route.durationMinutes,
+          precioBase: route.priceUsd,
+          initialAvailable: route.capacity,
+          capacity: route.capacity,
+          varied: true,
+        });
+      });
+    });
+  }
+  return entries;
+}
+
+export const NETWORK: ScheduleEntry[] = [...SCHEDULE, ...expandRoutes(ROUTES)];
+
+/** Airports of Ecuador: a flight between two of them is domestic. */
+export const ECUADOR = new Set(['UIO', 'GYE', 'CUE', 'LOH', 'MEC', 'ESM', 'LGQ', 'OCC', 'GPS', 'SCY']);
+
+export const isDomestic = (entry: Pick<ScheduleEntry, 'origenIATA' | 'destinoIATA'>): boolean => ECUADOR.has(entry.origenIATA) && ECUADOR.has(entry.destinoIATA);
+
+/** Fare multiplier by weekday (UTC), Sunday first: dearer Friday-Sunday, cheaper Tuesday-Wednesday. */
+const WEEKDAY_FACTOR = [1.1, 1.0, 0.92, 0.92, 1.0, 1.12, 1.05];
+
+/** Deterministic 0..1 value from a string, so re-running the seed gives the same load. */
+function hash01(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 1000) / 1000;
+}
+
+export const HORIZON_DAYS = 45;
+/** How far ahead the domestic (Ecuador) flights are created when the seed runs for real (SEED_DOMESTIC_HORIZON_DAYS). */
+export const DOMESTIC_HORIZON_DAYS = 180;
+const CAPACITY = 180;
+const INSERT_BATCH = 500;
+
+function utcDateAtHour(daysAhead: number, hour: number, now: Date): Date {
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysAhead, hour, 0, 0, 0));
+  return date;
+}
+
+/**
+ * Idempotent: fare families are upserted by code; flights are keyed by (codigoVuelo, fechaSalida)
+ * and inserted only when missing, so re-running never duplicates a flight and never resets the
+ * inventory of one that already has bookings. Each run extends the schedule HORIZON_DAYS ahead (the domestic flights as far as
+ * `domesticHorizonDays`), creating only what lies after the last flight of each code.
+ */
+export async function seedFlights(dataSource: DataSource, now: Date = new Date(), options: { domesticHorizonDays?: number } = {}): Promise<{ families: number; flights: number }> {
+  // Domestic flights may reach further than the rest of the network; the integration suites keep the default (45) so they seed fast.
+  const domesticHorizon = Math.max(HORIZON_DAYS, options.domesticHorizonDays ?? HORIZON_DAYS);
+  await dataSource.getRepository(FareFamily).upsert(FARE_FAMILIES, ['code']);
+
+  // The airports and airlines the flights point at. Inserted only when missing: an airline an admin renamed keeps its name.
+  await seedLocalidades(dataSource);
+  const aerolineas = new Map<string, string>();
+  for (const entry of NETWORK) aerolineas.set(entry.codigoAerolinea, entry.aerolinea);
+  await dataSource
+    .createQueryBuilder()
+    .insert()
+    .into(Aerolinea)
+    .values([...aerolineas].map(([codigo, nombre]) => ({ codigo, nombre })))
+    .orIgnore()
+    .execute();
+
+  // Incremental: only the days after the last flight each code already has are generated, so a start-up of a seeded database
+  // (every Azure start runs the seed, against a distant database) sends about one day of rows instead of the whole horizon.
+  // A new code or a longer horizon fills itself in, and a flight an admin deleted is not brought back.
+  const lastRows = await dataSource.getRepository(Vuelo).createQueryBuilder('v').select('v.codigoVuelo', 'codigo').addSelect('MAX(v.fechaSalida)', 'ultima').groupBy('v.codigoVuelo').getRawMany<{ codigo: string; ultima: Date | string }>();
+  const lastByCode = new Map(lastRows.map((r) => [r.codigo, new Date(r.ultima).getTime()]));
+
+  const rows: Partial<Vuelo>[] = [];
+  for (let day = 1; day <= domesticHorizon; day++) {
+    for (const entry of NETWORK) {
+      if (day > HORIZON_DAYS && !isDomestic(entry)) continue;
+      const departure = utcDateAtHour(day, entry.hour, now);
+      if (departure.getTime() <= (lastByCode.get(entry.codigoVuelo) ?? Number.NEGATIVE_INFINITY)) continue;
+      const capacity = entry.capacity ?? CAPACITY;
+      let price = entry.precioBase;
+      let open = entry.initialAvailable;
+      if (entry.varied) {
+        price = Math.round(entry.precioBase * WEEKDAY_FACTOR[departure.getUTCDay()]);
+        open = Math.max(6, Math.round(capacity * (0.45 + 0.5 * hash01(`${entry.codigoVuelo}:${day}`))));
+      }
+      rows.push({
+        codigoAerolinea: entry.codigoAerolinea,
+        codigoVuelo: entry.codigoVuelo,
+        origenIATA: entry.origenIATA,
+        destinoIATA: entry.destinoIATA,
+        fechaSalida: departure,
+        fechaLlegada: new Date(departure.getTime() + entry.durationMinutes * 60_000),
+        precioBase: price,
+        asientosDisponibles: open,
+        capacidadTotal: capacity,
+        durationMinutes: entry.durationMinutes,
+      });
+    }
+  }
+
+  // Batches keep each INSERT well under PostgreSQL's 65,535 bind-parameter limit.
+  let created = 0;
+  for (let i = 0; i < rows.length; i += INSERT_BATCH) {
+    const result = await dataSource
+      .createQueryBuilder()
+      .insert()
+      .into(Vuelo)
+      .values(rows.slice(i, i + INSERT_BATCH))
+      .orIgnore() // ON CONFLICT DO NOTHING on UQ_vuelos_codigo_salida
+      .returning('"id"')
+      .execute();
+    created += Array.isArray(result.raw) ? result.raw.length : 0;
+  }
+
+  return { families: FARE_FAMILIES.length, flights: created };
+}
+
+/**
+ * Flights left full (or nearly full) on purpose, to show what the system does without seats: they are listed as
+ * sold out and a booking attempt is refused with 409 SEAT_TAKEN. `dias` are days from the day the seed runs, `libres`
+ * the seats that stay open (0 = sold out). Only core-schedule flights can be named here (they have a fixed hour).
+ */
+export const DEMO_SCENARIOS: { codigoVuelo: string; dias: number[]; libres: number }[] = [
+  { codigoVuelo: 'LA800', dias: [3, 10, 17, 24], libres: 0 }, // BOG -> SCL, the SRS evidence route
+  { codigoVuelo: 'LA801', dias: [10, 17], libres: 0 }, // SCL -> BOG: the return of a full outbound
+  { codigoVuelo: 'LA1500', dias: [5, 12], libres: 2 }, // BOG -> SCL: seats for a couple, not for a group of three
+  { codigoVuelo: 'LA2402', dias: [4], libres: 0 }, // UIO -> GYE
+  { codigoVuelo: 'LA1412', dias: [6], libres: 0 }, // BOG -> UIO
+];
+
+/** Owner of the synthetic bookings that occupy the seats of the demo flights (never a real customer). */
+export const DEMO_OWNER = 'demo-seed';
+
+const GROUP_SIZES = [2, 1, 3, 2, 4, 1, 2, 3];
+const FIRST_NAMES = ['Ana', 'Luis', 'María', 'Carlos', 'Lucía', 'Andrés', 'Sofía', 'Diego', 'Valentina', 'Mateo', 'Camila', 'Javier'];
+const LAST_NAMES = ['Pérez', 'Gómez', 'Rodríguez', 'Torres', 'Salazar', 'Vega', 'Mora', 'Cedeño', 'Andrade', 'Paredes'];
+const PNR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/** Deterministic order of the seats of a flight, so a re-run (or another machine) fills the same ones. */
+function shuffledSeats(vuelo: Vuelo): string[] {
+  const seats = buildSeatGrid(vuelo.capacidadTotal).flatMap((row) => row.seats.map((s) => s.seatNumber));
+  return seats
+    .map((seat) => ({ seat, key: hash01(`${vuelo.id}:${seat}`) }))
+    .sort((a, b) => a.key - b.key)
+    .map((x) => x.seat);
+}
+
+async function uniqueDigits(manager: EntityManager, taken: Set<string>): Promise<string> {
+  for (;;) {
+    let digits = '';
+    for (let i = 0; i < 13; i++) digits += randomInt(10).toString();
+    if (!taken.has(digits) && !(await manager.exists(Ticket, { where: { eTicketNumber: digits } }))) {
+      taken.add(digits);
+      return digits;
+    }
+  }
+}
+
+async function uniquePnr(manager: EntityManager, taken: Set<string>): Promise<string> {
+  for (;;) {
+    let pnr = '';
+    for (let i = 0; i < 6; i++) pnr += PNR_ALPHABET[randomInt(PNR_ALPHABET.length)];
+    if (!taken.has(pnr) && !(await manager.exists(Booking, { where: { pnr } }))) {
+      taken.add(pnr);
+      return pnr;
+    }
+  }
+}
+
+/**
+ * Occupies, with real confirmed bookings (hold, passengers, tickets and seat assignments), the seats a flight has
+ * already sold, so the seat map and the admin views agree with the open-seat counter. `ocupados` seats are assigned;
+ * the rest stay free. Personal data is synthetic and encrypted like any other (the field cipher must be configured).
+ */
+async function fillSeats(dataSource: DataSource, vuelo: Vuelo, ocupados: number, now: Date): Promise<number> {
+  const seats = shuffledSeats(vuelo).slice(0, ocupados);
+  const pnrs = new Set<string>();
+  const tickets = new Set<string>();
+  let nextSeat = 0;
+  let group = 0;
+  let sequence = 0;
+  const unit = Math.round(Number(vuelo.precioBase) * 1.15 * 1.15 * 100) / 100;
+
+  await dataSource.transaction(async (manager) => {
+    while (nextSeat < seats.length) {
+      const size = Math.min(GROUP_SIZES[group++ % GROUP_SIZES.length], seats.length - nextSeat);
+      const mine = seats.slice(nextSeat, nextSeat + size);
+      nextSeat += size;
+      // Booked some days ago, spread out, so the history does not look like one single instant.
+      const createdAt = new Date(now.getTime() - (1 + hash01(`${vuelo.id}:${group}`) * 9) * 86_400_000);
+
+      const totalMinor = Math.round(unit * size * 100);
+      const itineraryId = randomUUID();
+      const offer = await manager.save(
+        manager.create(FlightOffer, {
+          itineraries: [{ orden: 0, itineraryId, vueloId: vuelo.id }],
+          grandTotalMinor: totalMinor,
+          currency: 'USD',
+          adults: size,
+          youths: 0,
+          children: 0,
+          infants: 0,
+          createdAt,
+          expiresAt: new Date(createdAt.getTime() + 15 * 60_000),
+        }),
+      );
+      const hold = await manager.save(
+        manager.create(FlightHold, {
+          offerId: offer.offerId,
+          ownerId: DEMO_OWNER,
+          status: 'CONSUMED',
+          lockedPriceMinor: totalMinor,
+          lockedTaxesMinor: null,
+          currency: 'USD',
+          ttlMinutes: 15,
+          adults: size,
+          youths: 0,
+          children: 0,
+          infants: 0,
+          items: [manager.create(FlightHoldItem, { orden: 0, itineraryId, vueloId: vuelo.id, seats: size, cabinClass: 'ECONOMY', fareBrand: 'LIGHT' })],
+          createdAt,
+          expiresAt: new Date(createdAt.getTime() + 15 * 60_000),
+        }),
+      );
+      const booking = await manager.save(
+        manager.create(Booking, {
+          pnr: await uniquePnr(manager, pnrs),
+          holdId: hold.holdId,
+          status: 'CONFIRMED',
+          ownerId: DEMO_OWNER,
+          totalMinor,
+          currency: 'USD',
+          paymentReference: `demo_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+          createdAt,
+        }),
+      );
+      for (let i = 0; i < size; i++) {
+        sequence += 1;
+        const documentNumber = `DEMO${vuelo.id.slice(0, 4).toUpperCase()}${String(sequence).padStart(4, '0')}`;
+        const travellers = await ensureTravellers(manager, [{ documentType: 'PASSPORT', nationality: 'EC', documentNumber }]);
+        const passenger = await manager.save(
+          manager.create(Passenger, {
+            bookingId: booking.bookingId,
+            travellerId: [...travellers.values()][0],
+            clientPassengerId: `p${i + 1}`,
+            associatedAdultClientId: null,
+            passengerType: 'ADULT',
+            firstName: FIRST_NAMES[randomInt(FIRST_NAMES.length)],
+            lastName: LAST_NAMES[randomInt(LAST_NAMES.length)],
+            documentType: 'PASSPORT',
+            documentNumber,
+            nationality: 'EC',
+            birthDate: `${1960 + randomInt(40)}-0${1 + randomInt(9)}-1${randomInt(10)}`,
+            gender: randomInt(2) === 0 ? 'F' : 'M',
+            contactEmail: 'demo@example.com',
+            contactPhone: '+593999999999',
+          }),
+        );
+        await manager.save(manager.create(SeatAssignment, { vueloId: vuelo.id, seatNumber: mine[i], bookingId: booking.bookingId, passengerId: passenger.passengerId }));
+        await manager.save(manager.create(Ticket, { bookingId: booking.bookingId, passengerId: passenger.passengerId, eTicketNumber: await uniqueDigits(manager, tickets), status: 'ISSUED', issuedAt: createdAt }));
+      }
+    }
+  });
+  return seats.length;
+}
+
+/**
+ * Idempotent and conservative: it only ever lowers a flight's open seats, and leaves alone any flight that already
+ * has a hold or a booking on it, so it can run on every deploy without disturbing real activity. Not part of
+ * `seedFlights` on purpose: the integration tests rely on that inventory. After lowering the counter it occupies the
+ * sold seats with synthetic bookings (`fillSeats`), so the seat map matches; a flight already filled has holds on it
+ * and is skipped. Returns how many flights it changed. Needs the field cipher configured (passengers are encrypted).
+ */
+export async function seedDemoScenarios(dataSource: DataSource, now: Date = new Date()): Promise<number> {
+  let changed = 0;
+  for (const scenario of DEMO_SCENARIOS) {
+    const entry = SCHEDULE.find((e) => e.codigoVuelo === scenario.codigoVuelo);
+    if (!entry) throw new Error(`Demo scenario for ${scenario.codigoVuelo}: not a flight of the core schedule`);
+    for (const day of scenario.dias) {
+      const vuelo = await dataSource.getRepository(Vuelo).findOne({ where: { codigoVuelo: entry.codigoVuelo, fechaSalida: utcDateAtHour(day, entry.hour, now) } });
+      if (!vuelo) continue;
+
+      const used =
+        (await dataSource.getRepository(SeatAssignment).count({ where: { vueloId: vuelo.id } })) > 0 ||
+        (await dataSource
+          .getRepository(FlightHoldItem)
+          .createQueryBuilder('i')
+          .innerJoin(FlightHold, 'h', 'h."holdId" = i."holdId"')
+          .where('i."vueloId" = :vueloId AND h."status" IN (:...states)', { vueloId: vuelo.id, states: ['HELD', 'CONSUMED'] })
+          .getCount()) > 0;
+      if (used) continue;
+
+      if (vuelo.asientosDisponibles > scenario.libres) {
+        await dataSource
+          .createQueryBuilder()
+          .update(Vuelo)
+          .set({ asientosDisponibles: scenario.libres })
+          .where('id = :id AND "asientosDisponibles" > :libres', { id: vuelo.id, libres: scenario.libres })
+          .execute();
+        vuelo.asientosDisponibles = scenario.libres;
+      }
+      // The sold seats are the capacity minus what is open now (the counter may already have been lowered by an earlier run).
+      const ocupados = vuelo.capacidadTotal - vuelo.asientosDisponibles;
+      if (ocupados > 0) await fillSeats(dataSource, vuelo, ocupados, now);
+      changed += 1;
+    }
+  }
+  return changed;
+}
