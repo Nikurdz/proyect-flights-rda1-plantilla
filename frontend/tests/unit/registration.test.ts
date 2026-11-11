@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { getTodayDateString } from '../../src/lib/dates';
 import { ageOn, registrationSchema } from '../../src/features/account/registration-schema';
 
 const valid = {
@@ -41,8 +42,9 @@ describe('registration form rules', () => {
   });
 
   it('requires an adult with a plausible birth date', () => {
-    const today = new Date();
-    const years = (n: number) => `${today.getFullYear() - n}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    // "Today" is the Ecuador day (what the schema uses), not the day of the machine running the test: CI runs in UTC.
+    const [year, month, day] = getTodayDateString().split('-');
+    const years = (n: number) => `${Number(year) - n}-${month}-${day}`;
 
     expect(registrationSchema.safeParse({ ...valid, fechaNacimiento: years(18) }).success).toBe(true);
     expect(problems({ fechaNacimiento: years(17) })).toEqual([expect.stringContaining('mayor de 18')]);
