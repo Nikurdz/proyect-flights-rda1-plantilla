@@ -158,4 +158,4 @@ Sin broker, la consistencia eventual la garantiza `ReconciliacionService` (cada 
 
 ## 8. Fuera de esta fase (decisiones documentadas)
 
-Sin broker ni outbox transaccional; pasarela, antifraude y correo simulados; vuelos directos, cabina económica y búsqueda por día UTC; los eventos `flight.*` los producen acciones de administración (no hay una fuente operativa real de aerolíneas).
+Sin broker ni outbox transaccional; pasarela, antifraude y correo simulados; vuelos directos y cabina económica; la búsqueda lee la fecha como día local (Ecuador en la web, aeropuerto de origen en la API v2), mientras el estado de vuelo, el stock y el feed de eventos siguen en días UTC; los eventos `flight.*` los producen acciones de administración (no hay una fuente operativa real de aerolíneas).

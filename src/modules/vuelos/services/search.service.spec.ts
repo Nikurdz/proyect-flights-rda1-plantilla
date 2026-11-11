@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { AirportZones } from '../common/airport-zones';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { FareFamily } from '../entities/fare-family.entity';
 import { FlightOffer } from '../entities/flight-offer.entity';
@@ -71,6 +72,7 @@ describe('SearchService', () => {
   const vuelosRepo = { createQueryBuilder: jest.fn(() => queryBuilder) };
   const fareFamiliesRepo = { find: jest.fn(async () => families) };
   const offersRepo = { create: jest.fn((data) => data), save: jest.fn(async (data) => data) };
+  const airportZones = { zoneOf: jest.fn(async (iata?: string) => (iata === 'GPS' ? 'Pacific/Galapagos' : 'America/Guayaquil')) };
 
   const request = (passengers: Record<string, number>, legs = 1) => ({
     itineraries: Array.from({ length: legs }, (_, i) => ({
@@ -93,6 +95,7 @@ describe('SearchService', () => {
         { provide: getRepositoryToken(FareFamily), useValue: fareFamiliesRepo },
         { provide: getRepositoryToken(FlightOffer), useValue: offersRepo },
         { provide: VUELOS_CONFIG, useValue: config },
+        { provide: AirportZones, useValue: airportZones },
       ],
     }).compile();
 
@@ -153,5 +156,34 @@ describe('SearchService', () => {
   it('asks the catalog only for flights that can seat the whole party', async () => {
     await service.search(request({ adults: 2, children: 1, infants: 1 }));
     expect(queryBuilder.andWhere).toHaveBeenCalledWith(expect.stringContaining('asientosDisponibles'), { seatsNeeded: 3 });
+  });
+
+  it('reads the day in UTC by default and in the origin airport zone with originLocalDay', async () => {
+    const range = () => queryBuilder.andWhere.mock.calls.find(([sql]) => String(sql).includes(':start'))![1];
+
+    await service.findDirectFlights('UIO', 'GYE', '2027-01-15', 1);
+    expect(range()).toEqual({ start: new Date('2027-01-15T00:00:00.000Z'), end: new Date('2027-01-16T00:00:00.000Z') });
+
+    jest.clearAllMocks();
+    await service.findDirectFlights('UIO', 'GYE', '2027-01-15', 1, { originLocalDay: true });
+    expect(range()).toEqual({ start: new Date('2027-01-15T05:00:00.000Z'), end: new Date('2027-01-16T05:00:00.000Z') });
+
+    jest.clearAllMocks();
+    await service.findDirectFlights('GPS', 'SCY', '2027-01-15', 1, { originLocalDay: true });
+    expect(range()).toEqual({ start: new Date('2027-01-15T06:00:00.000Z'), end: new Date('2027-01-16T06:00:00.000Z') });
+  });
+
+  it('with originLocalDay, "today" is the date at each origin: late in the Ecuador evening the UTC date is already tomorrow', async () => {
+    // Only `Date` is faked: 19:30 in Ecuador on 15 January.
+    jest.useFakeTimers({ now: new Date('2027-01-16T00:30:00.000Z'), doNotFake: ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    try {
+      const today = { itineraries: [{ origin: 'UIO', destination: 'GYE', departureDate: '2027-01-15' }], passengers: { adults: 1 } };
+      await expect(service.search(today)).rejects.toMatchObject({ status: 400 }); // a UTC day: 15 January is already "the past"
+      await expect(service.search(today, { originLocalDay: true })).resolves.toMatchObject({ totalOffers: expect.any(Number) });
+      const yesterday = { ...today, itineraries: [{ ...today.itineraries[0], departureDate: '2027-01-14' }] };
+      await expect(service.search(yesterday, { originLocalDay: true })).rejects.toMatchObject({ status: 400 });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

@@ -5676,9 +5676,9 @@ paths:
   /offers/{offerId}/seatmap:
     get:
       description: >-
-        Muestra los asientos ya emitidos (reservados por una reserva confirmada). Un hold no fija asientos concretos: dos clientes pueden
-        elegir el mismo asiento libre y el perdedor recibe 409 `SEAT_TAKEN` al confirmar la reserva, sin cobro. Es un mapa de cabina, no una
-        reserva de inventario.
+        `isAvailable` es `false` para los asientos ya emitidos y para los que un hold activo tiene apartados (`assignedSeats` de `POST
+        /offers/hold`, o los que un cliente de la web eligió para su oferta); estos últimos vuelven a estar disponibles si el hold vence o
+        se libera. Un hold sin `assignedSeats` no aparta ningún asiento.
       operationId: VuelosController_getSeatmap
       parameters:
         - in: path
@@ -7026,9 +7026,19 @@ components:
             type: string
           type: array
         isAvailable:
+          description: false para HELD y OCCUPIED.
           type: boolean
         seatNumber:
           example: 12A
+          type: string
+        status:
+          description: >-
+            AVAILABLE; HELD = apartado por otra oferta o bloqueo activo (puede liberarse); OCCUPIED = vendido. Los asientos que esta misma
+            oferta tiene apartados salen AVAILABLE.
+          enum:
+            - AVAILABLE
+            - HELD
+            - OCCUPIED
           type: string
       required:
         - seatNumber
@@ -8088,6 +8098,14 @@ components:
       type: object
     HoldRequestDto:
       properties:
+        assignedSeats:
+          description: >-
+            Asientos que el bloqueo aparta mientras está HELD (se ven `HELD` en el seatmap). Como mucho uno por pasajero con asiento y
+            tramo. 409 SEAT_TAKEN si alguno ya está vendido o apartado por otro bloqueo activo.
+          items:
+            $ref: '#/components/schemas/SeatAssignmentDto'
+          maxItems: 300
+          type: array
         itinerarySelections:
           items:
             $ref: '#/components/schemas/ItinerarySelectionDto'

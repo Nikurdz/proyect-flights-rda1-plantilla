@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { TokenService } from './auth/token.service';
+import { AirportZones } from './common/airport-zones';
 import { FieldCipher } from './common/cifrado';
 import { DomainEventBus } from './common/domain-event-bus';
 import { VUELOS_CONFIG, VuelosConfig, loadVuelosConfig } from './common/vuelos-config';
@@ -15,6 +16,7 @@ import { FareFamily } from './entities/fare-family.entity';
 import { BookingCambio } from './entities/booking-cambio.entity';
 import { FlightHold } from './entities/flight-hold.entity';
 import { FlightHoldItem } from './entities/flight-hold-item.entity';
+import { FlightHoldSeat } from './entities/flight-hold-seat.entity';
 import { FlightOfferItinerary } from './entities/flight-offer-itinerary.entity';
 import { FlightOffer } from './entities/flight-offer.entity';
 import { IdempotencyRecord } from './entities/idempotency-record.entity';
@@ -56,6 +58,7 @@ import { WebhooksService } from './services/webhooks.service';
       FlightOfferItinerary,
       FlightHold,
       FlightHoldItem,
+      FlightHoldSeat,
       Booking,
       BookingCambio,
       Passenger,
@@ -91,6 +94,7 @@ import { WebhooksService } from './services/webhooks.service';
     DomainEventBus,
     IdempotencyService,
     InventoryService,
+    AirportZones,
     SearchService,
     OffersService,
     BookingsService,
@@ -113,6 +117,7 @@ import { WebhooksService } from './services/webhooks.service';
     DomainEventBus,
     IdempotencyService,
     InventoryService,
+    AirportZones,
     SearchService,
     OffersService,
     BookingsService,

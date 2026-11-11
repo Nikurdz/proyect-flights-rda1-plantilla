@@ -111,7 +111,8 @@ export class VuelosV2Controller {
         { name: 'X-Device-Fingerprint', reason: 'required header is missing or empty' },
       ]);
     }
-    return this.searchService.search(body);
+    // departureDate is a calendar day of the origin airport (not a UTC day): validation and the day's flights use its zone.
+    return this.searchService.search(body, { originLocalDay: true });
   }
 
   @Get('offers/:offerId/seatmap')

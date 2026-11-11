@@ -103,9 +103,9 @@ export class VuelosController {
   @ApiOperation({
     summary: 'Obtener mapa de asientos por segmento',
     description:
-      'Muestra los asientos ya emitidos (reservados por una reserva confirmada). Un hold no fija asientos concretos: ' +
-      'dos clientes pueden elegir el mismo asiento libre y el perdedor recibe 409 `SEAT_TAKEN` al confirmar la reserva, ' +
-      'sin cobro. Es un mapa de cabina, no una reserva de inventario.',
+      '`isAvailable` es `false` para los asientos ya emitidos y para los que un hold activo tiene apartados ' +
+      '(`assignedSeats` de `POST /offers/hold`, o los que un cliente de la web eligió para su oferta); estos últimos ' +
+      'vuelven a estar disponibles si el hold vence o se libera. Un hold sin `assignedSeats` no aparta ningún asiento.',
   })
   @ApiParam({ name: 'offerId', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Mapa de asientos' })

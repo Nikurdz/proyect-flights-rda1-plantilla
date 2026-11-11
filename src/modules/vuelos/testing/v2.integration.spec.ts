@@ -5,10 +5,12 @@ import { INestApplication } from '@nestjs/common';
 import request = require('supertest');
 import { DataSource } from 'typeorm';
 import { signWebhookBodyV2 } from '../common/safe-http';
+import { FlightHoldSeat } from '../entities/flight-hold-seat.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import { WebhookSubscription, WebhookSubscriptionEvent } from '../entities/webhook-subscription.entity';
 import { seedFlights } from '../seed/flights.seed';
 import { DomainEventBus } from '../common/domain-event-bus';
+import { OffersService } from '../services/offers.service';
 import { WebhookDispatcherService } from '../services/webhook-dispatcher.service';
 import { PartnerAuthService } from '../v2/auth/partner-auth.service';
 import { ContractV2Validator } from './contract-v2-validator';
@@ -341,6 +343,189 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       expect(second.status).toBe(409);
       expect(second.body.code).toBe('ALREADY_CANCELLED');
       contract.check('post', '/vuelos/bookings/{bookingId}/cancel', 409, second.body, second.headers['content-type']);
+    });
+  });
+
+  describe('seats set aside by a hold (assignedSeats)', () => {
+    type Seat = { seatNumber: string; status: string; isAvailable: boolean };
+
+    /** A hold on the first flight of `date` that sets `seatNumbers` aside (one adult per seat, at least one). */
+    async function holdSeats(token: string, userId: string, date: string, seatNumbers: string[], extra: Record<string, unknown> = {}) {
+      const offer = await searchOffer(date);
+      const segmentId = (await api().get(`${V2}/offers/${offer.offerId}/seatmap`).expect(200)).body.segmentId as string;
+      const body = {
+        offerId: offer.offerId,
+        itinerarySelections: offer.itineraries.map((i) => ({ itineraryId: i.itineraryId, cabinClass: 'ECONOMY', fareBrand: 'FULL' })),
+        passengersBreakdown: { adults: Math.max(1, seatNumbers.length) },
+        assignedSeats: seatNumbers.map((seatNumber) => ({ segmentId, seatNumber })),
+        ...extra,
+      };
+      const res = await api().post(`${V2}/offers/hold`).set(bearer(token, userId)).set('Idempotency-Key', randomUUID()).send(body);
+      return { res, body, offer, segmentId };
+    }
+
+    /** One seat of the v2 seat map (the answer is checked against the contract). */
+    async function seatOf(offerId: string, segmentId: string, seatNumber: string): Promise<Seat> {
+      const map = await api().get(`${V2}/offers/${offerId}/seatmap`).query({ segmentId }).expect(200);
+      contract.check('get', '/vuelos/offers/{offerId}/seatmap', 200, map.body);
+      return (map.body.cabins[0].rows.flatMap((r: { seats: Seat[] }) => r.seats) as Seat[]).find((s) => s.seatNumber === seatNumber)!;
+    }
+    const heldRows = (segmentId: string, seatNumber: string) => ds.getRepository(FlightHoldSeat).count({ where: { vueloId: segmentId, seatNumber } });
+    const freeSeats = (segmentId: string) => ds.getRepository(Vuelo).findOneByOrFail({ id: segmentId }).then((v) => v.asientosDisponibles);
+
+    it('holds the seats (201), shows them HELD, refuses them to a second hold (409 SEAT_TAKEN) and frees them on release', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const first = await holdSeats(token, 'seat-u1', date, ['7A']);
+      expect(first.res.status).toBe(201);
+      contract.check('post', '/vuelos/offers/hold', 201, first.res.body);
+      const { segmentId } = first;
+
+      expect(await seatOf(first.offer.offerId, segmentId, '7A')).toMatchObject({ status: 'HELD', isAvailable: false });
+      expect(await seatOf(first.offer.offerId, segmentId, '7B')).toMatchObject({ status: 'AVAILABLE', isAvailable: true });
+      // v1 has no `status`: a held seat is simply not available.
+      const v1 = await api().get(`/api/v1/offers/${first.offer.offerId}/seatmap`).query({ segmentId }).expect(200);
+      const v1Seat = v1.body.cabins[0].rows.flatMap((r: { seats: Record<string, unknown>[] }) => r.seats).find((s: Record<string, unknown>) => s.seatNumber === '7A');
+      expect(v1Seat).toEqual(expect.objectContaining({ isAvailable: false }));
+      expect(v1Seat.status).toBeUndefined();
+
+      // Another user asks for the same seat: 409 naming it, and nothing of that hold is kept (no inventory taken).
+      const before = await freeSeats(segmentId);
+      const second = await holdSeats(token, 'seat-u2', date, ['7A']);
+      expect(second.segmentId).toBe(segmentId);
+      expect(second.res.status).toBe(409);
+      expect(second.res.body).toMatchObject({ code: 'SEAT_TAKEN', detail: `El asiento 7A del segmento ${segmentId} ya fue tomado.` });
+      contract.check('post', '/vuelos/offers/hold', 409, second.res.body, second.res.headers['content-type']);
+      expect(await freeSeats(segmentId)).toBe(before);
+
+      // Releasing the hold gives the seat back, and the second user can now hold it.
+      await api().delete(`${V2}/offers/hold/${first.res.body.holdId}`).set(bearer(token, 'seat-u1')).expect(204);
+      expect(await seatOf(first.offer.offerId, segmentId, '7A')).toMatchObject({ status: 'AVAILABLE', isAvailable: true });
+      expect(await heldRows(segmentId, '7A')).toBe(0);
+      const retry = await holdSeats(token, 'seat-u2', date, ['7A']);
+      expect(retry.res.status).toBe(201);
+    });
+
+    it('validates the seats of the hold: segment of the offer, a real seat, no repeats, one per seat-taking passenger', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const probe = await holdSeats(token, 'seat-v1', date, []);
+      expect(probe.res.status).toBe(201); // an empty list is a plain hold
+      const { segmentId } = probe;
+      const attempt = (assignedSeats: unknown, adults = 1) => holdSeats(token, 'seat-v1', date, [], { assignedSeats, passengersBreakdown: { adults } });
+
+      const foreign = await attempt([{ segmentId: randomUUID(), seatNumber: '8A' }]);
+      expect(foreign.res.status).toBe(400);
+      contract.check('post', '/vuelos/offers/hold', 400, foreign.res.body, foreign.res.headers['content-type']);
+
+      const missing = await attempt([{ segmentId, seatNumber: '999F' }]);
+      expect(missing.res.status).toBe(422);
+      expect(missing.res.body.code).toBe('SEAT_CABIN_MISMATCH');
+
+      const repeated = await attempt([{ segmentId, seatNumber: '8A' }, { segmentId, seatNumber: '8A' }], 2);
+      expect(repeated.res.status).toBe(409);
+      expect(repeated.res.body.code).toBe('SEAT_TAKEN');
+
+      const tooMany = await attempt([{ segmentId, seatNumber: '8A' }, { segmentId, seatNumber: '8B' }], 1);
+      expect(tooMany.res.status).toBe(422);
+
+      const malformed = await attempt([{ segmentId, seatNumber: 'A8' }]);
+      expect(malformed.res.status).toBe(400);
+
+      // None of the refused holds kept a seat.
+      expect(await ds.getRepository(FlightHoldSeat).count({ where: { vueloId: segmentId } })).toBe(0);
+    });
+
+    it('frees the seats of a hold that ran out, also before the sweeper has seen it', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const overdue = await holdSeats(token, 'seat-e1', date, ['9A', '9B']);
+      expect(overdue.res.status).toBe(201);
+      const { segmentId } = overdue;
+      expect((await seatOf(overdue.offer.offerId, segmentId, '9A')).status).toBe('HELD');
+
+      await ds.query(`UPDATE "${ctx.schema}"."vuelos_flight_holds" SET "expiresAt" = $1 WHERE "holdId" = $2`, [new Date(Date.now() - 60_000), overdue.res.body.holdId]);
+      // Not swept yet (its rows are still there), but an overdue hold holds nothing.
+      expect(await heldRows(segmentId, '9A')).toBe(1);
+      expect(await seatOf(overdue.offer.offerId, segmentId, '9A')).toMatchObject({ status: 'AVAILABLE', isAvailable: true });
+
+      // Another hold takes one of those seats right away.
+      const next = await holdSeats(token, 'seat-e2', date, ['9A']);
+      expect(next.res.status).toBe(201);
+      expect((await seatOf(next.offer.offerId, segmentId, '9A')).status).toBe('HELD');
+
+      // The sweep removes what was left of the overdue hold and leaves the new hold's seat alone.
+      await app.get(OffersService).expireDueHolds();
+      expect(await heldRows(segmentId, '9B')).toBe(0);
+      expect((await seatOf(next.offer.offerId, segmentId, '9A')).status).toBe('HELD');
+      expect((await seatOf(next.offer.offerId, segmentId, '9B')).status).toBe('AVAILABLE');
+    });
+
+    it('turns HELD into TICKETED when the hold is booked with that seat, and frees a held seat the booking does not assign', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const held = await holdSeats(token, 'seat-b1', date, ['10A']);
+      const { segmentId } = held;
+      const booked = await book(token, 'seat-b1', held.res.body.holdId, { passengers: [pax('a1', { assignedSeats: [{ segmentId, seatNumber: '10A' }] })] });
+      expect(booked.status).toBe(201);
+      expect(await seatOf(held.offer.offerId, segmentId, '10A')).toMatchObject({ status: 'TICKETED', isAvailable: false });
+      expect(await heldRows(segmentId, '10A')).toBe(0);
+
+      // The booking decides the seats: without `assignedSeats` the seat the hold had set aside is free again.
+      const loose = await holdSeats(token, 'seat-b2', date, ['10B']);
+      expect((await seatOf(loose.offer.offerId, segmentId, '10B')).status).toBe('HELD');
+      expect((await book(token, 'seat-b2', loose.res.body.holdId, { passengers: [pax('b2')] })).status).toBe(201);
+      expect(await seatOf(loose.offer.offerId, segmentId, '10B')).toMatchObject({ status: 'AVAILABLE', isAvailable: true });
+    });
+
+    it('refuses a booking (and a seat change) that asks for a seat another hold has set aside, and keeps that booking\'s hold HELD', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const owner = await holdSeats(token, 'seat-c1', date, ['11A']);
+      const { segmentId } = owner;
+      const other = await holdSeats(token, 'seat-c2', date, []);
+      const otherHoldId = other.res.body.holdId as string;
+
+      const refused = await book(token, 'seat-c2', otherHoldId, { passengers: [pax('c2', { assignedSeats: [{ segmentId, seatNumber: '11A' }] })] });
+      expect(refused.status).toBe(409);
+      expect(refused.body).toMatchObject({ code: 'SEAT_TAKEN', detail: `El asiento 11A del segmento ${segmentId} ya fue tomado.` });
+      contract.check('post', '/vuelos/bookings', 409, refused.body, refused.headers['content-type']);
+      const status = await api().get(`${V2}/offers/hold/${otherHoldId}`).set(bearer(token, 'seat-c2')).expect(200);
+      expect(status.body.status).toBe('HELD');
+      expect((await seatOf(owner.offer.offerId, segmentId, '11A')).status).toBe('HELD');
+
+      // The same hold books with another seat; moving to the held seat afterwards is refused too.
+      const booked = await book(token, 'seat-c2', otherHoldId, { passengers: [pax('c2', { assignedSeats: [{ segmentId, seatNumber: '11B' }] })] });
+      expect(booked.status).toBe(201);
+      const move = await api().put(`${V2}/bookings/${booked.body.bookingId}/seats`).set(bearer(token, 'seat-c2')).set('Idempotency-Key', randomUUID()).send({ seats: [{ passengerId: 'c2', segmentId, seatNumber: '11A' }] });
+      expect(move.status).toBe(409);
+      expect(move.body.code).toBe('SEAT_TAKEN');
+
+      // The owner of the held seat is not affected: it books it.
+      const mine = await book(token, 'seat-c1', owner.res.body.holdId, { passengers: [pax('c1', { assignedSeats: [{ segmentId, seatNumber: '11A' }] })] });
+      expect(mine.status).toBe(201);
+      expect((await seatOf(owner.offer.offerId, segmentId, '11A')).status).toBe('TICKETED');
+    });
+
+    it('two holds racing for one seat: exactly one is created, the other answers 409 and takes no inventory', async () => {
+      const token = await tokenFor();
+      const date = dayAhead(day++);
+      const offer = await searchOffer(date);
+      const segmentId = (await api().get(`${V2}/offers/${offer.offerId}/seatmap`).expect(200)).body.segmentId as string;
+      const before = await freeSeats(segmentId);
+      const body = {
+        offerId: offer.offerId,
+        itinerarySelections: offer.itineraries.map((i) => ({ itineraryId: i.itineraryId, cabinClass: 'ECONOMY', fareBrand: 'FULL' })),
+        passengersBreakdown: { adults: 1 },
+        assignedSeats: [{ segmentId, seatNumber: '12A' }],
+      };
+      const attempt = (userId: string) => api().post(`${V2}/offers/hold`).set(bearer(token, userId)).set('Idempotency-Key', randomUUID()).send(body);
+
+      const results = await Promise.all([attempt('seat-r1'), attempt('seat-r2'), attempt('seat-r3')]);
+      expect(results.map((r) => r.status).sort()).toEqual([201, 409, 409]);
+      for (const lost of results.filter((r) => r.status === 409)) expect(lost.body.code).toBe('SEAT_TAKEN');
+      expect(await heldRows(segmentId, '12A')).toBe(1);
+      expect(await freeSeats(segmentId)).toBe(before - 1);
     });
   });
 

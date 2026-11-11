@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { AuthClaims } from '../auth/token.service';
 import { mapBookingUniqueViolation, seatTakenProblem } from '../common/db-errors';
+import { assertNotHeldByAnotherHold, lockSeats } from '../common/held-seats';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { seatExists } from '../common/seat-grid';
@@ -84,6 +85,10 @@ export class SeatChangeV2Service {
           }
 
           // A seat held by another booking is taken; one held by a passenger of this booking is free only if that passenger leaves it in this same request (a swap).
+          // A seat set aside by an active hold is taken too (the booking's own hold is consumed and holds nothing).
+          const wanted = changes.filter((c) => c.previousSeatNumber !== c.seatNumber).map((c) => ({ segmentId: c.segmentId, seatNumber: c.seatNumber }));
+          await lockSeats(manager, wanted);
+          await assertNotHeldByAnotherHold(manager, wanted);
           const leaving = new Set(changes.filter((c) => c.previousSeatNumber !== c.seatNumber).map((c) => `${c.segmentId}:${c.previousSeatNumber}`));
           for (const change of changes.filter((c) => c.previousSeatNumber !== c.seatNumber)) {
             const occupied = await manager.findOne(SeatAssignment, { where: { vueloId: change.segmentId, seatNumber: change.seatNumber } });

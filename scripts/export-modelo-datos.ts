@@ -31,6 +31,7 @@ const PROPOSITO: Record<string, string> = {
   vuelos_flight_offer_itineraries: 'Tramos de cada oferta de búsqueda (id de itinerario → vuelo)',
   vuelos_flight_holds: 'Bloqueo temporal de cupos con precio congelado',
   vuelos_flight_hold_items: 'Tramos de cada bloqueo: vuelo vigente, asientos, cabina y familia',
+  vuelos_flight_hold_seats: 'Asientos que un bloqueo activo tiene apartados (estado HELD); la clave única (vuelo, asiento) impide apartarlo dos veces',
   vuelos_bookings: 'Reserva emitida (PNR) con estado y total',
   vuelos_booking_cambios: 'Historial de cambios de una reserva (cambio de fecha, reprogramación, cancelación)',
   vuelos_passengers: 'Pasajeros de la reserva (datos personales cifrados)',

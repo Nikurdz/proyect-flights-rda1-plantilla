@@ -3,7 +3,8 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { assertChronology, assertGroupSize, assertInfantRatio, assertOriginDestinationDiffer } from '../common/business-rules';
-import { ecuadorDayRange, todayEcuador, toIso, utcDayRange } from '../common/date.util';
+import { AirportZones } from '../common/airport-zones';
+import { ecuadorDayRange, todayEcuador, todayInZone, toIso, utcDayRange, zonedDayRange } from '../common/date.util';
 import { formatMinorUnits, toMinorUnits } from '../common/money.util';
 import {
   PASSENGER_TYPES,
@@ -37,14 +38,24 @@ export class SearchService {
     @InjectRepository(FareFamily) private readonly fareFamilies: Repository<FareFamily>,
     @InjectRepository(FlightOffer) private readonly offers: Repository<FlightOffer>,
     @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
+    private readonly airportZones: AirportZones,
   ) {}
 
-  /** `ecuadorDay`: the web (v1) reads a departureDate as an Ecuador calendar day; the partner API (v2) keeps UTC days. */
-  async search(request: SearchRequestDto, options: { ecuadorDay?: boolean } = {}): Promise<SearchResponseDto> {
+  /**
+   * `ecuadorDay`: the web (v1) reads a departureDate as an Ecuador calendar day. `originLocalDay`: the partner API (v2)
+   * reads it as a calendar day of the leg's origin airport (its zone in the catalogue). Neither: a UTC day.
+   */
+  async search(request: SearchRequestDto, options: { ecuadorDay?: boolean; originLocalDay?: boolean } = {}): Promise<SearchResponseDto> {
     for (const leg of request.itineraries) {
       assertOriginDestinationDiffer(leg);
     }
-    assertChronology(request.itineraries, options.ecuadorDay ? todayEcuador() : undefined);
+    if (options.originLocalDay) {
+      const todayAt = new Map<string, string>();
+      for (const leg of request.itineraries) todayAt.set(leg.origin, todayInZone(await this.airportZones.zoneOf(leg.origin)));
+      assertChronology(request.itineraries, (leg) => todayAt.get(leg.origin)!);
+    } else {
+      assertChronology(request.itineraries, options.ecuadorDay ? todayEcuador() : undefined);
+    }
     const passengers = this.normalizeBreakdown(request.passengers);
     assertInfantRatio(passengers);
     assertGroupSize(passengers, this.config.maxPassengersPerOrder);
@@ -54,7 +65,7 @@ export class SearchService {
 
     const legOptions: Vuelo[][] = [];
     for (const leg of request.itineraries) {
-      const matches = await this.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats, { ecuadorDay: options.ecuadorDay });
+      const matches = await this.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats, { ecuadorDay: options.ecuadorDay, originLocalDay: options.originLocalDay });
       if (matches.length === 0) {
         // RF-031: a differentiated empty result, not an error.
         return { totalOffers: 0, offers: [] };
@@ -128,9 +139,16 @@ export class SearchService {
     );
   }
 
-  /** Direct flights on one calendar day (UTC, or Ecuador with `ecuadorDay`) that have not departed and can seat the whole party. */
-  async findDirectFlights(origin: string | undefined, destination: string | undefined, departureDate: string, seatsNeeded: number, options: { includeSoldOut?: boolean; ecuadorDay?: boolean } = {}): Promise<Vuelo[]> {
-    const { start, end } = options.ecuadorDay ? ecuadorDayRange(departureDate) : utcDayRange(departureDate);
+  /**
+   * Direct flights on one calendar day (UTC; Ecuador with `ecuadorDay`; the origin airport's own zone with
+   * `originLocalDay`) that have not departed and can seat the whole party.
+   */
+  async findDirectFlights(origin: string | undefined, destination: string | undefined, departureDate: string, seatsNeeded: number, options: { includeSoldOut?: boolean; ecuadorDay?: boolean; originLocalDay?: boolean } = {}): Promise<Vuelo[]> {
+    const { start, end } = options.originLocalDay
+      ? zonedDayRange(departureDate, await this.airportZones.zoneOf(origin))
+      : options.ecuadorDay
+        ? ecuadorDayRange(departureDate)
+        : utcDayRange(departureDate);
     const qb = this.vuelos.createQueryBuilder('v').leftJoinAndSelect('v.aerolineaRef', 'a').where('1 = 1');
     // Omitted origin/destination mean "any": lets a visitor browse without knowing codes.
     if (origin) qb.andWhere('v."origenIATA" = :origin', { origin });

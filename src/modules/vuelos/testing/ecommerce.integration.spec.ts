@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { Booking } from '../entities/booking.entity';
 import { SeatAssignment } from '../entities/seat-assignment.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
+import { FlightHoldSeat } from '../entities/flight-hold-seat.entity';
 import { findHold } from '../common/hold-loader';
 import { Vuelo } from '../entities/vuelo.entity';
 import { ProblemDetailsException } from '../common/problem-details.exception';
@@ -1030,7 +1031,7 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(foreignLeg.body.code).toBe('VALIDATION_FAILED');
 
       // A lap infant takes no seat.
-      const withInfant = await nuevaOferta(token, { pasajeros: { adultos: 1, ninos: 0, infantes: 1 } });
+      const withInfant = await nuevaOferta(token, { pasajeros: { adultos: 1, ninos: 0, infantes: 1 }, fechas: mismasFechas(out) }); // same days: fresh ones come out of the seeded horizon
       expect(withInfant.res.status).toBe(201);
       const infantPlan = await seatPlan(token, withInfant.res.body.ofertaId, [
         pasajero('a1', 'ADULT', yearsBefore(35, withInfant.out)),
@@ -1061,13 +1062,71 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
       expect(seats.find((s: { seatNumber: string }) => s.seatNumber === '10C').isAvailable).toBe(true);
     });
 
+    /** Offers whose seats were picked before holds set seats aside: their picks are saved but nothing holds them. */
+    const sinApartar = (vueloId: string) => ds.getRepository(FlightHoldSeat).delete({ vueloId });
+
+    it('sets the picked seats aside: another offer sees them HELD and cannot pick them, the v2 seat map shows HELD, and the purchase issues them', async () => {
+      const first = await guest();
+      const a = await ofertaConAsientos(first, { adulto: '18A', nino: '18B' });
+      const vueloId = a.ida.itinerarioId;
+      const seatsOf = (res: request.Response) => res.body.filas.flatMap((f: { seats: { seatNumber: string; isAvailable: boolean; status: string }[] }) => f.seats) as { seatNumber: string; isAvailable: boolean; status: string }[];
+      const seat = (res: request.Response, seatNumber: string) => seatsOf(res).find((s) => s.seatNumber === seatNumber)!;
+
+      // The customer still sees its own picks as available; someone else sees them held.
+      expect(seat(await mapa(first, a.ofertaId, vueloId).expect(200), '18A')).toMatchObject({ isAvailable: true, status: 'AVAILABLE' });
+      const second = await guest();
+      const b = await nuevaOferta(second, { fechas: mismasFechas(a.out) });
+      expect(b.ida.itinerarioId).toBe(vueloId);
+      const rivalMap = await mapa(second, b.res.body.ofertaId, vueloId).expect(200);
+      expect(seat(rivalMap, '18A')).toMatchObject({ isAvailable: false, status: 'HELD' });
+      expect(seat(rivalMap, '18B')).toMatchObject({ isAvailable: false, status: 'HELD' });
+      expect(seat(rivalMap, '18C')).toMatchObject({ isAvailable: true, status: 'AVAILABLE' });
+
+      // Partners see the same through the v2 seat map.
+      const gdsOfferId = (await ds.getRepository(Oferta).findOneByOrFail({ ofertaId: a.ofertaId })).gdsOfferId;
+      const v2 = await api().get(`/api/v2/vuelos/offers/${gdsOfferId}/seatmap`).query({ segmentId: vueloId }).expect(200);
+      const v2Seats = v2.body.cabins[0].rows.flatMap((r: { seats: { seatNumber: string; status: string; isAvailable: boolean }[] }) => r.seats) as { seatNumber: string; status: string; isAvailable: boolean }[];
+      expect(v2Seats.find((s) => s.seatNumber === '18A')).toMatchObject({ status: 'HELD', isAvailable: false });
+
+      // The other customer cannot save that seat, and nothing of that attempt is kept.
+      const rivalPlan = (asiento: string) =>
+        seatPlan(second, b.res.body.ofertaId, [pasajero('a1', 'ADULT', yearsBefore(35, b.out), { asientos: [{ trayectoId: vueloId, asiento }] }), pasajero('c1', 'CHILD', yearsBefore(8, b.out))]);
+      const refused = await rivalPlan('18A').expect(409);
+      expect(refused.body.code).toBe('SEAT_TAKEN');
+      expect((await api().get(`/api/v1/ofertas/${b.res.body.ofertaId}`).set(bearer(second)).expect(200)).body.faltantes).toContain('PASAJEROS');
+
+      // Changing the pick gives the old seat back: 18A -> 18D frees 18A for the other customer.
+      await seatPlan(first, a.ofertaId, [
+        pasajero('a1', 'ADULT', yearsBefore(35, a.out), { asientos: [{ trayectoId: vueloId, asiento: '18D' }] }),
+        pasajero('c1', 'CHILD', yearsBefore(8, a.out), { asientos: [{ trayectoId: vueloId, asiento: '18B' }] }),
+      ]).expect(200);
+      await rivalPlan('18A').expect(200);
+
+      // The purchase turns the held seats into sold ones, without tripping over its own hold.
+      await comprar(first, a.ofertaId).expect(201);
+      const sold = await ds.getRepository(SeatAssignment).find({ where: { vueloId }, order: { seatNumber: 'ASC' } });
+      expect(sold.map((r) => r.seatNumber)).toEqual(expect.arrayContaining(['18B', '18D']));
+      const after = await mapa(second, b.res.body.ofertaId, vueloId).expect(200);
+      expect(seat(after, '18D')).toMatchObject({ isAvailable: false, status: 'OCCUPIED' });
+      expect(seat(after, '18A')).toMatchObject({ isAvailable: true, status: 'AVAILABLE' }); // its own pick
+      expect(await ds.getRepository(FlightHoldSeat).count({ where: { vueloId, seatNumber: '18D' } })).toBe(0);
+
+      // Cancelling an offer gives its held seats back.
+      expect(await ds.getRepository(FlightHoldSeat).count({ where: { vueloId, seatNumber: '18A' } })).toBe(1);
+      await api().delete(`/api/v1/ofertas/${b.res.body.ofertaId}`).set(bearer(second)).expect(204);
+      expect(await ds.getRepository(FlightHoldSeat).count({ where: { vueloId, seatNumber: '18A' } })).toBe(0);
+    });
+
     it('reports a seat taken meanwhile BEFORE charging, and the customer can pick another and still buy', async () => {
       const first = await guest();
       const a = await ofertaConAsientos(first, { adulto: '12C' });
+      // The first offer's pick is not held (as with an offer saved before seats were set aside), so the second can take it.
+      await sinApartar(a.ida.itinerarioId);
 
       const second = await guest();
       const b = await ofertaConAsientos(second, { adulto: '12C' }, mismasFechas(a.out)); // still free when picked
       expect(b.ida.itinerarioId).toBe(a.ida.itinerarioId);
+      await sinApartar(a.ida.itinerarioId);
 
       await comprar(first, a.ofertaId).expect(201);
 
@@ -1085,8 +1144,11 @@ describeIntegration('E-commerce R1 against a real Postgres', () => {
     it('two purchases racing for one seat: exactly one is issued and the other is never captured', async () => {
       const first = await guest();
       const a = await ofertaConAsientos(first, { adulto: '15A' });
+      // Neither pick is held (offers saved before seats were set aside): the race is decided when the seat is sold.
+      await sinApartar(a.ida.itinerarioId);
       const second = await guest();
       const b = await ofertaConAsientos(second, { adulto: '15A' }, mismasFechas(a.out));
+      await sinApartar(a.ida.itinerarioId);
 
       const results = await Promise.all([comprar(first, a.ofertaId), comprar(second, b.ofertaId)]);
       expect(results.filter((r) => r.status === 201)).toHaveLength(1);

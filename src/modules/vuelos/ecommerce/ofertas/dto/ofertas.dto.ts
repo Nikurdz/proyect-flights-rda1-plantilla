@@ -274,9 +274,14 @@ export class MapaAsientosQueryDto {
   trayectoId: string;
 }
 
+export const ASIENTO_ESTADOS = ['AVAILABLE', 'HELD', 'OCCUPIED'] as const;
+export type AsientoEstado = (typeof ASIENTO_ESTADOS)[number];
+
 class AsientoViewDto {
   @ApiProperty({ example: '12A' }) seatNumber: string;
-  @ApiProperty() isAvailable: boolean;
+  @ApiProperty({ description: 'false para HELD y OCCUPIED.' }) isAvailable: boolean;
+  @ApiPropertyOptional({ enum: ASIENTO_ESTADOS, description: 'AVAILABLE; HELD = apartado por otra oferta o bloqueo activo (puede liberarse); OCCUPIED = vendido. Los asientos que esta misma oferta tiene apartados salen AVAILABLE.' })
+  status?: AsientoEstado;
   @ApiProperty({ type: [String], example: ['WINDOW'] }) characteristics: string[];
 }
 

@@ -26,7 +26,7 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
     const list: string[] = [];
     for (let offset = -3; offset <= 3; offset++) {
       const d = addDaysToDate(currentDate, offset);
-      // Ensure we don't include dates before minDate (UTC today)
+      // Ensure we don't include dates before minDate (today in Ecuador)
       if (d >= minDate) {
         list.push(d);
       }

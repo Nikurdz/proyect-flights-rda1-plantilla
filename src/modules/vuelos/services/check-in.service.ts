@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import type { AuthClaims } from '../auth/token.service';
 import { uniqueViolationColumns } from '../common/db-errors';
+import { heldSeatNumbers } from '../common/held-seats';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { boardingGroupFor, checkInWindow, firstFreeSeat, hasDeparted } from '../common/postsale-rules';
 import { ProblemDetailsException } from '../common/problem-details.exception';
@@ -129,7 +130,8 @@ export class CheckInService {
 
     const cabin = buildSeatGrid(capacity).flatMap((row) => row.seats.map((seat) => seat.seatNumber));
     for (let attempt = 0; attempt < SEAT_RETRIES; attempt += 1) {
-      const taken = new Set((await manager.find(SeatAssignment, { where: { vueloId } })).map((s) => s.seatNumber));
+      // Sold seats and the ones an active hold has set aside: a passenger is never auto-seated on a held seat.
+      const taken = new Set([...(await manager.find(SeatAssignment, { where: { vueloId } })).map((s) => s.seatNumber), ...(await heldSeatNumbers(manager, vueloId))]);
       const seat = firstFreeSeat(cabin, taken);
       if (!seat) {
         throw new ProblemDetailsException(HttpStatus.CONFLICT, 'CHECK_IN_FAILED', 'No seat available', 'The cabin is full: no seat could be assigned.');

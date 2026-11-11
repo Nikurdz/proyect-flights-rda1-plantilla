@@ -8,10 +8,10 @@ export function isDateOnly(value: string): boolean {
 }
 
 /**
- * Half-open [start, end) UTC range covering one calendar day. Instants are stored in UTC
- * (RNF-28); until an airport timezone catalog is wired into search, a requested
- * departureDate is interpreted as a UTC calendar day, and this is the only place that
- * assumption lives.
+ * Half-open [start, end) UTC range covering one UTC calendar day. Instants are stored in UTC
+ * (RNF-28). Searches read a departureDate as a local day (`ecuadorDayRange` for the web,
+ * `zonedDayRange` in the origin airport's zone for the partner API); the UTC day remains the
+ * default for callers that pass no option.
  */
 export function utcDayRange(date: string): { start: Date; end: Date } {
   const start = new Date(`${date}T00:00:00.000Z`);
@@ -45,6 +45,52 @@ export function todayEcuador(now: Date = new Date()): string {
 export function formatEcuador(iso: string): string {
   const local = new Date(new Date(iso).getTime() + ECUADOR_UTC_OFFSET_HOURS * 3_600_000).toISOString();
   return `${local.slice(0, 10)} ${local.slice(11, 16)} (hora de Ecuador)`;
+}
+
+const zoneFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** The wall-clock fields of an instant in an IANA zone, read back as if they were UTC (throws RangeError for an unknown zone). */
+function wallClockAsUtc(instant: number, timeZone: string): number {
+  let formatter = zoneFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    zoneFormatters.set(timeZone, formatter);
+  }
+  const parts: Record<string, number> = {};
+  for (const part of formatter.formatToParts(new Date(instant))) {
+    if (part.type !== 'literal') parts[part.type] = Number(part.value);
+  }
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour % 24, parts.minute, parts.second);
+}
+
+/** The instant at which the calendar day `date` starts (local midnight) in an IANA zone. */
+function zonedMidnight(date: string, timeZone: string): Date {
+  const wall = new Date(`${date}T00:00:00.000Z`).getTime();
+  const offsetAt = (instant: number) => wallClockAsUtc(instant, timeZone) - instant;
+  // Two passes: the offset at the first guess, then at the corrected instant (matters only when the zone's offset changes near midnight).
+  const guess = wall - offsetAt(wall);
+  return new Date(wall - offsetAt(guess));
+}
+
+/**
+ * Half-open [start, end) UTC range covering one calendar day of an IANA zone: local midnight of `date` to local midnight
+ * of the next day (America/Guayaquil starts at 05:00Z, Pacific/Galapagos at 06:00Z). The partner API (v2) reads a
+ * departureDate this way, in the zone of the origin airport.
+ */
+export function zonedDayRange(date: string, timeZone: string): { start: Date; end: Date } {
+  const nextDay = new Date(new Date(`${date}T00:00:00.000Z`).getTime() + 24 * 3_600_000).toISOString().slice(0, 10);
+  return { start: zonedMidnight(date, timeZone), end: zonedMidnight(nextDay, timeZone) };
+}
+
+/** The calendar date (YYYY-MM-DD) of an instant in an IANA zone. */
+export function dayInZone(instant: Date | string, timeZone: string): string {
+  const at = instant instanceof Date ? instant : new Date(instant);
+  return new Date(wallClockAsUtc(at.getTime(), timeZone)).toISOString().slice(0, 10);
+}
+
+/** Today's date (YYYY-MM-DD) in an IANA zone. */
+export function todayInZone(timeZone: string, now: Date = new Date()): string {
+  return dayInZone(now, timeZone);
 }
 
 /** TypeORM can hand back a Date or an ISO string depending on the column type/driver. */

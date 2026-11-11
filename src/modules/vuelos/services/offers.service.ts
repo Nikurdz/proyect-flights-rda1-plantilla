@@ -5,10 +5,12 @@ import type { AuthClaims } from '../auth/token.service';
 import { assertGroupSize, assertInfantRatio } from '../common/business-rules';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { toIso } from '../common/date.util';
+import { claimHoldSeats, heldSeatNumbers, releaseHoldSeats } from '../common/held-seats';
 import { moneyAmount, toMinorUnits } from '../common/money.util';
 import { PassengerBreakdown, priceForPartyParts, seatsRequired } from '../common/pricing.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { buildSeatGrid } from '../common/seat-grid';
+import { SeatRef, assertHoldSeats } from '../common/seat-rules';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { FareFamily } from '../entities/fare-family.entity';
 import { attachItemsToMany, findHold } from '../common/hold-loader';
@@ -65,9 +67,11 @@ export class OffersService {
       );
     }
 
-    const taken = new Set(
-      (await this.seatAssignments.find({ where: { vueloId: vuelo.id } })).map((s) => s.seatNumber),
-    );
+    // Not available: sold seats and the seats an active hold has set aside (v2 tells them apart with `status`).
+    const taken = new Set([
+      ...(await this.seatAssignments.find({ where: { vueloId: vuelo.id } })).map((s) => s.seatNumber),
+      ...(await heldSeatNumbers(this.seatAssignments.manager, vuelo.id)),
+    ]);
     const rows = buildSeatGrid(vuelo.capacidadTotal).map((row) => ({
       rowNumber: row.rowNumber,
       seats: row.seats.map((seat) => ({
@@ -219,6 +223,10 @@ export class OffersService {
       inventory.push({ vueloId: vuelo.id, seats });
     }
 
+    // Seats the hold sets aside: validated before anything is taken, claimed once the hold row exists.
+    const assignedSeats = request.assignedSeats ?? [];
+    assertHoldSeats(assignedSeats, vuelos, seats);
+
     await this.inventory.reserve(manager, inventory);
 
     const ttlMinutes = request.ttlMinutes ?? this.config.holdTtlMinutes;
@@ -249,6 +257,8 @@ export class OffersService {
         expiresAt,
       }),
     );
+    // 409 SEAT_TAKEN (and the whole hold rolls back) when a seat is sold or set aside by another active hold.
+    await claimHoldSeats(manager, hold.holdId, assignedSeats);
 
     return {
       holdId: hold.holdId,
@@ -257,6 +267,19 @@ export class OffersService {
       ttlMinutes: hold.ttlMinutes,
       lockedPrice: moneyAmount(offer.currency, hold.lockedPriceMinor, hold.lockedTaxesMinor),
     };
+  }
+
+  /**
+   * Replaces the seats a hold has set aside, inside the caller's transaction. Public for the e-commerce offer flow:
+   * the seats a web customer picks for the offer are held by the offer's own hold, so nobody else can take them
+   * while the customer pays. A hold that is no longer active ends up holding nothing. A seat sold or set aside by
+   * another active hold answers 409 SEAT_TAKEN, which rolls the caller's transaction back.
+   */
+  async replaceHoldSeatsWithin(manager: EntityManager, holdId: string, seats: SeatRef[]): Promise<void> {
+    const hold = await manager.findOne(FlightHold, { where: { holdId }, lock: { mode: 'pessimistic_write' } });
+    await releaseHoldSeats(manager, holdId);
+    if (!hold || hold.status !== 'HELD' || hold.expiresAt.getTime() <= Date.now()) return;
+    await claimHoldSeats(manager, holdId, seats);
   }
 
   async getHoldStatus(ownerId: string, holdId: string): Promise<HoldStatusResponseDto> {
@@ -353,12 +376,14 @@ export class OffersService {
 
   /**
    * HELD -> RELEASED|EXPIRED as a conditional UPDATE: only the caller that wins the
-   * transition restores the seats, so a seat can never be returned twice.
+   * transition restores the seats, so a seat can never be returned twice. The seats the
+   * hold had set aside are given back in the same transaction.
    */
   private async transition(manager: EntityManager, hold: FlightHold, to: Extract<HoldStatus, 'RELEASED' | 'EXPIRED'>): Promise<boolean> {
     const result = await manager.update(FlightHold, { holdId: hold.holdId, status: 'HELD' }, { status: to });
     if (result.affected !== 1) return false;
     await this.inventory.restore(manager, hold.inventory);
+    await releaseHoldSeats(manager, hold.holdId);
     return true;
   }
 

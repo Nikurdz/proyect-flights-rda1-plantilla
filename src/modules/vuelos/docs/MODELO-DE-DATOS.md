@@ -2,7 +2,7 @@
 
 > Generado por `npm run docs:modelo` desde las entidades TypeORM: no se edita a mano.
 
-Esquema **real** de PostgreSQL (66 tablas, 84 llaves foráneas) versionado con migraciones (`src/modules/vuelos/migrations/`). Está en **tercera forma normal**: cada dato vive en una sola tabla, los arreglos y documentos se modelan como tablas hijas y toda relación es una `FOREIGN KEY` real.
+Esquema **real** de PostgreSQL (67 tablas, 86 llaves foráneas) versionado con migraciones (`src/modules/vuelos/migrations/`). Está en **tercera forma normal**: cada dato vive en una sola tabla, los arreglos y documentos se modelan como tablas hijas y toda relación es una `FOREIGN KEY` real.
 
 Reglas del modelo:
 
@@ -38,6 +38,8 @@ erDiagram
     vuelos_flight_holds ||--o{ vuelos_flight_hold_items : "holdId"
     vuelos ||--o{ vuelos_flight_hold_items : "vueloId"
     vuelos_fare_families ||--o{ vuelos_flight_hold_items : "fareBrand"
+    vuelos_flight_holds ||--o{ vuelos_flight_hold_seats : "holdId"
+    vuelos ||--o{ vuelos_flight_hold_seats : "vueloId"
     vuelos_flight_offers ||--o{ vuelos_flight_holds : "offerId"
     vuelos_flight_offers ||--o{ vuelos_flight_offer_itineraries : "offerId"
     vuelos ||--o{ vuelos_flight_offer_itineraries : "vueloId"
@@ -140,6 +142,7 @@ erDiagram
 | `vuelos_date_change_offers` | Opciones cotizadas de cambio de fecha | `changeOfferId` | `bookingId`, `ownerId`, `itineraryId`, `fromVueloId`, `toVueloId`, `fareDifferenceMinor`, `taxDifferenceMinor`, `changeFeeMinor`, `totalToPayMinor`, `currency`, `status`, `paymentReference`, `expiresAt`, `createdAt` | `bookingId` → `vuelos_bookings` (cascada); `fromVueloId` → `vuelos` (restringe); `toVueloId` → `vuelos` (restringe) |
 | `vuelos_fare_families` | Familias tarifarias (BASIC, LIGHT, FULL) | `code` | `name`, `carryOnKg`, `checkedBags`, `changeable`, `refundable`, `seatSelectionIncluded`, `upgradeEligible`, `accrualFactor`, `priceMultiplier` | — |
 | `vuelos_flight_hold_items` | Tramos de cada bloqueo: vuelo vigente, asientos, cabina y familia | `id` | `holdId`, `orden`, `itineraryId`, `vueloId`, `seats`, `cabinClass`, `fareBrand` | `holdId` → `vuelos_flight_holds` (cascada); `vueloId` → `vuelos` (restringe); `fareBrand` → `vuelos_fare_families` (restringe) |
+| `vuelos_flight_hold_seats` | Asientos que un bloqueo activo tiene apartados (estado HELD); la clave única (vuelo, asiento) impide apartarlo dos veces | `id` | `holdId`, `vueloId`, `seatNumber` | `holdId` → `vuelos_flight_holds` (cascada); `vueloId` → `vuelos` (restringe) |
 | `vuelos_flight_holds` | Bloqueo temporal de cupos con precio congelado | `holdId` | `offerId`, `ownerId`, `status`, `lockedPriceMinor`, `lockedTaxesMinor`, `currency`, `ttlMinutes`, `adults`, `youths`, `children`, `infants`, `createdAt`, `expiresAt` | `offerId` → `vuelos_flight_offers` (restringe) |
 | `vuelos_flight_offer_itineraries` | Tramos de cada oferta de búsqueda (id de itinerario → vuelo) | `id` | `offerId`, `orden`, `itineraryId`, `vueloId` | `offerId` → `vuelos_flight_offers` (cascada); `vueloId` → `vuelos` (cascada) |
 | `vuelos_flight_offers` | Oferta de búsqueda con precio total y composición del grupo | `offerId` | `grandTotalMinor`, `currency`, `adults`, `youths`, `children`, `infants`, `createdAt`, `expiresAt` | — |
@@ -206,10 +209,10 @@ erDiagram
 
 | Tabla | Para qué sirve | Clave | Columnas | Llaves foráneas (borrado) |
 |---|---|---|---|---|
-| `auditoria_administrativa` | Bitácora de cambios del back-office (antes y después) | `id` | `entidad`, `entidadId`, `actorId`, `accion`, `antes`, `despues`, `creadoEn` | `actorId` → `ecom_clientes` (restringe) |
+| `auditoria_administrativa` | Bitácora de cambios del back-office (antes y después) | `id` | `entidad`, `entidadId`, `actorId`, `accion`, `antes`, `despues`, `correlationId`, `ip`, `userAgent`, `creadoEn` | `actorId` → `ecom_clientes` (restringe) |
 | `auditoria_saga_pasos` | Pasos de cada saga y su duración | `id` | `sagaId`, `secuencia`, `nombre`, `estado`, `detalle`, `duracionMs`, `en` | `sagaId` → `auditoria_sagas` (cascada) |
 | `auditoria_sagas` | Ejecuciones de sagas con su resultado | `sagaId` | `tipo`, `referencia`, `propietarioId`, `correlationId`, `estado`, `error`, `iniciadaEn`, `finalizadaEn` | — |
-| `auditoria_transacciones` | Eventos de dominio que pasaron por el bus (solo identificadores) | `id` | `eventoId`, `tipo`, `agregadoId`, `mercado`, `propietarioId`, `correlationId`, `resumen`, `ocurridoEn`, `registradoEn` | `mercado` → `ecom_mercados` (restringe) |
+| `auditoria_transacciones` | Eventos de dominio que pasaron por el bus (solo identificadores) | `id` | `eventoId`, `tipo`, `agregadoId`, `mercado`, `propietarioId`, `correlationId`, `resumen`, `actorId`, `actorTipo`, `entidad`, `numero`, `origen`, `destino`, `ocurridoEn`, `registradoEn` | `mercado` → `ecom_mercados` (restringe) |
 | `peticiones_http` | Muestra acotada del tráfico HTTP (se purga por antigüedad) | `id` | `metodo`, `ruta`, `estado`, `duracionMs`, `correlationId`, `creadaEn` | — |
 
 ## 3. Estados principales

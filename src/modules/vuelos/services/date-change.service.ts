@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, MoreThan } from 'typeorm';
 import type { AuthClaims } from '../auth/token.service';
 import { mapBookingUniqueViolation } from '../common/db-errors';
+import { assertNotHeldByAnotherHold, lockSeats } from '../common/held-seats';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { formatMinorUnits, toMinorUnits } from '../common/money.util';
 import { changePricing, hasDeparted, isBeforeCutoff } from '../common/postsale-rules';
@@ -61,7 +62,8 @@ export class DateChangeService {
       this.assertChangeable(leg.family.changeable, leg.fareBrand);
       this.assertOpen(new Date(leg.vuelo.fechaSalida), leg.vuelo.codigoVuelo);
 
-      const candidates = (await this.search.findDirectFlights(leg.vuelo.origenIATA, leg.vuelo.destinoIATA, change.newDepartureDate, seatsNeeded))
+      // The new date is a calendar day of the leg's origin airport, like the departureDate of a v2 search.
+      const candidates = (await this.search.findDirectFlights(leg.vuelo.origenIATA, leg.vuelo.destinoIATA, change.newDepartureDate, seatsNeeded, { originLocalDay: true }))
         .filter((vuelo) => vuelo.id !== leg.vueloId && this.keepsLegOrder(context, leg.itineraryId, vuelo))
         .slice(0, MAX_OPTIONS_PER_CHANGE);
 
@@ -239,6 +241,9 @@ export class DateChangeService {
       seen.add(seat.seatNumber);
       return manager.create(SeatAssignment, { vueloId: newVuelo.id, seatNumber: seat.seatNumber, bookingId: context.booking.bookingId, passengerId: takers[index].passengerId });
     });
+    // A seat an active hold has set aside on the new flight is taken, like a sold one.
+    await lockSeats(manager, seats);
+    await assertNotHeldByAnotherHold(manager, seats);
     await manager.save(rows);
   }
 

@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { toIso } from '../../common/date.util';
+import { heldSeatNumbers } from '../../common/held-seats';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { seatExists } from '../../common/seat-grid';
 import { Aerolinea } from '../../entities/aerolinea.entity';
@@ -106,9 +107,11 @@ export class VuelosAdminService {
         if (dto.capacidadTotal < vendidos) {
           throw new ProblemDetailsException(HttpStatus.CONFLICT, 'CONFLICT', 'Capacity below the seats sold', `${vendidos} seat(s) are already sold or held; the capacity cannot be lower.`);
         }
-        const fuera = asignados.filter((a) => !seatExists(dto.capacidadTotal as number, a.seatNumber));
+        // Seats that are sold, or set aside by an active hold, must still exist in the smaller cabin.
+        const apartados = [...(await heldSeatNumbers(manager, vueloId))];
+        const fuera = [...asignados.map((a) => a.seatNumber), ...apartados].filter((asiento) => !seatExists(dto.capacidadTotal as number, asiento));
         if (fuera.length > 0) {
-          throw new ProblemDetailsException(HttpStatus.CONFLICT, 'CONFLICT', 'Assigned seats outside the cabin', `Seat(s) ${fuera.map((f) => f.seatNumber).join(', ')} are assigned and would no longer exist.`);
+          throw new ProblemDetailsException(HttpStatus.CONFLICT, 'CONFLICT', 'Assigned seats outside the cabin', `Seat(s) ${fuera.join(', ')} are assigned and would no longer exist.`);
         }
         vuelo.capacidadTotal = dto.capacidadTotal;
         vuelo.asientosDisponibles = dto.capacidadTotal - vendidos;

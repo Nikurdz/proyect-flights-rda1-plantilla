@@ -36,6 +36,11 @@ export type AsientoElegidoDto = Schemas['AsientoElegidoDto'];
 export interface AsientoMapaDto {
   seatNumber: string;
   isAvailable: boolean;
+  /**
+   * Why a seat is not available: OCCUPIED (sold) or HELD (another customer is buying it, so it may come back).
+   * Optional: the back-office map does not send it.
+   */
+  status?: 'AVAILABLE' | 'HELD' | 'OCCUPIED';
   characteristics: string[];
 }
 

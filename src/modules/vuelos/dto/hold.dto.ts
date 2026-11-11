@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, Min, ValidateNested } from 'class-validator';
+import { SeatAssignmentDto } from './booking.dto';
 import { CABIN_CLASSES } from './enums';
 import { MoneyAmountDto, PassengerBreakdownDto } from './search.dto';
 import { ToUpperTrimmed } from './validators';
@@ -45,6 +46,19 @@ export class HoldRequestDto {
   @Min(5)
   @Max(30)
   ttlMinutes?: number;
+
+  @ApiPropertyOptional({
+    type: [SeatAssignmentDto],
+    maxItems: 300,
+    description:
+      'Asientos que el bloqueo aparta mientras está HELD (se ven `HELD` en el seatmap). Como mucho uno por pasajero con asiento y tramo. 409 SEAT_TAKEN si alguno ya está vendido o apartado por otro bloqueo activo.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(300) // 6 legs x the highest MAX_PASSENGERS_PER_ORDER; the real cap is one seat per seat-taking passenger and leg
+  @ValidateNested({ each: true })
+  @Type(() => SeatAssignmentDto)
+  assignedSeats?: SeatAssignmentDto[];
 }
 
 export class HoldResponseDto {

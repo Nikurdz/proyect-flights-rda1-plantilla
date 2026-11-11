@@ -12,6 +12,7 @@ import {
 } from '../../common/business-rules';
 import { toIso } from '../../common/date.util';
 import { DomainEventBus } from '../../common/domain-event-bus';
+import { heldSeatNumbers, seatHeldByAnotherHold } from '../../common/held-seats';
 import { PASSENGER_TYPES, PassengerBreakdown, PassengerType, countFor } from '../../common/pricing.util';
 import { ProblemDetailsException } from '../../common/problem-details.exception';
 import { seatExists, buildSeatGrid } from '../../common/seat-grid';
@@ -33,6 +34,7 @@ import {
   AceptarCondicionesDto,
   AceptarPrecioDto,
   ArmarOfertaDto,
+  AsientoEstado,
   FacturacionDto,
   MapaAsientosViewDto,
   MedioPagoViewDto,
@@ -370,6 +372,14 @@ export class OfertasService implements OnModuleInit {
       await manager.delete(OfertaPasajero, { ofertaId: oferta.ofertaId });
       await manager.save(pasajeros.map((p, orden) => this.filaPasajero(manager, oferta.ofertaId, p, orden)));
       await manager.update(Oferta, { ofertaId: oferta.ofertaId }, { contactoCorreo: dto.contacto.correo, contactoTelefono: dto.contacto.telefono });
+      // The seats picked are set aside by the offer's own hold (and the ones dropped are given back), so other
+      // customers and partners see them HELD until the offer is paid, cancelled or expires. Losing a race for a
+      // seat here answers 409 SEAT_TAKEN and nothing of this save is kept.
+      await this.gdsOffers.replaceHoldSeatsWithin(
+        manager,
+        oferta.holdId,
+        pasajeros.flatMap((p) => (p.asientos ?? []).map((a) => ({ segmentId: a.trayectoId, seatNumber: a.asiento }))),
+      );
     });
     const guardada = (await cargarOferta(this.ofertas.manager, oferta.ofertaId))!;
     return { ...this.vista(guardada), ...(advertencias.length ? { advertencias } : {}) };
@@ -377,7 +387,11 @@ export class OfertasService implements OnModuleInit {
 
   // ---------------------------------------------------------------- seats
 
-  /** The seat map of one leg of the offer: which seats exist and which are already taken. */
+  /**
+   * The seat map of one leg of the offer: which seats exist and which are already taken. `status` says why a seat
+   * is not available: OCCUPIED (sold) or HELD (set aside by ANOTHER active hold, so it may come back). The seats
+   * this offer's own hold has set aside stay AVAILABLE: they are the customer's current picks.
+   */
   async mapaAsientos(auth: AuthClaims, id: string, trayectoId: string): Promise<MapaAsientosViewDto> {
     const oferta = await this.cargarVigente(auth, id);
     const trayecto = oferta.trayectos.find((t) => t.itinerarioId === trayectoId);
@@ -391,16 +405,22 @@ export class OfertasService implements OnModuleInit {
       throw new ProblemDetailsException(HttpStatus.GONE, 'OFFER_NO_LONGER_AVAILABLE', 'Flight no longer available', 'The flight behind this leg no longer exists.');
     }
     const ocupados = new Set((await this.asientosTomados.find({ where: { vueloId: vuelo.id } })).map((s) => s.seatNumber));
+    const apartados = await heldSeatNumbers(this.asientosTomados.manager, vuelo.id, oferta.holdId);
+    const estadoDe = (asiento: string): AsientoEstado => (ocupados.has(asiento) ? 'OCCUPIED' : apartados.has(asiento) ? 'HELD' : 'AVAILABLE');
     const filas = buildSeatGrid(vuelo.capacidadTotal).map((fila) => ({
       rowNumber: fila.rowNumber,
-      seats: fila.seats.map((seat) => ({ seatNumber: seat.seatNumber, isAvailable: !ocupados.has(seat.seatNumber), characteristics: seat.characteristics })),
+      seats: fila.seats.map((seat) => {
+        const status = estadoDe(seat.seatNumber);
+        return { seatNumber: seat.seatNumber, isAvailable: status === 'AVAILABLE', status, characteristics: seat.characteristics };
+      }),
     }));
     return { trayectoId, numeroVuelo: trayecto.numeroVuelo, filas };
   }
 
   /**
    * Checks the seats the passengers picked: they belong to a leg of the offer, exist in the cabin,
-   * are not for a lap infant, are not repeated, and are still free. The unique index on
+   * are not for a lap infant, are not repeated, and are still free: not sold, and not set aside by
+   * another active hold (the offer's own hold does not count). The unique index on
    * (flight, seat) stays the final guarantee when two purchases race for the same seat.
    */
   async verificarAsientos(oferta: Oferta, pasajeros: PasajeroDatos[]): Promise<void> {
@@ -445,6 +465,14 @@ export class OfertasService implements OnModuleInit {
     const ocupados = await this.asientosTomados.find({ where: elegidos.map((e) => ({ vueloId: e.trayectoId, seatNumber: e.asiento })) });
     if (ocupados.length > 0) {
       throw new ProblemDetailsException(HttpStatus.CONFLICT, 'SEAT_TAKEN', 'Seat already taken', `Seat ${ocupados.map((o) => o.seatNumber).join(', ')} was just taken by another booking. Choose another seat.`);
+    }
+    const apartado = await seatHeldByAnotherHold(
+      this.asientosTomados.manager,
+      elegidos.map((e) => ({ segmentId: e.trayectoId, seatNumber: e.asiento })),
+      oferta.holdId,
+    );
+    if (apartado) {
+      throw new ProblemDetailsException(HttpStatus.CONFLICT, 'SEAT_TAKEN', 'Seat already taken', `Seat ${apartado.seatNumber} is being held by another customer. Choose another seat.`);
     }
   }
 

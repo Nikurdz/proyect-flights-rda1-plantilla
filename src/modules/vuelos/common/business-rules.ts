@@ -28,13 +28,14 @@ export function assertOriginDestinationDiffer(leg: ItineraryLeg): void {
 /**
  * RN-02: no leg may depart before today and each subsequent leg must not depart before
  * the previous one. Compared as calendar dates (not instants) so a flight later today is
- * still bookable; per-airport timezones are not modelled yet, so "today" is the UTC date.
+ * still bookable. "Today" is the UTC date by default; a caller passes its own date (the web: Ecuador's)
+ * or a function that gives it per leg (the partner API: today in the zone of the leg's origin airport).
  */
-export function assertChronology(legs: ItineraryLeg[], today: string = todayUtc()): void {
+export function assertChronology(legs: ItineraryLeg[], today: string | ((leg: ItineraryLeg) => string) = todayUtc()): void {
   let previous: string | null = null;
 
   for (const leg of legs) {
-    if (leg.departureDate < today) {
+    if (leg.departureDate < (typeof today === 'function' ? today(leg) : today)) {
       throw new ProblemDetailsException(
         HttpStatus.BAD_REQUEST,
         'VALIDATION_FAILED',

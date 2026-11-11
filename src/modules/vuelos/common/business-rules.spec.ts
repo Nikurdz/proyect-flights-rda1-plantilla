@@ -50,6 +50,32 @@ describe('business-rules', () => {
       ).toThrow();
     });
 
+    it('takes "today" per leg: each leg is judged against the date at its own origin', () => {
+      // 05:30Z on 11 November: already the 11th in Quito (UTC-5), still the 10th in Galápagos (UTC-6).
+      const todayAt = (leg: { origin: string }) => (leg.origin === 'GPS' ? '2026-11-10' : '2026-11-11');
+      expect(() => assertChronology([{ origin: 'GPS', destination: 'UIO', departureDate: '2026-11-10' }], todayAt)).not.toThrow();
+      expect(() => assertChronology([{ origin: 'UIO', destination: 'GPS', departureDate: '2026-11-10' }], todayAt)).toThrow();
+      expect(() =>
+        assertChronology(
+          [
+            { origin: 'GPS', destination: 'UIO', departureDate: '2026-11-10' },
+            { origin: 'UIO', destination: 'GPS', departureDate: '2026-11-11' },
+          ],
+          todayAt,
+        ),
+      ).not.toThrow();
+      // The order between legs is still checked.
+      expect(() =>
+        assertChronology(
+          [
+            { origin: 'UIO', destination: 'GPS', departureDate: '2026-11-12' },
+            { origin: 'GPS', destination: 'UIO', departureDate: '2026-11-11' },
+          ],
+          todayAt,
+        ),
+      ).toThrow();
+    });
+
     it('throws when the return leg is before the outbound leg', () => {
       expect(() =>
         assertChronology([

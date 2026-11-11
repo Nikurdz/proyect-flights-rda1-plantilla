@@ -4,6 +4,7 @@ import { DomainEventBus } from '../common/domain-event-bus';
 import { Booking } from '../entities/booking.entity';
 import { FlightHold } from '../entities/flight-hold.entity';
 import { FlightHoldItem } from '../entities/flight-hold-item.entity';
+import { FlightHoldSeat } from '../entities/flight-hold-seat.entity';
 import { Ticket } from '../entities/ticket.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import type { BookingRequestDto, PassengerItemDto } from '../dto/booking.dto';
@@ -43,14 +44,22 @@ describe('BookingsService', () => {
   let paymentAlreadyUsed: boolean;
   let consumeAffected: number;
   let saved: { bookings: unknown[]; seats: unknown[] };
+  // Seats set aside by holds, and the holds they belong to (other than `hold`).
+  let heldSeats: Partial<FlightHoldSeat>[];
+  let otherHolds: Partial<FlightHold>[];
 
   const manager = {
     findOne: jest.fn(async (entity: unknown) => (entity === FlightHold ? hold : null)),
-    find: jest.fn(async (entity: unknown) => (entity === Vuelo ? vuelos : entity === FlightHoldItem ? hold.items : [])),
+    find: jest.fn(async (entity: unknown) =>
+      entity === Vuelo ? vuelos : entity === FlightHoldItem ? hold.items : entity === FlightHoldSeat ? heldSeats : entity === FlightHold ? otherHolds : [],
+    ),
     exists: jest.fn(async (entity: unknown, options: { where: Record<string, unknown> }) =>
       entity === Booking && 'paymentReference' in options.where ? paymentAlreadyUsed : false,
     ),
     update: jest.fn(async () => ({ affected: consumeAffected })),
+    // Seat locks (advisory) and the seats a hold had set aside: no database here, the integration suites cover them.
+    query: jest.fn(async () => []),
+    delete: jest.fn(async () => ({ affected: 0 })),
     create: jest.fn((_entity: unknown, data: object) => ({ ...data })),
     save: jest.fn(async (input: object | object[]) => {
       if (Array.isArray(input)) {
@@ -89,6 +98,8 @@ describe('BookingsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     saved = { bookings: [], seats: [] };
+    heldSeats = [];
+    otherHolds = [];
     paymentAlreadyUsed = false;
     consumeAffected = 1;
     hold = Object.assign(new FlightHold(), {
@@ -173,6 +184,31 @@ describe('BookingsService', () => {
       assignedSeats: [{ segmentId: VUELO_ID, seatNumber: '14D' }],
     };
     await expect(book({ passengers: [adult, infant] })).rejects.toMatchObject({ status: 422 });
+  });
+
+  it('refuses a seat another active hold has set aside (409 SEAT_TAKEN) and leaves this hold untouched', async () => {
+    const withSeat = { ...adult, assignedSeats: [{ segmentId: VUELO_ID, seatNumber: '14C' }] };
+    heldSeats = [{ id: 'row-1', holdId: 'other-hold', vueloId: VUELO_ID, seatNumber: '14C' }];
+    otherHolds = [{ holdId: 'other-hold', status: 'HELD', expiresAt: new Date(Date.now() + 60_000) }];
+
+    await expect(book({ passengers: [withSeat] })).rejects.toMatchObject({ status: 409, response: { code: 'SEAT_TAKEN' } });
+    expect(manager.update).not.toHaveBeenCalled(); // the hold was not consumed
+    expect(saved.bookings).toHaveLength(0);
+  });
+
+  it('sells a seat its own hold had set aside, or one left by a hold that ran out, and gives the held seats back', async () => {
+    const withSeat = { ...adult, assignedSeats: [{ segmentId: VUELO_ID, seatNumber: '14C' }] };
+    heldSeats = [{ id: 'row-1', holdId: HOLD_ID, vueloId: VUELO_ID, seatNumber: '14C' }];
+    await book({ passengers: [withSeat] });
+    expect(saved.seats).toHaveLength(1);
+    expect(manager.delete).toHaveBeenCalledWith(FlightHoldSeat, { holdId: HOLD_ID });
+
+    hold.status = 'HELD';
+    saved.seats = [];
+    heldSeats = [{ id: 'row-2', holdId: 'overdue-hold', vueloId: VUELO_ID, seatNumber: '14C' }];
+    otherHolds = [{ holdId: 'overdue-hold', status: 'HELD', expiresAt: new Date(Date.now() - 1_000) }];
+    await book({ passengers: [withSeat] });
+    expect(saved.seats).toHaveLength(1);
   });
 
   it('rejects a hold that was already consumed (409) and one that belongs to someone else (403)', async () => {

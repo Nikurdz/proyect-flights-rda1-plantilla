@@ -9,12 +9,13 @@ import { decodeCursor, encodeCursor } from '../common/cursor.util';
 import { toIso, utcDayRange } from '../common/date.util';
 import { mapBookingUniqueViolation, seatTakenProblem } from '../common/db-errors';
 import { DomainEventBus } from '../common/domain-event-bus';
+import { assertNotHeldByAnotherHold, lockSeats, releaseHoldSeats } from '../common/held-seats';
 import { findHold } from '../common/hold-loader';
 import { formatMinorUnits, toMinorUnits } from '../common/money.util';
 import { PassengerBreakdown, PassengerType, countFor, PASSENGER_TYPES } from '../common/pricing.util';
 import type { ProblemDetailsBody, ProblemDetailsCode } from '../common/problem-details.exception';
 import { ProblemDetailsException } from '../common/problem-details.exception';
-import { seatExists } from '../common/seat-grid';
+import { assertSeatPick } from '../common/seat-rules';
 import { buildTicketCode } from '../common/ticket-qr';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { BaggagePurchase } from '../entities/baggage-purchase.entity';
@@ -189,18 +190,27 @@ export class BookingsService {
       throw new ProblemDetailsException(HttpStatus.CONFLICT, 'PAYMENT_REFERENCE_INVALID', 'Payment already used', 'This paymentReference is already attached to another booking.').forV2('PAYMENT_REFERENCE_INVALID', HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
-    // A seat sold to another booking answers 409 SEAT_TAKEN naming it, before the hold is consumed or anything is written
-    // (the unique index stays the last guarantee against a race).
-    for (const seat of request.passengers.flatMap((p) => p.assignedSeats ?? [])) {
+    // A seat sold to another booking, or set aside by ANOTHER active hold, answers 409 SEAT_TAKEN naming it, before
+    // the hold is consumed or anything is written: this hold stays HELD (the unique index stays the last guarantee
+    // against a race). The seats are locked first so a hold cannot set one aside while this booking sells it.
+    const requestedSeats = request.passengers.flatMap((p) => p.assignedSeats ?? []);
+    await lockSeats(manager, requestedSeats);
+    for (const seat of requestedSeats) {
       if (await manager.exists(SeatAssignment, { where: { vueloId: seat.segmentId, seatNumber: seat.seatNumber } })) {
         throw seatTakenProblem(seat.seatNumber, seat.segmentId);
       }
     }
+    await assertNotHeldByAnotherHold(manager, requestedSeats, hold.holdId);
 
     const consumed = await manager.update(FlightHold, { holdId: hold.holdId, status: 'HELD' }, { status: 'CONSUMED' });
     if (consumed.affected !== 1) {
       throw new ProblemDetailsException(HttpStatus.CONFLICT, 'BOOKING_NOT_CONFIRMED', 'Hold already consumed', `Hold ${hold.holdId} was already used to create a booking.`).forV2('HOLD_ALREADY_CONSUMED');
     }
+    // A consumed hold sets nothing aside: its seats are given back here, before the sold seats are written, so the ones
+    // the booking keeps go from HELD to BOOKED/TICKETED. The booking decides the seats: one the hold had set aside
+    // but no passenger of the request was assigned (or a request with no `assignedSeats` at all) is simply free
+    // again, because a held seat names no passenger it could be given to.
+    await releaseHoldSeats(manager, hold.holdId);
 
     const booking = await manager.save(
       manager.create(Booking, {
@@ -393,18 +403,12 @@ export class BookingsService {
         if (passenger.passengerType === 'INFANT') {
           throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'INFANT_SEAT_NOT_ALLOWED', 'Infants cannot have a seat', `Infant ${passenger.passengerId} travels on a lap and cannot be assigned a seat.`);
         }
-        const flight = vuelos.find((v) => v.id === seat.segmentId);
-        if (!flight) {
-          fail('Seat segment not part of the hold', `segmentId ${seat.segmentId} is not part of this booking.`, { name: 'passengers.assignedSeats.segmentId', reason: 'not part of the hold' });
-        }
-        if (!seatExists(flight!.capacidadTotal, seat.seatNumber)) {
-          throw new ProblemDetailsException(HttpStatus.UNPROCESSABLE_ENTITY, 'SEAT_CABIN_MISMATCH', 'Seat does not exist', `Seat ${seat.seatNumber} does not exist on flight ${flight!.codigoVuelo}.`);
-        }
-        const key = `${seat.segmentId}:${seat.seatNumber}`;
-        if (requested.has(key)) {
-          throw new ProblemDetailsException(HttpStatus.CONFLICT, 'SEAT_TAKEN', 'Seat requested twice', `Seat ${seat.seatNumber} is assigned to more than one passenger.`);
-        }
-        requested.add(key);
+        assertSeatPick(seat, vuelos, requested, {
+          segmentStatus: HttpStatus.UNPROCESSABLE_ENTITY,
+          segmentField: 'passengers.assignedSeats.segmentId',
+          owner: 'hold',
+          duplicateDetail: (seatNumber) => `Seat ${seatNumber} is assigned to more than one passenger.`,
+        });
         if (perSegment.has(seat.segmentId)) {
           fail('Several seats on one segment', `Passenger ${passenger.passengerId} has more than one seat on a segment.`, { name: 'passengers.assignedSeats', reason: 'one seat per segment' });
         }

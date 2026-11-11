@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In } from 'typeorm';
 import { toIso } from '../common/date.util';
+import { heldSeatNumbers } from '../common/held-seats';
 import { moneyAmount } from '../common/money.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
 import { buildSeatGrid } from '../common/seat-grid';
@@ -145,17 +146,21 @@ export class BookingViewV2Service {
     return { ...base, boardingPasses: base.boardingPasses.map((p) => ({ ...p, gate: vuelos.find((v) => v.id === p.segmentId)?.puertaSalida ?? null })) };
   }
 
-  /** Status of every taken seat of a flight: BOOKED/TICKETED (by ticket), CHECKED_IN and BOARDED (checked in and the flight left). */
+  /**
+   * Status of every taken seat of a flight: HELD (set aside by an active hold), BOOKED/TICKETED (by ticket),
+   * CHECKED_IN and BOARDED (checked in and the flight left). A sold seat wins over HELD.
+   */
   async seatStatuses(vueloId: string): Promise<Map<string, SeatStatus>> {
     const manager = this.dataSource.manager;
+    const result = new Map<string, SeatStatus>();
+    for (const seatNumber of await heldSeatNumbers(manager, vueloId)) result.set(seatNumber, 'HELD');
     const assignments = await manager.find(SeatAssignment, { where: { vueloId } });
-    if (assignments.length === 0) return new Map();
+    if (assignments.length === 0) return result;
     const passengerIds = assignments.map((a) => a.passengerId);
     const tickets = await manager.find(Ticket, { where: { passengerId: In(passengerIds) } });
     const checkIns = await manager.find(CheckIn, { where: { vueloId, passengerId: In(passengerIds) } });
     const vuelo = await manager.findOne(Vuelo, { where: { id: vueloId } });
     const left = !!vuelo && (['DEPARTED', 'ARRIVED'].includes(vuelo.estado) || new Date(vuelo.fechaSalida).getTime() <= Date.now());
-    const result = new Map<string, SeatStatus>();
     for (const a of assignments) {
       const checkedIn = checkIns.some((c) => c.passengerId === a.passengerId);
       const ticketed = tickets.some((t) => t.passengerId === a.passengerId && t.status === 'ISSUED');
@@ -175,7 +180,7 @@ export class BookingViewV2Service {
           ...row,
           seats: row.seats.map((seat) => {
             const status = statuses.get(seat.seatNumber) ?? 'AVAILABLE';
-            return { ...seat, status, isAvailable: status === 'AVAILABLE' }; // a sold seat (BOOKED, TICKETED, CHECKED_IN, BOARDED) is never available
+            return { ...seat, status, isAvailable: status === 'AVAILABLE' }; // a held or sold seat (HELD, BOOKED, TICKETED, CHECKED_IN, BOARDED) is never available
           }),
         })),
       })),

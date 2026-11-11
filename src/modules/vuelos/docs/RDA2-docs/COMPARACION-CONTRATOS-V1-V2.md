@@ -27,7 +27,7 @@ Las 22 operaciones de v1 existen en v2 con el mismo verbo y ruta relativa. 14 es
 ## Diferencias que conviene saber
 - **Check-in**: v2 lo cierra a la hora de salida; el valor por defecto sigue en 1 h (`CHECKIN_CLOSES_HOURS=1`, como v1). Para v2 pon `CHECKIN_CLOSES_HOURS=0`.
 - **Emisión**: la reserva se emite en la misma transacción, así que `POST /bookings` responde siempre 201 (nunca 202 `TICKET_ISSUING`).
-- **Asientos**: un hold no fija asientos concretos, así que el mapa solo distingue `AVAILABLE`, `BOOKED`/`TICKETED`, `CHECKED_IN` y `BOARDED` (HELD solo cuenta en la ocupación del panel).
+- **Asientos**: un hold aparta asientos concretos solo si los pide en `assignedSeats` (o si un cliente de la web los eligió para su oferta); esos salen `HELD` en el mapa mientras el hold está activo. Un hold sin `assignedSeats` solo descuenta cupo: sus asientos cuentan como HELD en la ocupación del panel, pero no marcan ningún asiento del mapa.
 - **`ticketId`**: es un UUID (acepta también el prefijo `TKT-`).
 - **`BookingDetail`** no incluye `itineraries` ni `passengers` (son opcionales en el contrato; evita exponer datos personales).
 - **Stock**: `time_slot` va en UTC; la cabina es siempre ECONOMY.
