@@ -53,7 +53,7 @@ describeIntegration('gRPC stock push to Booking (contract v2, section 9)', () =>
     });
     const port = await new Promise<number>((resolve, reject) => server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (error, bound) => (error ? reject(error) : resolve(bound))));
 
-    ctx = await createIntegrationApp({ GRPC_STOCK_URL: `127.0.0.1:${port}`, NODE_ID: 'NODE_VUE_TEST', BOOKING_STOCK_API_KEY: 'bk_test_key_0123456789' });
+    ctx = await createIntegrationApp({ GRPC_STOCK_URL: `127.0.0.1:${port}`, NODE_ID: 'NODE_VUE_TEST', BOOKING_STOCK_API_KEY: 'bk_test_key_0123456789', STOCK_PUSH_HORIZON_DAYS: '10' }); // the flight used below departs in 9 days; a shorter horizon keeps the first full push small (the network grew with the domestic flights)
     app = ctx.app;
     await seedFlights(ctx.dataSource);
   });

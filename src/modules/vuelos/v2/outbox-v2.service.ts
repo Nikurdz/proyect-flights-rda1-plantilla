@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThan, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { CloudEvent, isVuelosEventName, toCloudEvent } from '../common/cloud-events';
 import { DomainEvent, DomainEventBus } from '../common/domain-event-bus';
 import { ProblemDetailsException } from '../common/problem-details.exception';
@@ -44,23 +44,27 @@ export class OutboxV2Service implements OnModuleInit {
   /** `after` is the id of the last event read (what `metadata.next_after` returns) or its older cursor form (`evt-vue-000120`). */
   async list(query: EventsQueryDto): Promise<{ events: CloudEvent[]; metadata: { total: number; next_after: string | null; timestamp: string } }> {
     const limit = query.limit ?? 20;
-    let afterSeq = '0';
+    const qb = this.outbox.createQueryBuilder('e');
+    // Only events that have been in the table for a moment: two inserts can commit out of `seq` order, and a partner that
+    // already read the later one would never see the earlier one. A recent row waits until the next poll.
+    qb.where('e."createdAt" <= NOW() - (:delayMs::int * INTERVAL \'1 millisecond\')', { delayMs: this.config.outboxFeedDelayMs });
+    let cursorId: string | undefined;
     if (query.after) {
       const match = /^evt-vue-(\d+)$/.exec(query.after);
-      if (match) afterSeq = String(Number(match[1]));
+      if (match) qb.andWhere('e.seq > :afterSeq', { afterSeq: String(Number(match[1])) });
       else if (/^[0-9a-f-]{36}$/i.test(query.after)) {
-        const row = await this.outbox.findOne({ where: { eventoId: query.after } });
-        if (!row) throw unknownCursor(query.after);
-        afterSeq = row.seq;
+        // The cursor is resolved inside the same statement (the table name comes from the metadata, so it works in any schema).
+        const cursorSeq = qb.subQuery().select('c.seq').from(OutboxEvent, 'c').where('c."eventoId" = :cursorId').getQuery();
+        qb.andWhere(`e.seq > ${cursorSeq}`, { cursorId: query.after });
+        cursorId = query.after;
       } else {
         throw unknownCursor(query.after);
       }
     }
-    const rows = await this.outbox.find({
-      where: { seq: MoreThan(afterSeq), ...(query.type ? { type: query.type } : {}) },
-      order: { seq: 'ASC' },
-      take: limit,
-    });
+    if (query.type) qb.andWhere('e.type = :type', { type: query.type });
+    const rows = await qb.orderBy('e.seq', 'ASC').take(limit).getMany();
+    // An unknown cursor matches nothing: only an empty page needs the second query that tells it from "nothing new yet".
+    if (rows.length === 0 && cursorId && !(await this.outbox.exists({ where: { eventoId: cursorId } }))) throw unknownCursor(cursorId);
     return {
       events: rows.map((r) => r.cloudEvent as unknown as CloudEvent),
       // The id of the last event read, which is what a partner keeps as its cursor (the `evt-vue-<n>` form is still accepted in `after`).

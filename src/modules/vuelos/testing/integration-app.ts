@@ -49,6 +49,7 @@ const ISOLATED_ENV = [
   'NODE_SOURCE',
   'PARTNER_CLIENT_ID',
   'PARTNER_CLIENT_SECRET',
+  'OUTBOX_FEED_DELAY_MS',
 ];
 
 export async function createIntegrationApp(env: Record<string, string> = {}): Promise<IntegrationApp> {
@@ -79,6 +80,8 @@ export async function createIntegrationApp(env: Record<string, string> = {}): Pr
             DEFAULT_CURRENCY: 'USD',
             OFFER_TTL_MINUTES: '15',
             HOLD_TTL_MINUTES: '15',
+            // The feed's 2 s wait for late commits would make every test wait; a suite that checks it passes its own value.
+            OUTBOX_FEED_DELAY_MS: '0',
             ...env,
           }),
         ],

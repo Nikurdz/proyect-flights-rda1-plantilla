@@ -2,6 +2,8 @@ import { registrarAccion } from '../common/traza-acciones';
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { AirportZones } from '../common/airport-zones';
+import { toZonedBody } from '../common/zoned-time';
 import { runtimeMetrics } from '../common/runtime-metrics';
 import { postJson, resolveSafeTarget, signWebhookBody, signWebhookBodyV2 } from '../common/safe-http';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
@@ -41,6 +43,7 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
+    private readonly airportZones: AirportZones,
   ) {}
 
   onModuleInit(): void {
@@ -107,10 +110,11 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
     try {
       // Resolved again at every attempt: an address that turned private since registration is refused.
       const target = await resolveSafeTarget(subscription.url, this.config.webhooks.allowPrivateHosts);
-      const body = JSON.stringify(delivery.payload);
       const timestamp = String(Math.floor(now.getTime() / 1000));
       // Contract v2 subscribers get a structured CloudEvent signed over the body; v1.5 ones keep `timestamp.body`.
       const v2 = subscription.apiVersion === 2;
+      // v2 instants go out with their real offset (the stored payload stays in UTC); converted BEFORE signing, the HMAC covers what is sent.
+      const body = JSON.stringify(v2 ? await toZonedBody(delivery.payload, this.airportZones) : delivery.payload);
       const response = await postJson(
         target,
         body,

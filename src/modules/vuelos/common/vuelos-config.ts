@@ -31,6 +31,8 @@ export interface VuelosConfig {
   stockPush: StockPushConfig;
   /** What Booking Prototipo gave us for the integration; every field is empty when not configured. */
   booking: BookingConfig;
+  /** The event feed (`GET /eventos`) only lists events at least this old, so a late commit is never skipped. 2000 by default. */
+  outboxFeedDelayMs: number;
 }
 
 export interface BookingConfig {
@@ -208,6 +210,8 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
     fullResyncMinutes: parseNumber(config, 'STOCK_PUSH_FULL_RESYNC_MINUTES', '60', errors, (v) => isPositiveInt(v) && v <= 1440, 'an integer in 1..1440'),
   };
 
+  const outboxFeedDelayMs = parseNumber(config, 'OUTBOX_FEED_DELAY_MS', '2000', errors, (v) => Number.isInteger(v) && v >= 0 && v <= 60_000, 'an integer in 0..60000');
+
   if (errors.length > 0) {
     throw new Error(`Invalid Vuelos configuration:\n - ${errors.join('\n - ')}`);
   }
@@ -230,5 +234,6 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
     stockGrpcUrl: config.get<string>('GRPC_STOCK_URL', ''),
     stockPush,
     booking,
+    outboxFeedDelayMs,
   };
 }

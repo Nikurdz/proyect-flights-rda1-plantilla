@@ -572,7 +572,8 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const estimate = new Date(new Date(flight.fechaSalida).getTime() + 45 * 60_000).toISOString();
       const delayed = await api().patch(`${V2}/flights/${flight.codigoVuelo}/status`).set(bearer(token)).send({ date, status: 'DELAYED', estimatedDepartureAt: estimate, departureGate: 'B12', reason: 'Tráfico aéreo' }).expect(200);
       expect(delayed.body).toMatchObject({ previousStatus: 'SCHEDULED', flight: { status: 'DELAYED', delayMinutes: 45 } });
-      expect(delayed.body.flight.departure).toMatchObject({ gate: 'B12', estimatedAt: estimate });
+      expect(delayed.body.flight.departure).toMatchObject({ gate: 'B12' });
+      expect(new Date(delayed.body.flight.departure.estimatedAt).getTime()).toBe(new Date(estimate).getTime());
       expect(delayed.body.eventId).toBeDefined();
       contract.check('patch', '/vuelos/flights/{flightNumber}/status', 200, delayed.body);
 
@@ -727,6 +728,7 @@ describeIntegration('Contract v2 (/api/v2/vuelos) against a real Postgres', () =
       const event = JSON.parse(hit!.body);
       expect(event).toMatchObject({ specversion: '1.0', type: 'ec.edu.epn.booking.vuelos.booking.confirmed' });
       expect(event.data.bookingId).toBe(booked.body.bookingId);
+      expect(event.time).toMatch(/-05:00$/); // the delivery goes out with the real offset (signed over exactly this body)
       expect(hit!.headers['x-correlation-id']).toBe(event.correlationid);
     });
 

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
+import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { assertChronology, assertGroupSize, assertInfantRatio, assertOriginDestinationDiffer } from '../common/business-rules';
 import { AirportZones } from '../common/airport-zones';
 import { ecuadorDayRange, todayEcuador, todayInZone, toIso, utcDayRange, zonedDayRange } from '../common/date.util';
@@ -18,6 +19,7 @@ import { ProblemDetailsException } from '../common/problem-details.exception';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { FareFamily } from '../entities/fare-family.entity';
 import { FlightOffer } from '../entities/flight-offer.entity';
+import { FlightOfferItinerary } from '../entities/flight-offer-itinerary.entity';
 import { Vuelo } from '../entities/vuelo.entity';
 import type {
   CabinPricingDto,
@@ -27,6 +29,8 @@ import type {
   SearchRequestDto,
   SearchResponseDto,
 } from '../dto/search.dto';
+
+const FARE_FAMILIES_TTL_MS = 60_000;
 
 /** The party of an offer or a hold, as its four columns. */
 export const breakdownColumns = (b: PassengerBreakdown) => ({ adults: b.adults, youths: b.youths, children: b.children, infants: b.infants });
@@ -63,14 +67,13 @@ export class SearchService {
     const families = await this.requireFareFamilies();
     const seats = seatsRequired(passengers);
 
-    const legOptions: Vuelo[][] = [];
-    for (const leg of request.itineraries) {
-      const matches = await this.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats, { ecuadorDay: options.ecuadorDay, originLocalDay: options.originLocalDay });
-      if (matches.length === 0) {
-        // RF-031: a differentiated empty result, not an error.
-        return { totalOffers: 0, offers: [] };
-      }
-      legOptions.push(matches);
+    // The legs are independent: one query each, all at once (a round trip to the database is the main cost).
+    const legOptions = await Promise.all(
+      request.itineraries.map((leg) => this.findDirectFlights(leg.origin, leg.destination, leg.departureDate, seats, { ecuadorDay: options.ecuadorDay, originLocalDay: options.originLocalDay })),
+    );
+    if (legOptions.some((matches) => matches.length === 0)) {
+      // RF-031: a differentiated empty result, not an error.
+      return { totalOffers: 0, offers: [] };
     }
 
     // Cheapest bundles first, then cap: a truncated list must still hold the best offers.
@@ -86,6 +89,8 @@ export class SearchService {
 
     const { currency, offerTtlMinutes } = this.config;
     const offerDtos: FlightOfferDto[] = [];
+    const offerRows: QueryDeepPartialEntity<FlightOffer>[] = [];
+    const itineraryRows: QueryDeepPartialEntity<FlightOfferItinerary>[] = [];
 
     for (const { combo, total } of bundles) {
       const itineraries: ItineraryOptionDto[] = combo.map((vuelo) => ({
@@ -98,22 +103,22 @@ export class SearchService {
 
       const offerId = randomUUID();
       const grandTotal = formatMinorUnits(total);
-      await this.offers.save(
-        this.offers.create({
-          offerId,
-          itineraries: itineraries.map((itinerary, index) => ({ orden: index, itineraryId: itinerary.itineraryId, vueloId: combo[index].id })),
-          grandTotalMinor: total,
-          currency,
-          ...breakdownColumns(passengers),
-          expiresAt: new Date(Date.now() + offerTtlMinutes * 60_000),
-        }),
-      );
+      offerRows.push({ offerId, grandTotalMinor: total, currency, ...breakdownColumns(passengers), expiresAt: new Date(Date.now() + offerTtlMinutes * 60_000) });
+      itineraries.forEach((itinerary, index) => itineraryRows.push({ offerId, orden: index, itineraryId: itinerary.itineraryId, vueloId: combo[index].id }));
 
       offerDtos.push({
         offerId,
         airline: { code: combo[0].codigoAerolinea, name: combo[0].aerolinea },
         itineraries,
         grandTotal: { currency, total: grandTotal },
+      });
+    }
+
+    if (offerRows.length > 0) {
+      // One transaction, two multi-row INSERTs (offers, then their itineraries): 4 round trips however many offers.
+      await this.offers.manager.transaction(async (manager) => {
+        await manager.createQueryBuilder().insert().into(FlightOffer).values(offerRows).execute();
+        await manager.createQueryBuilder().insert().into(FlightOfferItinerary).values(itineraryRows).execute();
       });
     }
 
@@ -164,8 +169,13 @@ export class SearchService {
       .getMany();
   }
 
+  /** Fare families change only from the seed: kept in memory for a minute (never an empty list, so a first seed shows at once). */
+  private familiesCache?: { at: number; families: FareFamily[] };
+
   async requireFareFamilies(): Promise<FareFamily[]> {
+    if (this.familiesCache && Date.now() - this.familiesCache.at < FARE_FAMILIES_TTL_MS) return this.familiesCache.families;
     const families = await this.fareFamilies.find();
+    if (families.length > 0) this.familiesCache = { at: Date.now(), families };
     if (families.length === 0) {
       throw new ProblemDetailsException(
         HttpStatus.SERVICE_UNAVAILABLE,

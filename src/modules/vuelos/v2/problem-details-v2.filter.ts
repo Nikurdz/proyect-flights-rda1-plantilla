@@ -1,6 +1,8 @@
 import { ArgumentsHost, Catch } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
+import { toZonedIso } from '../common/date.util';
+import { SYSTEM_ZONE } from '../common/zoned-time';
 import { resolveCorrelationId } from '../common/correlation';
 import { ProblemDetailsBody, ProblemDetailsException } from '../common/problem-details.exception';
 import { VuelosProblemDetailsFilter } from '../common/problem-details.filter';
@@ -41,7 +43,7 @@ export class VuelosProblemDetailsV2Filter extends VuelosProblemDetailsFilter {
       code,
       instance: request.originalUrl.split('?')[0],
       correlation_id: correlationId,
-      timestamp: new Date().toISOString(),
+      timestamp: toZonedIso(new Date(), SYSTEM_ZONE),
     };
   }
 }

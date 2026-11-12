@@ -41,7 +41,7 @@ info:
     * **Idempotency-Key** (UUID v4) obligatoria en las escrituras que lo indican: se retiene 24 h. Mismo cuerpo → misma respuesta, con `Idempotent-Replayed: true` y código **200**; otro cuerpo con la misma clave → **409 `IDEMPOTENCY_KEY_REUSED`**.
     * **Trazabilidad:** `X-Correlation-Id` (8–100 caracteres `A-Za-z0-9._-`) se acepta y se devuelve sin cambios; si no viene o es inválido se genera uno. `X-Request-Id` identifica cada llamada. Todo error trae `correlation_id`, `instance` y `timestamp` (RFC 7807).
     * **Búsqueda:** `X-Device-Fingerprint` obligatorio y no vacío.
-    * **Fechas e instantes:** los instantes van en UTC (`…Z`). La fecha que se **busca** (`departureDate`, y `newDepartureDate` en el cambio de fecha) es el día **local del aeropuerto de origen** (Ecuador continental UTC−5, Galápagos UTC−6). El `date` del estado de vuelo, el `date`/`time_slot` del stock y el feed de eventos siguen en UTC.
+    * **Fechas e instantes:** los instantes llevan su **offset real** (`2026-11-12T08:30:00.000-05:00`, mismo instante que en UTC): la salida de un vuelo en la zona de su aeropuerto de **origen**, la llegada en la de su aeropuerto de **destino** (Ecuador continental `-05:00`, Galápagos `-06:00`, otras zonas con el offset de esa fecha) y cualquier otro instante (`expiresAt`, `createdAt`, `timestamp`, `time` de los eventos…) en `America/Guayaquil` (`-05:00`). Aplica también a `/eventos` y a los webhooks. La fecha que se **busca** (`departureDate`, y `newDepartureDate` en el cambio de fecha) es el día **local del aeropuerto de origen** (Ecuador continental UTC−5, Galápagos UTC−6). El `date` del estado de vuelo y el `date`/`time_slot` del stock siguen en UTC.
     * **Límite de tasa:** 300 peticiones por 60 s **por dirección IP** del cliente; al excederlo, **429** con `Retry-After`. `health` está exento.
     * **Paginación:** `limit` y `cursor` opacos (`nextCursor`); `GET /bookings` por defecto 10 (máx. 50), `operaciones/vuelos` por defecto 20 (máx. 100), `eventos` por defecto 20 (máx. 100).
     * **Dinero:** cadenas con dos decimales y moneda ISO-4217 (`USD`). Solo se vende en **clase ECONÓMICA**, vuelos directos.
@@ -2194,7 +2194,7 @@ components:
                 type: string
                 format: date
                 example: '2026-11-20'
-                description: Fecha **local del aeropuerto de origen** del tramo (YYYY-MM-DD), no un día UTC. Ecuador continental es `America/Guayaquil` (UTC−5) y Galápagos (`GPS`, `SCY`) `Pacific/Galapagos` (UTC−6). Con esa zona se decide si la fecha ya pasó (400) y qué vuelos salen ese día; un vuelo de las 23:06 de Quito aparece al buscar ese mismo día. Los instantes de la respuesta siguen en UTC (`…Z`).
+                description: Fecha **local del aeropuerto de origen** del tramo (YYYY-MM-DD), no un día UTC. Ecuador continental es `America/Guayaquil` (UTC−5) y Galápagos (`GPS`, `SCY`) `Pacific/Galapagos` (UTC−6). Con esa zona se decide si la fecha ya pasó (400) y qué vuelos salen ese día; un vuelo de las 23:06 de Quito aparece al buscar ese mismo día. Los instantes de la respuesta llevan su offset real (ver «Fechas e instantes»).
         passengers:
           $ref: '#/components/schemas/PassengerBreakdown'
     PassengerBreakdown:

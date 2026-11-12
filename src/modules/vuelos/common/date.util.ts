@@ -97,3 +97,18 @@ export function todayInZone(timeZone: string, now: Date = new Date()): string {
 export function toIso(value: Date | string): string {
   return (value instanceof Date ? value : new Date(value)).toISOString();
 }
+
+/**
+ * An instant written with the real UTC offset of an IANA zone: `2026-11-12T08:30:00.000-05:00`. Same instant as
+ * `toISOString()` (milliseconds kept), other writing; zones with daylight saving give the offset of that date.
+ */
+export function toZonedIso(instant: Date | string | number, timeZone: string): string {
+  const at = instant instanceof Date ? instant : new Date(instant);
+  const time = at.getTime();
+  if (Number.isNaN(time)) throw new RangeError('Invalid instant');
+  const offsetMinutes = Math.round((wallClockAsUtc(Math.floor(time / 1000) * 1000, timeZone) - Math.floor(time / 1000) * 1000) / 60_000);
+  const local = new Date(time + offsetMinutes * 60_000).toISOString().slice(0, 23);
+  const sign = offsetMinutes < 0 ? '-' : '+';
+  const abs = Math.abs(offsetMinutes);
+  return `${local}${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+}

@@ -34,6 +34,18 @@ export async function heldSeatNumbers(manager: EntityManager, vueloId: string, e
   return new Set(rows.filter((row) => row.holdId !== exceptHoldId).map((row) => row.seatNumber));
 }
 
+/**
+ * Ids of the ACTIVE holds (HELD, not past expiry) that have set aside any of these seats and belong to `ownerId`
+ * for `offerId`: the previous attempt of the same purchase. Sorted, so callers lock them in a fixed order.
+ */
+export async function ownActiveHoldIdsWithSeats(manager: EntityManager, seats: SeatRef[], ownerId: string, offerId: string): Promise<string[]> {
+  const rows = await rowsOfOtherHolds(manager, seats);
+  const ids = [...new Set(rows.filter((entry) => entry.active).map((entry) => entry.row.holdId))];
+  if (ids.length === 0) return [];
+  const own = await manager.find(FlightHold, { where: { holdId: In(ids), ownerId, offerId } });
+  return own.map((hold) => hold.holdId).sort();
+}
+
 /** The first of these seats that ANOTHER active hold has set aside, if any. */
 export async function seatHeldByAnotherHold(manager: EntityManager, seats: SeatRef[], exceptHoldId?: string): Promise<SeatRef | null> {
   const taken = (await rowsOfOtherHolds(manager, seats, exceptHoldId)).find((entry) => entry.active);

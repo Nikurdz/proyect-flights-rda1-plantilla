@@ -8,6 +8,7 @@ export type TicketStatus = 'PENDING' | 'ISSUING' | 'ISSUED' | 'FAILED' | 'VOIDED
 // means there is exactly one segment/coupon per ticket, so no separate coupon table.
 @Entity('vuelos_tickets')
 @Index('IDX_vuelos_tickets_booking', ['bookingId'])
+@Index('IDX_vuelos_tickets_passenger', ['passengerId'])
 export class Ticket {
   @PrimaryGeneratedColumn('uuid')
   ticketId: string;
