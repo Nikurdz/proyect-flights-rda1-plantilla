@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronDown, ChevronRight, ClipboardList, Download, Network, Search, X } from 'lucide-react';
 import {
@@ -14,6 +14,12 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { Dialog } from '../../components/ui/Dialog';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
+import { useToast } from '../../lib/toast';
+import { AdminPageHeader } from './AdminPageHeader';
+import { FilterPanel } from './FilterPanel';
 import { cleanCorrelation, formatDuration, pasoEstado, AUDIT_BADGE_CLASS } from '../../lib/auditoria';
 import { formatAdminDateTime } from '../../lib/labels';
 import { useSession } from '../../lib/session';
@@ -22,20 +28,20 @@ import { TraceEstadoBadge } from './TraceEstadoBadge';
 import { TraceFlowGraph } from './TraceFlowGraph';
 
 const FUENTE_CLASS: Record<string, string> = {
-  evento: 'bg-sky-100 text-sky-800',
-  saga: 'bg-violet-100 text-violet-800',
-  admin: 'bg-slate-200 text-slate-800',
+  evento: 'bg-ink/10 text-ink',
+  saga: 'bg-gold-soft text-gold-text',
+  admin: 'bg-line text-ink',
 };
 
 type PanelTarget = { kind: 'flujo'; params: TrazaFlujoParams } | { kind: 'mapa' };
 
-/** A correlation id that opens the timeline filtered by it: everything that request touched. */
+/** A request id that opens the timeline filtered by it: everything that request touched. */
 const CorrelationLink: React.FC<{ id: string }> = ({ id }) => (
   <Link
     to={`/admin/auditoria?correlationId=${encodeURIComponent(id)}`}
-    className="break-all font-mono text-[11px] font-semibold text-brand-blue underline underline-offset-2 hover:text-brand-black"
-    aria-label={`Ver todo lo que tocó la correlación ${id}`}
-    title="Ver todo lo que tocó esta correlación"
+    className="num break-all text-small font-medium text-gold-text underline underline-offset-2 hover:text-ink"
+    aria-label={`Ver todo lo que tocó la solicitud ${id}`}
+    title="Ver todo lo que tocó esta solicitud"
   >
     {id}
   </Link>
@@ -47,42 +53,12 @@ const TracePanel: React.FC<{ target: PanelTarget; desde?: string; hasta?: string
   const flujo = useFlujoTraza(target.kind === 'flujo' ? target.params : {}, ownerId, !isMap);
   const mapa = useMapaTraza({ desde, hasta }, ownerId, isMap);
   const query = isMap ? mapa : flujo;
-  const closeRef = useRef<HTMLButtonElement>(null);
   const title = isMap ? 'Mapa general de comunicación' : 'Flujo de comunicación';
 
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  });
-  useEffect(() => {
-    closeRef.current?.focus();
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') onCloseRef.current();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
-
-  const subject = target.kind === 'flujo' ? (target.params.numero ? `Orden o PNR ${target.params.numero}` : `Correlación ${target.params.correlationId}`) : desde || hasta ? `Periodo ${desde ?? '…'} a ${hasta ?? '…'} (días de Ecuador)` : 'Todo el periodo';
+  const subject = target.kind === 'flujo' ? (target.params.numero ? `Orden o PNR ${target.params.numero}` : `Solicitud ${target.params.correlationId}`) : desde || hasta ? `Periodo ${desde ?? '…'} a ${hasta ?? '…'} (días de Ecuador)` : 'Todo el periodo';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="trace-panel-title" className="my-6 w-full max-w-6xl rounded-2xl bg-white p-5 shadow-xl">
-        <header className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 id="trace-panel-title" className="flex items-center gap-2 text-base font-black text-brand-black">
-              <Network className="h-5 w-5 text-brand-gold-dark" aria-hidden="true" />
-              {title}
-            </h3>
-            <p className="mt-0.5 break-all text-xs text-slate-600">
-              {subject}. Se actualiza cada 10 s mientras este panel está abierto; las horas son de Ecuador.
-            </p>
-          </div>
-          <button ref={closeRef} type="button" onClick={onClose} className="rounded-full p-1.5 text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-airline-blue" aria-label="Cerrar el diagrama">
-            <X className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </header>
-
+    <Dialog isOpen onClose={onClose} title={title} description={`${subject}. Se actualiza cada 10 s mientras este panel está abierto; las horas son de Ecuador.`} maxWidth="5xl">
         {query.error != null && <ProblemAlert error={query.error} onRetry={() => query.refetch()} className="mb-3" />}
         {query.isLoading && (
           <div role="status" aria-busy="true" aria-label="Cargando el diagrama">
@@ -92,16 +68,15 @@ const TracePanel: React.FC<{ target: PanelTarget; desde?: string; hasta?: string
         {!isMap && flujo.data && (
           <>
             {flujo.data.correlaciones.length > 1 && (
-              <p className="mb-3 text-[11px] text-slate-600">
-                Reúne {flujo.data.correlaciones.length} correlaciones: <span className="break-all font-mono">{flujo.data.correlaciones.join(', ')}</span>
+              <p className="mb-3 text-small text-muted">
+                Reúne {flujo.data.correlaciones.length} solicitudes: <span className="num break-all">{flujo.data.correlaciones.join(', ')}</span>
               </p>
             )}
             <TraceFlowGraph nodos={flujo.data.nodos} aristas={flujo.data.aristas} truncado={flujo.data.truncado} />
           </>
         )}
         {isMap && mapa.data && <TraceFlowGraph nodos={mapa.data.nodos} enlaces={mapa.data.enlaces} />}
-      </div>
-    </div>
+    </Dialog>
   );
 };
 
@@ -111,7 +86,7 @@ const PasosTable: React.FC<{ item: TrazaItem }> = ({ item }) => {
     <div role="region" tabIndex={0} aria-label={`Pasos de la saga ${item.tipo}, desplazable horizontalmente`} className="overflow-x-auto">
       <table className="w-full min-w-[480px] text-left text-xs">
         <caption className="sr-only">Pasos de la saga {item.tipo} en orden de ejecución</caption>
-        <thead className="text-slate-500">
+        <thead className="text-muted">
           <tr>
             <th scope="col" className="py-1 pr-3 font-semibold">#</th>
             <th scope="col" className="py-1 pr-3 font-semibold">Paso</th>
@@ -120,24 +95,24 @@ const PasosTable: React.FC<{ item: TrazaItem }> = ({ item }) => {
             <th scope="col" className="py-1 font-semibold">Detalle</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-line">
           {pasos.map((p) => {
             const e = pasoEstado(p.estado);
             return (
-              <tr key={p.secuencia} className={e.tone === 'danger' ? 'bg-red-50/60' : ''}>
-                <td className="py-1.5 pr-3 font-mono text-slate-500">{p.secuencia}</td>
-                <td className="py-1.5 pr-3 font-semibold text-slate-900">{p.nombre}</td>
+              <tr key={p.secuencia} className={e.tone === 'danger' ? 'bg-danger-soft/60' : ''}>
+                <td className="py-1.5 pr-3 num text-muted">{p.secuencia}</td>
+                <td className="py-1.5 pr-3 font-semibold text-ink">{p.nombre}</td>
                 <td className="py-1.5 pr-3">
-                  <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${AUDIT_BADGE_CLASS[e.tone]}`}>{e.label}</span>
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${AUDIT_BADGE_CLASS[e.tone]}`}>{e.label}</span>
                 </td>
-                <td className="py-1.5 pr-3 text-right font-mono">{p.duracionMs !== null && p.duracionMs !== undefined ? formatDuration(p.duracionMs) : '—'}</td>
-                <td className="py-1.5 text-slate-600">{p.detalle ?? '—'}</td>
+                <td className="py-1.5 pr-3 text-right num">{p.duracionMs !== null && p.duracionMs !== undefined ? formatDuration(p.duracionMs) : '—'}</td>
+                <td className="py-1.5 text-muted">{p.detalle ?? '—'}</td>
               </tr>
             );
           })}
           {pasos.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-3 text-center text-slate-500">
+              <td colSpan={5} className="py-3 text-center text-muted">
                 Sin pasos registrados.
               </td>
             </tr>
@@ -158,7 +133,7 @@ export const AdminAuditPage: React.FC = () => {
   const [filters, setFilters] = useState(() => toTrazaFiltros({ ...EMPTY_TRAZA_FORM, correlationId: urlCorrelation ?? '' }));
   const [panel, setPanel] = useState<PanelTarget | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const [exported, setExported] = useState<string | null>(null);
+  const toast = useToast();
 
   // When the link changes the correlation (a click on a correlation id), the form and the query follow it.
   const [seen, setSeen] = useState(urlCorrelation);
@@ -197,37 +172,36 @@ export const AdminAuditPage: React.FC = () => {
     });
 
   const doExport = () => {
-    setExported(null);
-    exportCsv.mutate(filters, { onSuccess: (filename) => setExported(filename) });
+    exportCsv.mutate(filters, { onSuccess: (filename) => toast.success(`Descargado ${filename}.`) });
   };
 
   return (
     <section aria-label="Trazabilidad">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <ClipboardList className="h-5 w-5 text-brand-gold-dark" aria-hidden="true" />
-          <h2 className="text-lg font-black text-brand-black">Trazabilidad</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {filters.numero && (
-            <Button type="button" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'flujo', params: { numero: filters.numero } })}>
+      <AdminPageHeader
+        page="auditoria"
+        description="Todo lo que pasó en el sistema: eventos, procesos y cambios hechos desde la administración. Los proveedores no se incluyen."
+        actions={
+          <>
+            {filters.numero && (
+              <Button type="button" variant="secondary" size="sm" onClick={() => setPanel({ kind: 'flujo', params: { numero: filters.numero } })}>
+                <Network className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Ver flujo de {filters.numero}
+              </Button>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={() => setPanel({ kind: 'mapa' })}>
               <Network className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Ver flujo de {filters.numero}
+              Mapa general
             </Button>
-          )}
-          <Button type="button" variant="outline" size="sm" onClick={() => setPanel({ kind: 'mapa' })}>
-            <Network className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Mapa general
-          </Button>
-        </div>
-      </div>
-      <p className="mb-4 text-xs text-slate-600">Trazabilidad de Vuelos: eventos, sagas y cambios administrativos de todo el sistema. Los proveedores no se incluyen.</p>
+          </>
+        }
+      />
 
-      <form onSubmit={apply} className="mb-4 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4" aria-label="Filtros de trazabilidad">
-        <Input label="Orden o PNR" placeholder="ORD-… o ABC123" value={draft.numero} onChange={(e) => set('numero', e.target.value)} leftIcon={<Search className="h-4 w-4" />} />
-        <Input label="Correlation id" placeholder="Pega el id de una solicitud" value={draft.correlationId} onChange={(e) => set('correlationId', e.target.value)} />
-        <Input label="Actor" placeholder="Id del actor" value={draft.actor} onChange={(e) => set('actor', e.target.value)} />
-        <Input label="Tipo" placeholder="booking.cancelled" value={draft.tipo} onChange={(e) => set('tipo', e.target.value)} />
+      <FilterPanel defaultOpen activeCount={Object.values(filters).filter(Boolean).length}>
+      <form onSubmit={apply} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Filtros de trazabilidad">
+        <Input label="Orden o PNR" placeholder="Ej. el número de orden o ABC123" value={draft.numero} onChange={(e) => set('numero', e.target.value)} leftIcon={<Search className="h-4 w-4" />} />
+        <Input label="Id de solicitud" placeholder="Pega el id de una solicitud" helperText="Sale en cada fila y agrupa todo lo que hizo una misma acción." value={draft.correlationId} onChange={(e) => set('correlationId', e.target.value)} />
+        <Input label="Quién lo hizo" placeholder="Id de la persona o del sistema" value={draft.actor} onChange={(e) => set('actor', e.target.value)} />
+        <Input label="Tipo" placeholder="Parte del nombre del evento" helperText="Escribe una palabra del Tipo que ves en la tabla." value={draft.tipo} onChange={(e) => set('tipo', e.target.value)} />
         <Select label="Fuente" value={draft.fuente} onChange={(e) => set('fuente', e.target.value as TrazaForm['fuente'])}>
           <option value="">Todas</option>
           {Object.entries(FUENTE_LABEL).map(([value, label]) => (
@@ -247,28 +221,24 @@ export const AdminAuditPage: React.FC = () => {
           </Button>
         </div>
       </form>
+      </FilterPanel>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3" aria-live="polite">
-        <p className="text-[11px] text-slate-500">Más reciente primero, hora de Ecuador (UTC-5). El CSV usa los filtros aplicados y no contiene datos personales.</p>
+        <p className="text-small text-muted">Más reciente primero, hora de Ecuador. El CSV usa los filtros aplicados y no contiene datos personales.</p>
         <Button type="button" variant="outline" size="sm" isLoading={exportCsv.isPending} onClick={doExport}>
           <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Exportar CSV
         </Button>
       </div>
-      {exported && (
-        <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-          Descargado {exported}.
-        </p>
-      )}
       {exportCsv.error != null && <ProblemAlert error={exportCsv.error} className="mb-4" />}
 
       {filters.correlationId && (
-        <p role="status" className="mb-4 inline-flex flex-wrap items-center gap-2 rounded-full border border-brand-gold/40 bg-brand-gold-light px-3 py-1.5 text-xs font-semibold text-brand-black">
-          Filtrando por la correlación <span className="font-mono">{filters.correlationId}</span>
-          <button type="button" onClick={() => setPanel({ kind: 'flujo', params: { correlationId: filters.correlationId } })} className="rounded-full bg-white px-2 py-0.5 hover:bg-slate-100">
+        <p role="status" className="mb-4 inline-flex flex-wrap items-center gap-2 rounded-full border border-gold/40 bg-gold-soft px-3 py-1.5 text-small font-medium text-ink">
+          Filtrando por la solicitud <span className="num">{filters.correlationId}</span>
+          <button type="button" onClick={() => setPanel({ kind: 'flujo', params: { correlationId: filters.correlationId } })} className="rounded-full bg-surface px-2 py-0.5 hover:bg-ink/5">
             Ver flujo
           </button>
-          <button type="button" onClick={clear} className="rounded-full p-0.5 hover:bg-white" aria-label="Quitar el filtro de correlación">
+          <button type="button" onClick={clear} className="rounded-full p-0.5 hover:bg-surface" aria-label="Quitar el filtro de solicitud">
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </p>
@@ -276,23 +246,21 @@ export const AdminAuditPage: React.FC = () => {
 
       {query.error != null && <ProblemAlert error={query.error} onRetry={() => query.refetch()} className="mb-4" />}
 
-      <div role="region" tabIndex={0} aria-label="Línea de tiempo, desplazable horizontalmente" className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1100px] text-left text-sm" aria-busy={query.isFetching}>
-          <caption className="sr-only">Eventos, sagas y cambios administrativos, los más recientes primero</caption>
-          <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+      <Table label="Línea de tiempo de eventos, procesos y cambios" className="min-w-[1100px]" aria-busy={query.isFetching}>
+          <TableHead>
             <tr>
-              <th scope="col" className="px-4 py-3">Cuándo (Ecuador)</th>
-              <th scope="col" className="px-4 py-3">Fuente</th>
-              <th scope="col" className="px-4 py-3">Tipo</th>
-              <th scope="col" className="px-4 py-3">Estado</th>
-              <th scope="col" className="px-4 py-3">Actor</th>
-              <th scope="col" className="px-4 py-3">Referencia</th>
-              <th scope="col" className="px-4 py-3">Resumen</th>
-              <th scope="col" className="px-4 py-3">Correlación</th>
-              <th scope="col" className="px-4 py-3 text-right">Flujo</th>
+              <TableHeaderCell>Cuándo (hora de Ecuador)</TableHeaderCell>
+              <TableHeaderCell>Fuente</TableHeaderCell>
+              <TableHeaderCell>Tipo</TableHeaderCell>
+              <TableHeaderCell>Estado</TableHeaderCell>
+              <TableHeaderCell>Quién lo hizo</TableHeaderCell>
+              <TableHeaderCell>Referencia</TableHeaderCell>
+              <TableHeaderCell>Resumen</TableHeaderCell>
+              <TableHeaderCell>Id de solicitud</TableHeaderCell>
+              <TableHeaderCell className="text-right">Flujo</TableHeaderCell>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
+          </TableHead>
+          <TableBody>
             {query.isLoading && (
               <tr>
                 <td colSpan={9} className="p-4">
@@ -308,57 +276,57 @@ export const AdminAuditPage: React.FC = () => {
               const open = expanded.has(key);
               return (
                 <React.Fragment key={key}>
-                  <tr className="align-top hover:bg-slate-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">{formatAdminDateTime(it.en)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${FUENTE_CLASS[it.fuente] ?? 'bg-slate-100 text-slate-700'}`}>{fuenteLabel(it.fuente)}</span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-brand-black">
+                  <TableRow>
+                    <TableCell className="num whitespace-nowrap text-muted">{formatAdminDateTime(it.en)}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${FUENTE_CLASS[it.fuente] ?? 'bg-line text-ink'}`}>{fuenteLabel(it.fuente)}</span>
+                    </TableCell>
+                    <TableCell className="num font-semibold text-ink">
                       {isSaga ? (
                         <button
                           type="button"
                           onClick={() => toggle(key)}
                           aria-expanded={open}
                           aria-label={`${open ? 'Ocultar' : 'Ver'} los pasos de la saga ${it.tipo}`}
-                          className="inline-flex items-center gap-1 rounded hover:text-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-airline-blue"
+                          className="inline-flex items-center gap-1 rounded hover:text-gold-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-text"
                         >
                           {open ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
                           {it.tipo}
-                          <span className="font-sans text-[10px] font-semibold text-slate-500">({it.pasos?.length ?? 0} pasos)</span>
+                          <span className="font-sans text-small font-medium text-muted">({it.pasos?.length ?? 0} pasos)</span>
                         </button>
                       ) : (
                         it.tipo
                       )}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       <TraceEstadoBadge estado={it.estado} />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-700">
+                    </TableCell>
+                    <TableCell className="text-small">
                       {it.actorTipo ?? '—'}
                       {it.actorId && (
-                        <span className="ml-1 font-mono text-[11px] text-slate-500" title={it.actorId}>
+                        <span className="num ml-1 text-small text-muted" title={it.actorId}>
                           {abbreviateId(it.actorId)}
                         </span>
                       )}
-                    </td>
-                    <td className="break-all px-4 py-3 font-mono text-[11px] text-slate-600">{it.numero ?? it.referencia ?? '—'}</td>
-                    <td className="px-4 py-3 text-xs text-slate-700">{it.resumen ?? '—'}</td>
-                    <td className="px-4 py-3">{it.correlationId ? <CorrelationLink id={it.correlationId} /> : '—'}</td>
-                    <td className="px-4 py-3 text-right">
+                    </TableCell>
+                    <TableCell className="num break-all text-small text-muted">{it.numero ?? it.referencia ?? '—'}</TableCell>
+                    <TableCell className="text-small">{it.resumen ?? '—'}</TableCell>
+                    <TableCell>{it.correlationId ? <CorrelationLink id={it.correlationId} /> : '—'}</TableCell>
+                    <TableCell className="text-right">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={!it.correlationId}
-                        aria-label={`Ver flujo de la correlación ${it.correlationId ?? ''}`}
+                        aria-label={`Ver flujo de la solicitud ${it.correlationId ?? ''}`}
                         onClick={() => it.correlationId && setPanel({ kind: 'flujo', params: { correlationId: it.correlationId } })}
                       >
                         Ver flujo
                       </Button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                   {isSaga && open && (
-                    <tr className="bg-slate-50/60">
+                    <tr className="bg-paper">
                       <td colSpan={9} className="px-4 py-3">
                         <PasosTable item={it} />
                       </td>
@@ -367,16 +335,11 @@ export const AdminAuditPage: React.FC = () => {
                 </React.Fragment>
               );
             })}
-            {!query.isLoading && items.length === 0 && !query.error && (
-              <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-500">
-                  No hay actividad registrada con estos filtros.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+      </Table>
+      {!query.isLoading && items.length === 0 && !query.error && (
+        <EmptyState icon={<ClipboardList />} title="No hay actividad registrada con estos filtros" description="Prueba con otras fechas o quita algún filtro." />
+      )}
 
       {query.hasNextPage && (
         <div className="mt-4 text-center">

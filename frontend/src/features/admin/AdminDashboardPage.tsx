@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, BarChart3, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAdminDashboard, type DashboardDias } from '../../api/endpoints/admin';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { AdminPageHeader } from './AdminPageHeader';
 import { centsToUsd, formatInt, isEmptyWindow, isFull, orderSlices, passengerSlices, paymentSlices } from '../../lib/dashboard';
 import { formatRate, rateTone, type Tone } from '../../lib/observability';
 import { useSession } from '../../lib/session';
@@ -12,24 +14,24 @@ import { DailyBarsChart, DonutChart, HBarsChart, RevenueAreaChart } from './dash
 const WINDOWS: DashboardDias[] = [7, 30, 90];
 
 const toneClass: Record<Tone, string> = {
-  success: 'text-emerald-700',
-  warning: 'text-amber-700',
-  danger: 'text-red-700',
-  secondary: 'text-brand-black',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
+  secondary: 'text-ink',
 };
 
 const Kpi: React.FC<{ label: string; value: string; tone?: Tone; note?: string }> = ({ label, value, tone = 'secondary', note }) => (
-  <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600">{label}</div>
-    <div className={`mt-1 truncate text-2xl font-black ${toneClass[tone]}`}>{value}</div>
-    {note && <div className="mt-0.5 text-[11px] text-slate-600">{note}</div>}
+  <div className="rounded-xl border border-line bg-surface p-4">
+    <div className="text-small text-muted">{label}</div>
+    <div className={`num mt-1 truncate text-title font-semibold ${toneClass[tone]}`}>{value}</div>
+    {note && <div className="mt-0.5 text-small text-muted">{note}</div>}
   </div>
 );
 
 const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-2 text-xs last:border-0">
-    <dt className="text-slate-700">{label}</dt>
-    <dd className="font-mono text-sm font-bold text-slate-900">{value}</dd>
+  <div className="flex items-baseline justify-between gap-3 border-b border-line py-2 text-small last:border-0">
+    <dt className="text-muted">{label}</dt>
+    <dd className="num font-semibold text-ink">{value}</dd>
   </div>
 );
 
@@ -42,36 +44,31 @@ export const AdminDashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-brand-gold-dark" aria-hidden="true" />
-          <h2 className="text-lg font-black text-brand-black">Dashboard</h2>
-          {d && (
-            <span className="text-xs text-slate-600">
-              {d.desde} al {d.hasta}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1" role="group" aria-label="Ventana de tiempo">
-            {WINDOWS.map((w) => (
-              <button
-                key={w}
-                type="button"
-                aria-pressed={dias === w}
-                onClick={() => setDias(w)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${dias === w ? 'bg-brand-black text-white' : 'text-slate-600 hover:bg-slate-100'}`}
-              >
-                {w} días
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={() => void q.refetch()} className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-black">
-            <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
-            {d ? `Actualizado ${new Date(d.generadoEn).toLocaleTimeString('es-EC')}` : 'Actualizar'}
-          </button>
-        </div>
-      </div>
+      <AdminPageHeader
+        page="dashboard"
+        description={d ? `Ventas y operación del ${d.desde} al ${d.hasta} (hora de Ecuador).` : 'Ventas y operación de los últimos días (hora de Ecuador).'}
+        actions={
+          <>
+            <div className="flex gap-1 rounded-xl border border-line bg-surface p-1" role="group" aria-label="Ventana de tiempo">
+              {WINDOWS.map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  aria-pressed={dias === w}
+                  onClick={() => setDias(w)}
+                  className={`min-h-[44px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors sm:min-h-[32px] ${dias === w ? 'bg-ink text-on-ink' : 'text-muted hover:bg-ink/5'}`}
+                >
+                  {w} días
+                </button>
+              ))}
+            </div>
+            <button type="button" onClick={() => void q.refetch()} className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-muted hover:text-ink sm:min-h-[32px]">
+              <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
+              {d ? `Actualizado ${new Date(d.generadoEn).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' })}` : 'Actualizar'}
+            </button>
+          </>
+        }
+      />
 
       {q.error != null && <ProblemAlert error={q.error} onRetry={() => q.refetch()} />}
 
@@ -80,12 +77,12 @@ export const AdminDashboardPage: React.FC = () => {
           <div className="space-y-4" role="status" aria-busy="true" aria-label="Cargando">
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
               {Array.from({ length: 10 }, (_, i) => (
-                <Skeleton key={i} className="h-24 rounded-2xl" />
+                <Skeleton key={i} className="h-24 rounded-xl" />
               ))}
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-64 rounded-2xl" />
+                <Skeleton key={i} className="h-64 rounded-xl" />
               ))}
             </div>
           </div>
@@ -106,8 +103,8 @@ export const Content: React.FC<{ d: NonNullable<ReturnType<typeof useAdminDashbo
   return (
     <>
       {empty && (
-        <div role="status" className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-700">
-          Sin ventas en los últimos {d.dias} días. Las métricas aparecerán cuando se emitan órdenes.
+        <div role="status" className="rounded-xl border border-dashed border-line-strong bg-surface">
+          <EmptyState headingLevel={3} title={`Sin ventas en los últimos ${d.dias} días`} description="Las métricas aparecerán cuando se emitan órdenes." />
         </div>
       )}
 
@@ -159,8 +156,8 @@ export const Content: React.FC<{ d: NonNullable<ReturnType<typeof useAdminDashbo
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm" aria-label="Posventa">
-          <h3 className="text-sm font-bold text-slate-900">Posventa</h3>
+        <section className="rounded-xl border border-line bg-surface p-5" aria-label="Posventa">
+          <h3 className="text-body font-semibold text-ink">Posventa</h3>
           <dl className="mt-3">
             <Stat label="Maletas extra" value={formatInt(d.posventa.maletasExtra)} />
             <Stat label="Ingresos por equipaje" value={centsToUsd(d.posventa.ingresosEquipajeMinor)} />
@@ -169,26 +166,26 @@ export const Content: React.FC<{ d: NonNullable<ReturnType<typeof useAdminDashbo
             <Stat label="Check-ins" value={formatInt(d.posventa.checkIns)} />
           </dl>
         </section>
-        <section className={`rounded-2xl border bg-white p-5 shadow-sm ${dead > 0 ? 'border-red-300' : 'border-slate-200/80'}`} aria-label="Integración">
-          <h3 className="text-sm font-bold text-slate-900">Integración (webhooks)</h3>
+        <section className={`rounded-xl border bg-surface p-5 ${dead > 0 ? 'border-danger' : 'border-line'}`} aria-label="Integración">
+          <h3 className="text-body font-semibold text-ink">Avisos a socios (webhooks)</h3>
           <dl className="mt-3">
             <Stat label="Entregadas" value={formatInt(d.webhooks.entregasEntregadas)} />
             <Stat label="Pendientes" value={formatInt(d.webhooks.entregasPendientes)} />
-            <div className="flex items-baseline justify-between gap-3 py-2 text-xs">
-              <dt className={dead > 0 ? 'font-bold text-red-700' : 'text-slate-700'}>Muertas (sin entregar)</dt>
-              <dd className={`font-mono text-sm font-bold ${dead > 0 ? 'text-red-700' : 'text-slate-900'}`}>{formatInt(dead)}</dd>
+            <div className="flex items-baseline justify-between gap-3 py-2 text-small">
+              <dt className={dead > 0 ? 'font-semibold text-danger' : 'text-muted'}>Sin entregar (reintentos agotados)</dt>
+              <dd className={`num font-semibold ${dead > 0 ? 'text-danger' : 'text-ink'}`}>{formatInt(dead)}</dd>
             </div>
           </dl>
           {dead > 0 && (
-            <p role="alert" className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800">
+            <p role="alert" className="mt-3 flex items-center gap-2 rounded-lg bg-danger-soft p-2 text-small font-medium text-danger">
               <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-              Hay entregas muertas.{' '}
+              Hay avisos que no llegaron a su destino.{' '}
               <Link to="/admin/webhooks?estado=DEAD" className="underline">
-                Ver entregas muertas
+                Ver los avisos sin entregar
               </Link>
             </p>
           )}
-          <Link to="/admin/webhooks" className="mt-3 inline-block text-xs font-semibold text-slate-700 underline hover:text-brand-black">
+          <Link to="/admin/webhooks" className="mt-3 inline-block text-small font-medium text-ink underline">
             Ver suscripciones y entregas
           </Link>
         </section>

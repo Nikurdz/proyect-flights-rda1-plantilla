@@ -1,64 +1,63 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { ShieldCheck } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
+import { ADMIN_NAV, currentAdminItem } from './admin-nav';
 
-const tabClass = ({ isActive }: { isActive: boolean }) =>
-  `rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${isActive ? 'bg-brand-black text-white' : 'text-slate-600 hover:bg-slate-100'}`;
+const linkClass = ({ isActive }: { isActive: boolean }) =>
+  `block rounded-lg px-3 py-2 text-sm transition-colors ${isActive ? 'bg-ink font-semibold text-on-ink' : 'text-ink hover:bg-ink/5'}`;
 
-/** Back-office frame (ADMIN only; the route guard and the API both enforce it). */
+/** Back-office frame (ADMIN only; the route guard and the API both enforce it): side navigation in four groups. */
 export const AdminLayout: React.FC = () => {
   const { pathname } = useLocation();
+  // The phone menu is open for one path only: a new page closes it.
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const open = openPath === pathname;
+  const navId = useId();
   useEffect(() => {
     document.title = 'Administración | RAM Alliance';
   }, []);
 
+  const current = currentAdminItem(pathname);
+
   return (
-    <div className="bg-airline-sand px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="rounded-xl bg-brand-black p-2.5 text-brand-gold">
-              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+    <div className="bg-paper px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
+        <div className="lg:sticky lg:top-4 lg:self-start">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={navId}
+            onClick={() => setOpenPath(open ? null : pathname)}
+            className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-line-strong bg-surface px-3.5 py-2 text-left text-sm font-medium text-ink lg:hidden"
+          >
+            <span>
+              Menú de administración
+              {current && <span className="text-muted"> · {current.label}</span>}
             </span>
-            <div>
-              <h1 className="text-2xl font-black text-brand-black">Administración</h1>
-              <p className="text-xs text-slate-500">Dashboard, órdenes, reservas de mostrador, vuelos, usuarios, facturación, auditoría, webhooks y estado del sistema.</p>
-            </div>
-          </div>
-          <nav aria-label="Administración" className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1">
-            <NavLink to="/admin/dashboard" className={tabClass}>
-              Dashboard
-            </NavLink>
-            <NavLink to="/admin/ordenes" className={tabClass}>
-              Órdenes
-            </NavLink>
-            <NavLink to="/admin/reservas" className={tabClass}>
-              Reservas
-            </NavLink>
-            <NavLink to="/admin/vuelos" className={tabClass}>
-              Vuelos
-            </NavLink>
-            <NavLink to="/admin/aeropuertos" className={tabClass}>
-              Aeropuertos
-            </NavLink>
-            <NavLink to="/admin/usuarios" className={tabClass}>
-              Usuarios
-            </NavLink>
-            <NavLink to="/admin/facturacion" className={() => tabClass({ isActive: pathname.startsWith('/admin/facturacion') })}>
-              Facturación
-            </NavLink>
-            <NavLink to="/admin/auditoria" className={tabClass}>
-              Auditoría
-            </NavLink>
-            <NavLink to="/admin/webhooks" className={tabClass}>
-              Webhooks
-            </NavLink>
-            <NavLink to="/admin/observabilidad" className={tabClass}>
-              Observabilidad
-            </NavLink>
+            <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+          </button>
+          <nav id={navId} aria-label="Administración" className={`${open ? 'mt-2 block' : 'hidden'} rounded-xl border border-line bg-surface p-3 lg:block`}>
+            {ADMIN_NAV.map((group) => (
+              <div key={group.id} className="mb-3 last:mb-0">
+                <p id={`${navId}-${group.id}`} className="px-3 pb-1 text-small font-semibold text-muted">
+                  {group.label}
+                </p>
+                <ul aria-labelledby={`${navId}-${group.id}`} className="space-y-0.5">
+                  {group.items.map((item) => (
+                    <li key={item.key}>
+                      <NavLink to={item.to} className={linkClass}>
+                        {item.label}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </nav>
         </div>
-        <Outlet />
+        <div className="min-w-0">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

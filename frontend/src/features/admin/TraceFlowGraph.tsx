@@ -137,12 +137,12 @@ export const TraceFlowGraph: React.FC<TraceFlowGraphProps> = ({ nodos, aristas, 
   return (
     <div>
       {truncado && (
-        <p role="note" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs font-semibold text-amber-900">
+        <p role="note" className="mb-3 rounded-lg border border-warning bg-warning-soft p-2 text-xs font-semibold text-amber-900">
           El flujo se cortó en 500 pasos: se muestran solo los primeros.
         </p>
       )}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50">
+        <div className="overflow-x-auto rounded-xl border border-line bg-paper">
           <svg viewBox={`0 0 ${layout.width} ${layout.height}`} className="h-auto w-full min-w-[640px]" role="group" aria-label="Diagrama de nodos de la comunicación entre componentes">
             <defs>
               {Object.entries(STROKE).map(([tone, color]) => (
@@ -212,47 +212,47 @@ export const TraceFlowGraph: React.FC<TraceFlowGraphProps> = ({ nodos, aristas, 
         </div>
 
         <div className="space-y-3">
-          <div aria-live="polite" className="rounded-xl border border-slate-200 bg-white p-3 text-xs">
-            <h4 className="mb-1 text-xs font-black uppercase tracking-wider text-slate-500">Detalle de la flecha</h4>
+          <div aria-live="polite" className="rounded-xl border border-line bg-surface p-3 text-xs">
+            <h4 className="mb-1 text-small font-semibold text-ink">Detalle de la flecha</h4>
             {selected ? (
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                <dt className="font-semibold text-slate-500">Ruta</dt>
+                <dt className="font-semibold text-muted">Ruta</dt>
                 <dd>
                   {name(selected.desde)} → {name(selected.hasta)}
                 </dd>
-                <dt className="font-semibold text-slate-500">Etiqueta</dt>
+                <dt className="font-semibold text-muted">Etiqueta</dt>
                 <dd>{selected.etiqueta}</dd>
                 {selected.fuente && (
                   <>
-                    <dt className="font-semibold text-slate-500">Fuente</dt>
+                    <dt className="font-semibold text-muted">Fuente</dt>
                     <dd>{fuenteLabel(selected.fuente)}</dd>
                   </>
                 )}
-                <dt className="font-semibold text-slate-500">Estado</dt>
+                <dt className="font-semibold text-muted">Estado</dt>
                 <dd>
                   <TraceEstadoBadge estado={selected.estado} />
                 </dd>
                 {selected.ms !== null && (
                   <>
-                    <dt className="font-semibold text-slate-500">Duración</dt>
+                    <dt className="font-semibold text-muted">Duración</dt>
                     <dd>{formatDuration(selected.ms)}</dd>
                   </>
                 )}
                 {selected.en && (
                   <>
-                    <dt className="font-semibold text-slate-500">Hora (Ecuador)</dt>
+                    <dt className="font-semibold text-muted">Hora (Ecuador)</dt>
                     <dd>{formatAdminDateTime(selected.en)}</dd>
                   </>
                 )}
                 {selected.correlationId && (
                   <>
-                    <dt className="font-semibold text-slate-500">Correlación</dt>
+                    <dt className="font-semibold text-muted">Id de solicitud</dt>
                     <dd className="break-all font-mono text-[11px]">{selected.correlationId}</dd>
                   </>
                 )}
                 {selected.total !== null && (
                   <>
-                    <dt className="font-semibold text-slate-500">Total</dt>
+                    <dt className="font-semibold text-muted">Total</dt>
                     <dd>
                       {selected.total} ({selected.errores ?? 0} con error)
                     </dd>
@@ -260,25 +260,25 @@ export const TraceFlowGraph: React.FC<TraceFlowGraphProps> = ({ nodos, aristas, 
                 )}
               </dl>
             ) : (
-              <p className="text-slate-500">Elige una flecha (clic o Tab) para ver su detalle.</p>
+              <p className="text-muted">Elige una flecha (clic o Tab) para ver su detalle.</p>
             )}
           </div>
 
           <div>
-            <h4 className="mb-1 text-xs font-black uppercase tracking-wider text-slate-500">{aristas ? 'Pasos del flujo' : 'Enlaces'}</h4>
+            <h4 className="mb-1 text-small font-semibold text-ink">{aristas ? 'Pasos del flujo' : 'Enlaces'}</h4>
             {edges.length === 0 ? (
-              <p className="text-xs text-slate-500">Sin comunicaciones registradas.</p>
+              <p className="text-xs text-muted">Sin comunicaciones registradas.</p>
             ) : (
               <ol aria-label={aristas ? 'Pasos del flujo en orden' : 'Enlaces entre componentes'} className="space-y-1.5 text-xs">
                 {edges.map((e) => (
-                  <li key={e.key} className={`rounded-lg border p-2 ${fresh.has(e.key) ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'}`}>
+                  <li key={e.key} className={`rounded-lg border p-2 ${fresh.has(e.key) ? 'border-warning bg-warning-soft' : 'border-line bg-surface'}`}>
                     <span className="font-mono font-bold">{e.orden !== null ? `${e.orden}. ` : ''}</span>
                     <span className="font-semibold">
                       {name(e.desde)} → {name(e.hasta)}
                     </span>
                     : {e.etiqueta} <TraceEstadoBadge estado={e.estado} />
-                    {e.ms !== null && <span className="ml-1 text-slate-500">({formatDuration(e.ms)})</span>}
-                    {e.en && <span className="ml-1 text-slate-500">{formatAdminDateTime(e.en)}</span>}
+                    {e.ms !== null && <span className="ml-1 text-muted">({formatDuration(e.ms)})</span>}
+                    {e.en && <span className="ml-1 text-muted">{formatAdminDateTime(e.en)}</span>}
                     {fresh.has(e.key) && <span className="ml-1 font-bold text-amber-800">Nuevo</span>}
                   </li>
                 ))}

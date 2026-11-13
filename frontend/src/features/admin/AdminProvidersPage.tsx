@@ -159,7 +159,7 @@ const ProviderCard: React.FC<{ proveedor: ProveedorView; ownerId?: string }> = (
               aria-label={`Proveedor ${p.nombre} encendido`}
               disabled={patch.isPending}
               onClick={toggle}
-              className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-airline-blue focus-visible:ring-offset-2 disabled:opacity-50 ${p.activo ? 'border-emerald-600 bg-emerald-500' : 'border-slate-400 bg-slate-300'}`}
+              className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-text focus-visible:ring-offset-2 disabled:opacity-50 ${p.activo ? 'border-emerald-600 bg-emerald-500' : 'border-slate-400 bg-slate-300'}`}
             >
               <span aria-hidden="true" className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${p.activo ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>

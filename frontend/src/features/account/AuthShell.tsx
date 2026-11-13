@@ -15,16 +15,16 @@ export const AuthShell: React.FC<AuthShellProps> = ({ title, subtitle, children,
   }, [title]);
 
   return (
-    <div className="bg-airline-sand px-4 py-12 sm:px-6 lg:px-8">
+    <div className="bg-paper px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
       <div className={`mx-auto w-full ${wide ? 'max-w-2xl' : 'max-w-md'}`}>
-        <div className="mb-8 text-center">
-          <div className="mb-4 inline-flex rounded-2xl bg-brand-black px-5 py-3 shadow-md">
+        <div className="mb-6">
+          <div className="mb-4 inline-flex rounded-xl bg-chrome px-4 py-2.5">
             <Logo variant="icon" inverted />
           </div>
-          <h1 className="text-2xl font-black text-brand-black">{title}</h1>
-          {subtitle && <p className="mt-1.5 text-sm text-slate-500">{subtitle}</p>}
+          <h1 className="text-title font-semibold text-ink sm:text-heading">{title}</h1>
+          {subtitle && <p className="mt-1.5 text-body text-muted">{subtitle}</p>}
         </div>
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card sm:p-8">{children}</div>
+        <div className="rounded-xl border border-line bg-surface p-6 sm:p-8">{children}</div>
       </div>
     </div>
   );

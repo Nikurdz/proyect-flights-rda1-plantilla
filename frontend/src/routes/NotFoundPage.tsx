@@ -9,14 +9,14 @@ export const NotFoundPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-20 text-center">
-      <Plane className="mx-auto h-10 w-10 -rotate-45 text-brand-gold" aria-hidden="true" />
-      <h1 className="mt-4 text-3xl font-black text-brand-black">No encontramos esta página</h1>
-      <p className="mt-3 text-sm text-slate-600">Es posible que el enlace esté incompleto o que la página ya no exista.</p>
+      <Plane className="mx-auto h-10 w-10 -rotate-45 text-gold-text" aria-hidden="true" />
+      <h1 className="mt-4 text-heading font-semibold text-ink">No encontramos esta página</h1>
+      <p className="mt-3 text-small text-muted">Es posible que el enlace esté incompleto o que la página ya no exista.</p>
       <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-        <Link to="/" className="rounded-lg bg-brand-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-navy">
+        <Link to="/" className="rounded-lg bg-ink px-5 py-2.5 text-small font-semibold text-on-ink hover:bg-ink/90">
           Buscar vuelos
         </Link>
-        <Link to="/ayuda" className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+        <Link to="/ayuda" className="rounded-lg border border-line-strong bg-surface px-5 py-2.5 text-small font-semibold text-ink hover:bg-paper">
           Ir a Ayuda
         </Link>
       </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useKeyedState } from '../../hooks/useKeyedState';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Plane, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Plane, CheckCircle2, AlertTriangle, CalendarSearch } from 'lucide-react';
 import { useDisponibilidad } from '../../api/endpoints/catalog';
 import { armarOferta } from '../../api/endpoints/offers';
 import { crearSesionInvitado } from '../../api/endpoints/auth';
@@ -24,6 +24,11 @@ import { FareComparisonModal } from '../fares/FareComparisonModal';
 import { ProblemDetailsError } from '../../api/problem-details';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { Button } from '../../components/ui/Button';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { lowestTotalIndex, onlyFlaggedIndex, uniqueMinIndex } from '../../lib/best-value';
+import { describePassengers } from '../../lib/search';
+import { formatDay } from '../../lib/labels';
 import { getValidSearchDateString, addDaysToDate } from '../../lib/dates';
 import { outboundSelectionKey } from '../../lib/search';
 
@@ -179,6 +184,14 @@ export const ResultsPage: React.FC = () => {
   const allSoldOut =
     Boolean(currentTrayecto) && bookableFlights.length === 0 && (currentTrayecto?.itinerarios.length ?? 0) > 0;
   const seatsNeeded = adt + yth + chd;
+  // Más conveniente: the bookable flight with the lowest price (same group for all, so also the lowest total).
+  const bestIndex = lowestTotalIndex(bookableFlights.map((i) => i.precioDesde?.monto));
+  const bestFlightId = bestIndex >= 0 ? bookableFlights[bestIndex].itinerarioId : null;
+  // «Más rápido» only for a single strictly fastest flight; «Recomendado» only when exactly one is flagged.
+  const fastestIndex = uniqueMinIndex(bookableFlights.map((i) => i.duracionMinutos));
+  const fastestFlightId = fastestIndex >= 0 ? bookableFlights[fastestIndex].itinerarioId : null;
+  const recommendedIndex = onlyFlaggedIndex(bookableFlights.map((i) => Boolean(i.distintivos?.includes('RECOMENDADO'))));
+  const recommendedFlightId = recommendedIndex >= 0 ? bookableFlights[recommendedIndex].itinerarioId : null;
 
   const minValidDate = getValidSearchDateString();
   const activeDate =
@@ -203,42 +216,38 @@ export const ResultsPage: React.FC = () => {
     setSearchParams(nextParams);
   };
 
+  const firstFlight = currentTrayecto?.itinerarios[0];
+  const routeTitle = `${firstFlight?.origen.ciudad ?? currentTrayecto?.origen ?? origin ?? 'Tu origen'} a ${
+    firstFlight?.destino.ciudad ?? currentTrayecto?.destino ?? destination ?? 'tu destino'
+  }`;
+  const legName = trip === 'RT' && activeLegIndex === 1 ? 'Vuelo de vuelta' : 'Vuelo de ida';
+  const modifySearch = () => navigate(`/?${searchParams.toString()}`);
+
+  const tabClass = (active: boolean, enabled: boolean) =>
+    `flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-small font-medium transition-colors ${
+      active ? 'bg-ink text-on-ink' : enabled ? 'text-ink hover:bg-ink/5' : 'cursor-not-allowed text-muted opacity-60'
+    }`;
+
   return (
-    <div className="bg-airline-sand px-4 py-8 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Navigation Breadcrumb & Back */}
-        <div className="flex items-center justify-between mb-6">
-          <button
-            type="button"
-            onClick={() => navigate(`/?${searchParams.toString()}`)}
-            className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-airline-navy transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-            <span>Modificar búsqueda</span>
-          </button>
+    <div className="bg-paper px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
+        <PageHeader
+          title={routeTitle}
+          description={`${legName} · ${formatDay(`${activeDate}T12:00:00Z`)} · ${describePassengers({ adt, yth, chd, inf })}. Precios en dólares (USD).`}
+          actions={
+            <Button type="button" variant="outline" onClick={modifySearch} className="gap-2">
+              <CalendarSearch className="h-4 w-4" aria-hidden="true" />
+              Modificar búsqueda
+            </Button>
+          }
+        />
 
-          <span className="rounded-full border border-brand-gold/40 bg-brand-gold-light px-3 py-1 text-xs font-semibold text-brand-gold-dark">
-            Precios en dólares (USD)
-          </span>
-        </div>
-
-        {/* Round Trip Stepper Tabs */}
         {trip === 'RT' && trayectos.length > 1 && (
-          <div className="flex rounded-2xl bg-white p-2 shadow-sm border border-slate-200/80 mb-6">
-            <button
-              type="button"
-              onClick={() => setActiveLegIndex(0)}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-                activeLegIndex === 0
-                  ? 'bg-airline-navy text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <Plane className="w-4 h-4 -rotate-45" aria-hidden="true" />
-              <span>1. Vuelo de Ida</span>
-              {selectedOutbound && (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 ml-1" aria-hidden="true" />
-              )}
+          <div className="mb-6 flex gap-1 rounded-xl border border-line bg-surface p-1.5" role="group" aria-label="Tramo del viaje">
+            <button type="button" onClick={() => setActiveLegIndex(0)} aria-pressed={activeLegIndex === 0} className={tabClass(activeLegIndex === 0, true)}>
+              <Plane className="h-4 w-4 -rotate-45" aria-hidden="true" />
+              <span>1. Vuelo de ida</span>
+              {selectedOutbound && <CheckCircle2 className="h-4 w-4 text-success" aria-label="Elegido" />}
             </button>
 
             <button
@@ -247,79 +256,54 @@ export const ResultsPage: React.FC = () => {
                 if (selectedOutbound) setActiveLegIndex(1);
               }}
               disabled={!selectedOutbound}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all ${
-                activeLegIndex === 1
-                  ? 'bg-airline-navy text-white shadow-sm'
-                  : selectedOutbound
-                  ? 'text-slate-600 hover:bg-slate-50'
-                  : 'text-slate-300 cursor-not-allowed'
-              }`}
+              aria-pressed={activeLegIndex === 1}
+              className={tabClass(activeLegIndex === 1, Boolean(selectedOutbound))}
             >
-              <Plane className="w-4 h-4 rotate-[135deg]" aria-hidden="true" />
-              <span>2. Vuelo de Vuelta</span>
+              <Plane className="h-4 w-4 rotate-[135deg]" aria-hidden="true" />
+              <span>2. Vuelo de vuelta</span>
             </button>
           </div>
         )}
 
-        {/* Selected Outbound Summary if picking return */}
         {activeLegIndex === 1 && selectedOutbound && (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-6 flex items-center justify-between">
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-success/30 bg-success-soft p-4">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" aria-hidden="true" />
-              <div className="text-xs sm:text-sm">
-                <span className="font-bold text-emerald-950">Vuelo de Ida seleccionado: </span>
-                <span className="text-emerald-800">
-                  {selectedOutbound.itinerario.origen.ciudad} a{' '}
-                  {selectedOutbound.itinerario.destino.ciudad} ({selectedOutbound.itinerario.numeroVuelo}) · Tarifa{' '}
-                  <strong className="uppercase">{selectedOutbound.familia.codigo}</strong>
-                </span>
-              </div>
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+              <p className="text-small text-ink">
+                <span className="font-semibold">Vuelo de ida elegido: </span>
+                {selectedOutbound.itinerario.origen.ciudad} a {selectedOutbound.itinerario.destino.ciudad} ({selectedOutbound.itinerario.numeroVuelo}), tarifa{' '}
+                {selectedOutbound.familia.nombre || selectedOutbound.familia.codigo}
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setActiveLegIndex(0)}
-              className="text-xs font-bold text-emerald-800 underline hover:text-emerald-950"
-            >
+            <button type="button" onClick={() => setActiveLegIndex(0)} className="min-h-[44px] shrink-0 px-2 text-small font-semibold text-ink underline underline-offset-2">
               Cambiar ida
             </button>
           </div>
         )}
 
-        {/* Global Date Navigator Always Available */}
         <DateNavigator
           currentDate={activeDate}
           minDate={minLegDate}
           lowestPrice={lowestPrice}
           fechasAlternativas={currentTrayecto?.fechasAlternativas}
           onSelectDate={handleNavigateDate}
-          label={
-            trip === 'RT'
-              ? activeLegIndex === 0
-                ? 'Navegador de Fechas · Vuelo de Ida:'
-                : 'Navegador de Fechas · Vuelo de Vuelta:'
-              : 'Navegador de Fechas para este trayecto:'
-          }
+          label={trip === 'RT' ? (activeLegIndex === 0 ? 'Cambia el día del vuelo de ida' : 'Cambia el día del vuelo de vuelta') : 'Cambia el día de tu vuelo'}
         />
 
-        {/* Global Errors */}
         {error != null && (
           <div className="mb-6">
             <ProblemAlert error={error} onRetry={() => refetch()} />
           </div>
         )}
         {soldOutNotice && (
-          <div
-            role="alert"
-            className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
-          >
-            <p>
-              <strong>Ese vuelo se quedó sin asientos.</strong> Elige otro vuelo o cambia las fechas.
+          <div role="alert" className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-warning/30 bg-warning-soft p-4 text-small text-ink">
+            <p className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+              <span>
+                <strong className="font-semibold">Ese vuelo se quedó sin asientos.</strong> Elige otro vuelo o cambia las fechas.
+              </span>
             </p>
-            <button
-              type="button"
-              onClick={() => setSoldOutNotice(false)}
-              className="text-xs font-bold underline hover:text-amber-950"
-            >
+            <button type="button" onClick={() => setSoldOutNotice(false)} className="min-h-[44px] shrink-0 px-2 font-semibold underline underline-offset-2">
               Cerrar
             </button>
           </div>
@@ -330,24 +314,19 @@ export const ResultsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Loading Skeletons */}
         {isLoading || isCreatingOffer ? (
-          <div className="space-y-4" role="status" aria-busy="true" aria-label="Buscando vuelos">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
-              <Skeleton className="h-5 w-48" />
-              <Skeleton className="h-8 w-32" />
-            </div>
+          <div className="space-y-4" role="status" aria-busy="true" aria-label={isCreatingOffer ? 'Preparando tu reserva' : 'Buscando vuelos'}>
+            <p className="text-body font-medium text-ink">
+              {isCreatingOffer ? 'Preparando tu reserva. Estamos apartando tus asientos.' : 'Buscando vuelos…'}
+            </p>
             {[1, 2, 3].map((i) => (
-              <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4 shadow-sm">
-                <div className="flex justify-between">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-4 w-24" />
+              <div key={i} className="space-y-4 rounded-2xl border border-line bg-surface p-5">
+                <div className="flex items-center justify-between gap-6">
+                  <Skeleton className="h-12 w-24" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-12 w-24" />
                 </div>
-                <div className="flex justify-between items-center gap-6">
-                  <Skeleton className="h-12 w-48" />
-                  <Skeleton className="h-10 w-32" />
-                  <Skeleton className="h-12 w-48" />
-                </div>
+                <Skeleton className="h-4 w-2/3" />
               </div>
             ))}
           </div>
@@ -361,24 +340,22 @@ export const ResultsPage: React.FC = () => {
             onPreviousDay={() => handleNavigateDate(addDaysToDate(activeDate, -1))}
             onNextDay={() => handleNavigateDate(addDaysToDate(activeDate, 1))}
             onPickDate={handleNavigateDate}
-            onModifySearch={() => navigate(`/?${searchParams.toString()}`)}
+            onModifySearch={modifySearch}
           />
         ) : (
           <div>
-            {/* Sorting bar */}
-            <SortingBar
-              currentSort={sort}
-              onSortChange={handleSortChange}
-              totalResults={bookableFlights.length}
-            />
+            <SortingBar currentSort={sort} onSortChange={handleSortChange} totalResults={bookableFlights.length} />
 
-            {/* List of Flights */}
             <div className="space-y-4">
               {currentTrayecto?.itinerarios.map((itinerario) => (
                 <FlightCard
                   key={itinerario.itinerarioId}
                   itinerario={itinerario}
                   passengerCount={seatsNeeded}
+                  group={{ adt, yth, chd, inf }}
+                  bestValue={itinerario.itinerarioId === bestFlightId}
+                  fastest={itinerario.itinerarioId === fastestFlightId}
+                  recommended={itinerario.itinerarioId === recommendedFlightId}
                   onSelect={handleSelectFlight}
                 />
               ))}
@@ -387,7 +364,6 @@ export const ResultsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Fare Families Modal */}
       <FareComparisonModal
         isOpen={isFareModalOpen}
         onClose={() => setIsFareModalOpen(false)}

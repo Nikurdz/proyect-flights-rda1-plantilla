@@ -12,6 +12,7 @@ vi.mock('../../src/lib/session', () => ({ useSession: () => currentSession }));
 import { apiClient } from '../../src/api/client';
 import { ProblemDetailsError } from '../../src/api/problem-details';
 import { MyExperiencesPage } from '../../src/features/experiences/MyExperiencesPage';
+import { ToastProvider } from '../../src/components/ui/Toast';
 
 const mocked = vi.mocked(apiClient);
 
@@ -42,9 +43,11 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
-        <MyExperiencesPage />
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter>
+          <MyExperiencesPage />
+        </MemoryRouter>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }

@@ -1,133 +1,98 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Users, Mail, Phone, ArrowRight, Baby, UserCheck } from 'lucide-react';
+import { Baby, Mail, Phone, UserRound } from 'lucide-react';
 import { registrarPasajeros } from '../../api/endpoints/offers';
-import { ProblemAlert } from '../../components/common/ProblemAlert';
-import { selectionsFromRegistered, toAsientosPayload, type SeatSelections } from '../../lib/seats';
-import { SeatSelector } from './SeatSelector';
-import { FieldError, FieldLabel } from '../../components/ui/FormField';
-import { fieldA11y } from '../../lib/field-a11y';
+import { usePerfil } from '../../api/endpoints/auth';
 import { useLocalidades } from '../../api/endpoints/catalog';
+import { ProblemAlert } from '../../components/common/ProblemAlert';
+import { Badge } from '../../components/ui/Badge';
+import { Card } from '../../components/ui/Card';
+import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
+import { selectionsFromRegistered, toAsientosPayload, type SeatSelections } from '../../lib/seats';
+import { passengerTitle, type Titular } from '../../lib/checkout';
 import { getTodayDateString, addDaysToDate } from '../../lib/dates';
 import { ageRangeMessage, birthDateRange, flightDay, isInternationalTrip, type PassengerType } from '../../lib/passenger-rules';
+import { useSession } from '../../lib/session';
 import { buildPassengerFormSchema, type PassengerFormValues } from './passenger-schema';
+import { SeatSelector } from './SeatSelector';
+import { StepActions } from './StepActions';
+import { CHECKOUT_FORM_ID } from './step-actions-context';
 import type { OfertaViewDto, RegistrarPasajerosDto, PasajeroDto } from '../../api/types';
 
 const COUNTRIES = [
-  { code: 'EC', name: 'Ecuador' },
-  { code: 'CO', name: 'Colombia' },
-  { code: 'US', name: 'Estados Unidos' },
-  { code: 'ES', name: 'España' },
-  { code: 'MX', name: 'México' },
-  { code: 'PE', name: 'Perú' },
-  { code: 'CL', name: 'Chile' },
-  { code: 'AR', name: 'Argentina' },
-  { code: 'PA', name: 'Panamá' },
-  { code: 'BR', name: 'Brasil' },
-  { code: 'CA', name: 'Canadá' },
-  { code: 'FR', name: 'Francia' },
-  { code: 'DE', name: 'Alemania' },
-  { code: 'GB', name: 'Reino Unido' },
+  { value: 'EC', label: 'Ecuador' },
+  { value: 'CO', label: 'Colombia' },
+  { value: 'US', label: 'Estados Unidos' },
+  { value: 'ES', label: 'España' },
+  { value: 'MX', label: 'México' },
+  { value: 'PE', label: 'Perú' },
+  { value: 'CL', label: 'Chile' },
+  { value: 'AR', label: 'Argentina' },
+  { value: 'PA', label: 'Panamá' },
+  { value: 'BR', label: 'Brasil' },
+  { value: 'CA', label: 'Canadá' },
+  { value: 'FR', label: 'Francia' },
+  { value: 'DE', label: 'Alemania' },
+  { value: 'GB', label: 'Reino Unido' },
+];
+
+const GENDERS = [
+  { value: 'M', label: 'Masculino' },
+  { value: 'F', label: 'Femenino' },
+  { value: 'X', label: 'Otro' },
+];
+
+const DOCUMENT_TYPES = [
+  { value: 'NATIONAL_ID', label: 'Cédula de identidad' },
+  { value: 'PASSPORT', label: 'Pasaporte' },
 ];
 
 interface PassengerFormProps {
   oferta: OfertaViewDto;
-  onSuccess: (updatedOferta: OfertaViewDto) => void;
+  /** Receives the saved offer and the first traveller, so the next step can reuse their data. */
+  onSuccess: (updatedOferta: OfertaViewDto, titular?: Titular) => void;
 }
 
+const emptyPassenger = (id: string, tipo: PasajeroDto['tipo'], extra: Partial<PasajeroDto> = {}): PasajeroDto => ({
+  id,
+  tipo,
+  nombres: '',
+  apellidos: '',
+  fechaNacimiento: '',
+  genero: 'M',
+  nacionalidad: 'EC',
+  documento: { tipo: 'NATIONAL_ID', numero: '', vencimiento: '' },
+  ...extra,
+});
+
 export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess }) => {
+  const session = useSession();
+  const perfil = usePerfil(session?.kind === 'customer', session?.ownerId);
   const [submitError, setSubmitError] = useState<unknown>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Optional seat picks, kept here so they travel with the passengers (and survive coming back to this step).
   const [seats, setSeats] = useState<SeatSelections>(() => selectionsFromRegistered(oferta.pasajerosRegistrados));
 
-  // Initialize initial passengers list based on offer passenger counts
+  // The passengers of the offer, adults first (the API ids are only for the request, people see "Pasajero 1 · Adulto").
   const adtCount = oferta.pasajeros?.adultos || 1;
   const ythCount = oferta.pasajeros?.jovenes || 0;
   const chdCount = oferta.pasajeros?.ninos || 0;
   const infCount = oferta.pasajeros?.infantes || 0;
 
   const defaultPassengers: PasajeroDto[] = [];
-
-  for (let i = 1; i <= adtCount; i++) {
-    defaultPassengers.push({
-      id: `ADT-${i}`,
-      tipo: 'ADULT',
-      nombres: '',
-      apellidos: '',
-      fechaNacimiento: '',
-      genero: 'M',
-      nacionalidad: 'EC',
-      documento: {
-        tipo: 'NATIONAL_ID',
-        numero: '',
-        vencimiento: '',
-      },
-    });
-  }
-
-  for (let i = 1; i <= ythCount; i++) {
-    defaultPassengers.push({
-      id: `YTH-${i}`,
-      tipo: 'YOUTH',
-      nombres: '',
-      apellidos: '',
-      fechaNacimiento: '',
-      genero: 'M',
-      nacionalidad: 'EC',
-      documento: {
-        tipo: 'NATIONAL_ID',
-        numero: '',
-        vencimiento: '',
-      },
-    });
-  }
-
-  for (let i = 1; i <= chdCount; i++) {
-    defaultPassengers.push({
-      id: `CHD-${i}`,
-      tipo: 'CHILD',
-      nombres: '',
-      apellidos: '',
-      fechaNacimiento: '',
-      genero: 'M',
-      nacionalidad: 'EC',
-      documento: {
-        tipo: 'NATIONAL_ID',
-        numero: '',
-        vencimiento: '',
-      },
-    });
-  }
-
-  for (let i = 1; i <= infCount; i++) {
-    defaultPassengers.push({
-      id: `INF-${i}`,
-      tipo: 'INFANT',
-      asociadoA: `ADT-${Math.min(i, adtCount)}`,
-      nombres: '',
-      apellidos: '',
-      fechaNacimiento: '',
-      genero: 'M',
-      nacionalidad: 'EC',
-      documento: {
-        tipo: 'NATIONAL_ID',
-        numero: '',
-        vencimiento: '',
-      },
-    });
-  }
+  for (let i = 1; i <= adtCount; i++) defaultPassengers.push(emptyPassenger(`ADT-${i}`, 'ADULT'));
+  for (let i = 1; i <= ythCount; i++) defaultPassengers.push(emptyPassenger(`YTH-${i}`, 'YOUTH'));
+  for (let i = 1; i <= chdCount; i++) defaultPassengers.push(emptyPassenger(`CHD-${i}`, 'CHILD'));
+  for (let i = 1; i <= infCount; i++) defaultPassengers.push(emptyPassenger(`INF-${i}`, 'INFANT', { asociadoA: `ADT-${Math.min(i, adtCount)}` }));
 
   // Rules that depend on the trip: ages are measured on the UTC day of the first flight, the document on the last.
   const localidades = useLocalidades();
   const today = getTodayDateString();
   const firstFlightDay = flightDay(oferta.trayectos[0].salida);
   const lastFlightDay = flightDay(oferta.trayectos[oferta.trayectos.length - 1].salida);
-  const countryOf = useMemo(
-    () => new Map((localidades.data ?? []).map((l) => [l.iata, l.pais] as const)),
-    [localidades.data],
-  );
+  const countryOf = useMemo(() => new Map((localidades.data ?? []).map((l) => [l.iata, l.pais] as const)), [localidades.data]);
   const international = isInternationalTrip(oferta.trayectos, countryOf);
   const formSchema = useMemo(
     () => buildPassengerFormSchema({ firstFlightDay, lastFlightDay, international, today, ids: defaultPassengers.map((p) => p.id) }),
@@ -139,22 +104,28 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
     register,
     control,
     handleSubmit,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm<PassengerFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       pasajeros: defaultPassengers,
-      contacto: {
-        correo: '',
-        telefono: '',
-      },
+      contacto: { correo: '', telefono: '' },
     },
   });
 
-  const { fields } = useFieldArray({
-    control,
-    name: 'pasajeros',
-  });
+  // A signed-in customer is almost always the first traveller: offer their name and e-mail, never overwrite what was typed.
+  useEffect(() => {
+    const data = perfil.data;
+    if (!data) return;
+    if (!getValues('pasajeros.0.nombres')) setValue('pasajeros.0.nombres', data.nombres);
+    if (!getValues('pasajeros.0.apellidos')) setValue('pasajeros.0.apellidos', data.apellidos);
+    if (!getValues('pasajeros.0.numeroSocio') && data.numeroSocio) setValue('pasajeros.0.numeroSocio', data.numeroSocio);
+    if (!getValues('contacto.correo')) setValue('contacto.correo', data.correo);
+  }, [perfil.data, getValues, setValue]);
+
+  const { fields } = useFieldArray({ control, name: 'pasajeros' });
 
   // `fields[].id` is the key react-hook-form generates, not the passenger id the API needs: take ids from the defaults.
   const adultsList = defaultPassengers.filter((p) => p.tipo === 'ADULT');
@@ -189,7 +160,12 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
       };
 
       const updated = await registrarPasajeros(oferta.ofertaId, payload);
-      onSuccess(updated);
+      const first = values.pasajeros[0];
+      onSuccess(updated, {
+        nombres: first.nombres,
+        apellidos: first.apellidos,
+        documento: { tipo: first.documento.tipo, numero: first.documento.numero },
+      });
     } catch (err) {
       setSubmitError(err);
     } finally {
@@ -198,303 +174,145 @@ export const PassengerForm: React.FC<PassengerFormProps> = ({ oferta, onSuccess 
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8" noValidate>
-      {submitError != null && <ProblemAlert error={submitError} className="mb-4" />}
+    <form id={CHECKOUT_FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+      {submitError != null && <ProblemAlert error={submitError} />}
 
-      {/* Passenger Cards */}
-      <div className="space-y-6">
-        {fields.map((field, idx) => {
-          const paxErrors = errors.pasajeros?.[idx];
-          const isInfant = field.tipo === 'INFANT';
-          const isChild = field.tipo === 'CHILD';
-          const isYouth = field.tipo === 'YOUTH';
-          const type = field.tipo as PassengerType;
-          const range = birthDateRange(type, firstFlightDay, today);
-          const expiryRequired = international;
+      {fields.map((field, idx) => {
+        const paxErrors = errors.pasajeros?.[idx];
+        const isInfant = field.tipo === 'INFANT';
+        const type = field.tipo as PassengerType;
+        const range = birthDateRange(type, firstFlightDay, today);
+        const prefix = `pax-${idx}`;
 
-          const labelTitle = isInfant
-            ? `Bebé / Infante (${idx + 1})`
-            : isChild
-            ? `Niño / Menor (${idx + 1})`
-            : isYouth
-            ? `Joven (${idx + 1})`
-            : `Adulto Responsable (${idx + 1})`;
-
-          return (
-            <div
-              key={field.id}
-              className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-5"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-airline-navy/5 text-airline-navy flex items-center justify-center font-bold text-xs">
-                    {isInfant ? <Baby className="w-4 h-4" aria-hidden="true" /> : <Users className="w-4 h-4" aria-hidden="true" />}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">{labelTitle}</h3>
-                    <span className="text-[11px] text-slate-500 font-mono">ID: {field.id}</span>
-                  </div>
-                </div>
-
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 uppercase font-mono">
-                  {field.tipo}
+        return (
+          <Card key={field.id} className="space-y-5 p-5 sm:p-6" role="group" aria-labelledby={`${prefix}-title`}>
+            <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold-soft text-gold-text" aria-hidden="true">
+                  {isInfant ? <Baby className="h-5 w-5" /> : <UserRound className="h-5 w-5" />}
                 </span>
+                <h2 id={`${prefix}-title`} className="text-lead font-semibold text-ink">
+                  {passengerTitle(idx + 1, field.tipo)}
+                </h2>
               </div>
-
-              {/* Infant Associated Adult */}
-              {isInfant && (
-                <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 space-y-2">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <UserCheck className="w-4 h-4 text-amber-700" aria-hidden="true" />
-                    <span>Asignar adulto acompañante (viaja en brazos)</span>
-                  </div>
-                  <select
-                    id={`pax-${idx}-asociadoA`}
-                    aria-label={`Adulto acompañante del infante ${idx + 1}`}
-                    {...register(`pasajeros.${idx}.asociadoA` as const)}
-                    className="w-full text-xs rounded-lg border-amber-300 bg-white p-2 text-slate-800 focus:ring-amber-500 focus:border-amber-500"
-                  >
-                    {adultsList.map((adult, aIdx) => (
-                      <option key={adult.id} value={adult.id}>
-                        Adulto {aIdx + 1} ({adult.id})
-                      </option>
-                    ))}
-                  </select>
-                  <FieldError id={`pax-${idx}-asociadoA`} message={paxErrors?.asociadoA?.message} />
-                </div>
-              )}
-
-              {/* Names and Surnames */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <FieldLabel htmlFor={`pax-${idx}-nombres`}>
-                    Nombres (tal como en el documento) *
-                  </FieldLabel>
-                  <input
-                    type="text"
-                    placeholder="Ej. Juan Carlos"
-                    autoComplete="given-name"
-                    {...fieldA11y(`pax-${idx}-nombres`, paxErrors?.nombres?.message)}
-                    {...register(`pasajeros.${idx}.nombres` as const)}
-                    className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-                      paxErrors?.nombres
-                        ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                        : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-                    }`}
-                  />
-                  <FieldError id={`pax-${idx}-nombres`} message={paxErrors?.nombres?.message} />
-                </div>
-
-                <div>
-                  <FieldLabel htmlFor={`pax-${idx}-apellidos`}>
-                    Apellidos (tal como en el documento) *
-                  </FieldLabel>
-                  <input
-                    type="text"
-                    placeholder="Ej. Pérez Gómez"
-                    autoComplete="family-name"
-                    {...fieldA11y(`pax-${idx}-apellidos`, paxErrors?.apellidos?.message)}
-                    {...register(`pasajeros.${idx}.apellidos` as const)}
-                    className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-                      paxErrors?.apellidos
-                        ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                        : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-                    }`}
-                  />
-                  <FieldError id={`pax-${idx}-apellidos`} message={paxErrors?.apellidos?.message} />
-                </div>
-              </div>
-
-              {/* Birthdate, Gender, Nationality */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <FieldLabel htmlFor={`pax-${idx}-nacimiento`}>
-                    Fecha de Nacimiento *
-                  </FieldLabel>
-                  <input
-                    type="date"
-                    min={range.min}
-                    max={range.max}
-                    {...fieldA11y(`pax-${idx}-nacimiento`, paxErrors?.fechaNacimiento?.message)}
-                    {...register(`pasajeros.${idx}.fechaNacimiento` as const)}
-                    className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-                      paxErrors?.fechaNacimiento
-                        ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                        : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-                    }`}
-                  />
-                  <p className="mt-1 text-[11px] text-slate-500">{ageRangeMessage(type)}.</p>
-                  <FieldError id={`pax-${idx}-nacimiento`} message={paxErrors?.fechaNacimiento?.message} />
-                </div>
-
-                <div>
-                  <FieldLabel htmlFor={`pax-${idx}-genero`}>Género *</FieldLabel>
-                  <select
-                    id={`pax-${idx}-genero`}
-                    {...register(`pasajeros.${idx}.genero` as const)}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
-                  >
-                    <option value="M">Masculino (M)</option>
-                    <option value="F">Femenino (F)</option>
-                    <option value="X">No binario / Otro (X)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <FieldLabel htmlFor={`pax-${idx}-nacionalidad`}>
-                    Nacionalidad *
-                  </FieldLabel>
-                  <select
-                    id={`pax-${idx}-nacionalidad`}
-                    {...register(`pasajeros.${idx}.nacionalidad` as const)}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
-                  >
-                    {COUNTRIES.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.name} ({c.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Identification Document */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
-                <div>
-                  <FieldLabel htmlFor={`pax-${idx}-doctipo`}>
-                    Tipo Documento *
-                  </FieldLabel>
-                  <select
-                    id={`pax-${idx}-doctipo`}
-                    {...register(`pasajeros.${idx}.documento.tipo` as const)}
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
-                  >
-                    <option value="NATIONAL_ID">Documento Nacional / Cédula</option>
-                    <option value="PASSPORT">Pasaporte</option>
-                  </select>
-                </div>
-
-                <div>
-                  <FieldLabel htmlFor={`pax-${idx}-docnumero`}>
-                    Número de Documento *
-                  </FieldLabel>
-                  <input
-                    type="text"
-                    placeholder="Ej. 1712345678"
-                    {...fieldA11y(`pax-${idx}-docnumero`, paxErrors?.documento?.numero?.message)}
-                    {...register(`pasajeros.${idx}.documento.numero` as const)}
-                    className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-                      paxErrors?.documento?.numero
-                        ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                        : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-                    }`}
-                  />
-                  <FieldError id={`pax-${idx}-docnumero`} message={paxErrors?.documento?.numero?.message} />
-                </div>
-
-                <div>
-                  <FieldLabel htmlFor={`pax-${idx}-docvence`}>
-                    {expiryRequired ? 'Fecha Vencimiento *' : 'Fecha Vencimiento (opcional)'}
-                  </FieldLabel>
-                  <input
-                    type="date"
-                    min={addDaysToDate(lastFlightDay, 1)}
-                    {...fieldA11y(`pax-${idx}-docvence`, paxErrors?.documento?.vencimiento?.message)}
-                    {...register(`pasajeros.${idx}.documento.vencimiento` as const)}
-                    className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-                      paxErrors?.documento?.vencimiento
-                        ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                        : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-                    }`}
-                  />
-                  <FieldError id={`pax-${idx}-docvence`} message={paxErrors?.documento?.vencimiento?.message} />
-                </div>
-              </div>
-
+              {isInfant && <Badge variant="secondary">Viaja en brazos</Badge>}
             </div>
-          );
-        })}
-      </div>
+
+            {isInfant && (
+              <Select
+                label="Adulto que lo lleva en brazos"
+                id={`${prefix}-asociadoA`}
+                error={paxErrors?.asociadoA?.message}
+                {...register(`pasajeros.${idx}.asociadoA` as const)}
+              >
+                {adultsList.map((adult, aIdx) => (
+                  <option key={adult.id} value={adult.id}>
+                    {passengerTitle(aIdx + 1, 'ADULT')}
+                  </option>
+                ))}
+              </Select>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Input
+                label="Nombres"
+                id={`${prefix}-nombres`}
+                placeholder="Juan Carlos"
+                autoComplete={idx === 0 ? 'given-name' : 'off'}
+                helperText="Tal como aparecen en el documento."
+                error={paxErrors?.nombres?.message}
+                {...register(`pasajeros.${idx}.nombres` as const)}
+              />
+              <Input
+                label="Apellidos"
+                id={`${prefix}-apellidos`}
+                placeholder="Pérez Gómez"
+                autoComplete={idx === 0 ? 'family-name' : 'off'}
+                helperText="Tal como aparecen en el documento."
+                error={paxErrors?.apellidos?.message}
+                {...register(`pasajeros.${idx}.apellidos` as const)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Input
+                label="Fecha de nacimiento"
+                id={`${prefix}-nacimiento`}
+                type="date"
+                min={range.min}
+                max={range.max}
+                helperText={`${ageRangeMessage(type)}.`}
+                error={paxErrors?.fechaNacimiento?.message}
+                {...register(`pasajeros.${idx}.fechaNacimiento` as const)}
+              />
+              <Select label="Género" id={`${prefix}-genero`} options={GENDERS} {...register(`pasajeros.${idx}.genero` as const)} />
+              <Select label="Nacionalidad" id={`${prefix}-nacionalidad`} options={COUNTRIES} error={paxErrors?.nacionalidad?.message} {...register(`pasajeros.${idx}.nacionalidad` as const)} />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 border-t border-line pt-5 sm:grid-cols-3">
+              <Select label="Tipo de documento" id={`${prefix}-doctipo`} options={DOCUMENT_TYPES} {...register(`pasajeros.${idx}.documento.tipo` as const)} />
+              <Input
+                label="Número de documento"
+                id={`${prefix}-docnumero`}
+                placeholder="1712345678"
+                error={paxErrors?.documento?.numero?.message}
+                {...register(`pasajeros.${idx}.documento.numero` as const)}
+              />
+              <Input
+                label={international ? 'Vence el' : 'Vence el (opcional)'}
+                id={`${prefix}-docvence`}
+                type="date"
+                min={addDaysToDate(lastFlightDay, 1)}
+                error={paxErrors?.documento?.vencimiento?.message}
+                {...register(`pasajeros.${idx}.documento.vencimiento` as const)}
+              />
+            </div>
+          </Card>
+        );
+      })}
 
       {/* Optional seat selection, per leg */}
       <SeatSelector oferta={oferta} passengers={seatPassengers} value={seats} onChange={setSeats} />
 
-      {/* Contact Section */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
-        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Mail className="w-5 h-5 text-airline-navy" aria-hidden="true" />
+      <Card className="space-y-5 p-5 sm:p-6" role="group" aria-labelledby="contacto-title">
+        <div className="flex items-center gap-3 border-b border-line pb-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold-soft text-gold-text" aria-hidden="true">
+            <Mail className="h-5 w-5" />
+          </span>
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Datos de Contacto del Comprador</h3>
-            <p className="text-xs text-slate-500">
-              Aquí enviaremos los billetes electrónicos e itinerario de vuelo.
-            </p>
+            <h2 id="contacto-title" className="text-lead font-semibold text-ink">
+              Datos de contacto
+            </h2>
+            <p className="text-small text-muted">Aquí enviaremos tus boletos y el itinerario.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <FieldLabel htmlFor="contacto-correo">
-              Correo Electrónico *
-            </FieldLabel>
-            <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" aria-hidden="true" />
-              <input
-                type="email"
-                placeholder="ejemplo@correo.com"
-                autoComplete="email"
-                {...fieldA11y('contacto-correo', errors.contacto?.correo?.message)}
-                {...register('contacto.correo')}
-                className={`w-full rounded-xl border pl-10 pr-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-                  errors.contacto?.correo
-                    ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                    : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-                }`}
-              />
-            </div>
-            <FieldError id="contacto-correo" message={errors.contacto?.correo?.message} />
-          </div>
-
-          <div>
-            <FieldLabel htmlFor="contacto-telefono">
-              Teléfono (Formato internacional E.164) *
-            </FieldLabel>
-            <div className="relative">
-              <Phone className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" aria-hidden="true" />
-              <input
-                type="tel"
-                placeholder="+593999999999 o +573001234567"
-                autoComplete="tel"
-                {...fieldA11y('contacto-telefono', errors.contacto?.telefono?.message)}
-                {...register('contacto.telefono')}
-                className={`w-full rounded-xl border pl-10 pr-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-                  errors.contacto?.telefono
-                    ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                    : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-                }`}
-              />
-            </div>
-            <FieldError id="contacto-telefono" message={errors.contacto?.telefono?.message} />
-          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input
+            label="Correo electrónico"
+            id="contacto-correo"
+            type="email"
+            placeholder="nombre@correo.com"
+            autoComplete="email"
+            leftIcon={<Mail className="h-4 w-4" />}
+            error={errors.contacto?.correo?.message}
+            {...register('contacto.correo')}
+          />
+          <Input
+            label="Teléfono"
+            id="contacto-telefono"
+            type="tel"
+            placeholder="+593 99 123 4567"
+            autoComplete="tel"
+            leftIcon={<Phone className="h-4 w-4" />}
+            helperText="Con el código de tu país, por ejemplo +593."
+            error={errors.contacto?.telefono?.message}
+            {...register('contacto.telefono')}
+          />
         </div>
-      </div>
+      </Card>
 
-      {/* Submit Button */}
-      <div className="flex justify-end pt-2">
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-airline-navy text-white font-bold text-sm hover:bg-slate-900 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? (
-            <span>Guardando datos...</span>
-          ) : (
-            <>
-              <span>Continuar a Facturación</span>
-              <ArrowRight className="w-4 h-4" aria-hidden="true" />
-            </>
-          )}
-        </button>
-      </div>
+      <StepActions submitLabel="Continuar a facturación" loading={isSubmitting} loadingLabel="Guardando datos…" />
     </form>
   );
 };

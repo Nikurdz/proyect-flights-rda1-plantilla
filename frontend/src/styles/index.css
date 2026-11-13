@@ -2,20 +2,117 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens (RAM Alliance). Each token is an "R G B" triplet so Tailwind can add opacity
+ * (`bg-ink/5`). Light is :root, dark is `.dark` (set on <html> by lib/theme.ts before first paint).
+ * Contrast of every pair is checked by `node scripts/contrast.mjs` (it reads this file).
+ * The documented list of tokens lives in docs/planes/2026-11-13-rediseno-frontend-nielsen.md.
+ */
+:root {
+  color-scheme: light;
+
+  --ink: 11 14 20; /* main text, primary button */
+  --on-ink: 255 255 255; /* text over a solid `ink` background */
+  --muted: 79 88 104; /* secondary text */
+  --gold: 171 145 89; /* accent fills: purchase button, highlights (NOT for text) */
+  --gold-text: 122 101 50; /* gold used as text/icon/focus on paper or surface */
+  --gold-soft: 244 239 228; /* soft gold background */
+  --on-gold: 11 14 20; /* text over a solid `gold` background */
+  --paper: 245 246 248; /* page background */
+  --surface: 255 255 255; /* cards and panels */
+  --line: 227 229 234; /* dividers and decorative borders */
+  --line-strong: 128 136 150; /* border of controls (>= 3:1) */
+  --chrome: 11 14 20; /* always-dark brand surface (hero, seat taken) with white text */
+
+  --success: 31 122 77;
+  --success-soft: 232 245 238;
+  --danger: 180 35 24;
+  --danger-soft: 253 236 234;
+  --on-danger: 255 255 255;
+  --warning: 161 92 7;
+  --warning-soft: 253 241 220;
+
+  /* Legacy bridge: the old pages use Tailwind's `slate-*`; these flip in dark mode so they stay legible
+     until each page is redesigned with the semantic tokens above. Do not use slate-* in new code. */
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --ink: 236 238 242;
+  --on-ink: 11 14 20;
+  --muted: 154 163 178;
+  --gold: 201 174 114;
+  --gold-text: 216 192 138;
+  --gold-soft: 42 36 24;
+  --on-gold: 11 14 20;
+  --paper: 11 14 20;
+  --surface: 21 26 35;
+  --line: 38 44 56;
+  --line-strong: 98 108 126;
+  --chrome: 27 34 48;
+
+  --success: 76 195 138;
+  --success-soft: 18 40 29;
+  --danger: 242 118 107;
+  --danger-soft: 51 22 26;
+  --on-danger: 11 14 20;
+  --warning: 232 163 61;
+  --warning-soft: 51 38 15;
+
+  --slate-50: 21 26 35;
+  --slate-100: 27 34 48;
+  --slate-200: 38 44 56;
+  --slate-300: 53 61 77;
+  --slate-400: 107 117 136;
+  --slate-500: 152 161 177;
+  --slate-600: 180 187 200;
+  --slate-700: 203 209 219;
+  --slate-800: 224 228 234;
+  --slate-900: 236 238 242;
+}
+
 @layer base {
-  body {
-    @apply bg-airline-sand text-slate-800 font-sans;
+  html {
+    font-family: 'Instrument Sans Variable', 'Instrument Sans', system-ui, sans-serif;
   }
 
-  /* Accessible visible focus ring */
+  body {
+    @apply bg-paper font-sans text-body text-ink;
+  }
+
+  /* Accessible visible focus ring: gold-text keeps >= 3:1 on paper and surface in both themes. */
   *:focus-visible {
-    @apply outline-none ring-2 ring-brand-gold ring-offset-2;
+    outline: 2px solid rgb(var(--gold-text));
+    outline-offset: 2px;
+  }
+
+  /* Headings and <main> receive focus from code on navigation (RouteEffects): no ring there.
+     Interactive controls are not tabindex="-1" targets, so their visible focus is untouched. */
+  [tabindex='-1']:focus,
+  [tabindex='-1']:focus-visible {
+    outline: none;
+  }
+
+  ::selection {
+    background: rgb(var(--gold) / 0.45);
   }
 }
 
 @layer components {
+  /* Legacy class names still used by pages that are not redesigned yet. */
   .brand-header-bg {
-    @apply bg-brand-black;
+    @apply bg-chrome;
   }
 
   .brand-hero-bg {
@@ -24,33 +121,62 @@
 
   /* Prose for the legal and help pages */
   .legal-prose h2 {
-    @apply mt-8 mb-3 text-lg font-bold text-brand-black;
+    @apply mb-3 mt-8 text-lg font-semibold text-ink;
   }
   .legal-prose h3 {
-    @apply mt-5 mb-2 text-sm font-bold uppercase tracking-wide text-slate-700;
+    @apply mb-2 mt-5 text-sm font-semibold text-ink;
   }
   .legal-prose p {
-    @apply mb-3 text-sm leading-relaxed text-slate-700;
+    @apply mb-3 text-sm leading-relaxed text-muted;
   }
   .legal-prose ul {
-    @apply mb-4 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-slate-700;
+    @apply mb-4 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted;
   }
   .legal-prose a {
-    @apply font-semibold text-brand-gold-dark underline underline-offset-2 hover:text-brand-black;
+    @apply font-semibold text-gold-text underline underline-offset-2 hover:text-ink;
   }
   .legal-prose table {
     @apply mb-4 w-full border-collapse text-sm;
   }
   .legal-prose th {
-    @apply border-b border-slate-300 bg-slate-100 px-3 py-2 text-left text-xs font-bold uppercase tracking-wide text-slate-600;
+    @apply border-b border-line-strong bg-paper px-3 py-2 text-left text-xs font-semibold text-muted;
   }
   .legal-prose td {
-    @apply border-b border-slate-200 px-3 py-2 align-top text-slate-700;
+    @apply border-b border-line px-3 py-2 align-top text-ink;
   }
 }
 
-/* Print styles for the order receipt and the legal pages */
+@layer utilities {
+  /* Tabular figures: use on times, prices, PNR and any number that must line up. */
+  .num {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: 'tnum' 1, 'lnum' 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Print styles for the order receipt and the legal pages: always the light palette. */
 @media print {
+  :root,
+  .dark {
+    --ink: 11 14 20;
+    --muted: 79 88 104;
+    --paper: 255 255 255;
+    --surface: 255 255 255;
+    --line: 227 229 234;
+    --gold-text: 122 101 50;
+  }
+
   body {
     background: white !important;
     color: black !important;

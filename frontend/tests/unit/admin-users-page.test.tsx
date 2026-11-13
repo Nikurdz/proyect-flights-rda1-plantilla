@@ -2,6 +2,8 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { ToastProvider } from '../../src/components/ui/Toast';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/api/client', () => ({ apiClient: vi.fn() }));
@@ -40,7 +42,11 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
+      <ToastProvider>
+      <MemoryRouter>
       <AdminUsersPage />
+    </MemoryRouter>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }

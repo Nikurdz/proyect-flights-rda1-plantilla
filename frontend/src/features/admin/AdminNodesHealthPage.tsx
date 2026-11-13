@@ -96,7 +96,7 @@ export const AdminNodesHealthPage: React.FC = () => {
                           type="button"
                           aria-pressed={isSelected}
                           onClick={() => setPicked(p.id)}
-                          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${isSelected ? 'border-brand-black bg-brand-black text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${isSelected ? 'border-ink bg-chrome text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
                           aria-label={`Ver el histórico de latencia de ${p.nombre}`}
                         >
                           {isSelected ? 'Mostrando' : 'Ver histórico'}

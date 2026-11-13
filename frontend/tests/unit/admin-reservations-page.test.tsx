@@ -2,6 +2,8 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { ToastProvider } from '../../src/components/ui/Toast';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/api/client', () => ({ apiClient: vi.fn() }));
@@ -43,7 +45,11 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
+      <ToastProvider>
+      <MemoryRouter>
       <AdminReservationsPage />
+    </MemoryRouter>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -77,7 +83,7 @@ describe('AdminReservationsPage', () => {
   it('marks the same traveller across two bookings', async () => {
     renderPage();
     await screen.findByText('ABC123');
-    expect(screen.getByRole('status').textContent).toMatch(/Mismo pasajero/);
+    expect(screen.getAllByRole('status').some((s) => /Mismo pasajero/.test(s.textContent ?? ''))).toBe(true);
     expect(screen.getAllByText('Mismo pasajero').length).toBe(2);
   });
 
@@ -92,7 +98,7 @@ describe('AdminReservationsPage', () => {
   it('shows an empty state', async () => {
     mocked.mockResolvedValue({ items: [], total: 0, pagina: 1, limite: 20 } as never);
     renderPage();
-    expect(await screen.findByText('No hay reservas con estos filtros.')).toBeTruthy();
+    expect(await screen.findByText('No hay reservas con estos filtros')).toBeTruthy();
   });
 
   it('quotes, then cancels with the quote id and a fresh Idempotency-Key', async () => {
@@ -103,8 +109,9 @@ describe('AdminReservationsPage', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cotizar cancelación' }));
     await within(dialog).findByText('Reembolsable');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar reserva' }));
-    fireEvent.click(await within(dialog).findByRole('button', { name: 'Sí, cancelar reserva' }));
-    await within(dialog).findByText(/Reserva cancelada/);
+    const confirm = await screen.findByRole('dialog', { name: /Cancelar la reserva ABC123/ });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Sí, cancelar reserva' }));
+    expect(await screen.findByText('Reserva cancelada')).toBeTruthy();
     const call = mocked.mock.calls.find(([u]) => u === 'admin/reservas/b1/cancelar');
     expect(call).toBeTruthy();
     const options = call?.[1] as { body: string; idempotencyKey: string };

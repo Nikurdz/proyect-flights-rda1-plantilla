@@ -4,14 +4,14 @@ import type { EstadoReservaExterna, MontoDto } from '../api/types';
 
 /** Spanish labels and tones for a reservation of an experience. */
 const ESTADOS: Record<EstadoReservaExterna, { label: string; className: string }> = {
-  PENDIENTE: { label: 'Pendiente', className: 'bg-amber-100 text-amber-800' },
-  CONFIRMADA: { label: 'Confirmada', className: 'bg-emerald-100 text-emerald-800' },
-  CANCELADA: { label: 'Cancelada', className: 'bg-slate-100 text-slate-700' },
-  FALLIDA_COMPENSADA: { label: 'No realizada (sin cobro)', className: 'bg-red-100 text-red-800' },
+  PENDIENTE: { label: 'Pendiente', className: 'bg-warning-soft text-warning' },
+  CONFIRMADA: { label: 'Confirmada', className: 'bg-success-soft text-success' },
+  CANCELADA: { label: 'Cancelada', className: 'bg-line text-ink' },
+  FALLIDA_COMPENSADA: { label: 'No realizada (sin cobro)', className: 'bg-danger-soft text-danger' },
 };
 
 export function estadoReserva(estado: string): { label: string; className: string } {
-  return ESTADOS[estado as EstadoReservaExterna] ?? { label: 'En proceso', className: 'bg-slate-100 text-slate-700' };
+  return ESTADOS[estado as EstadoReservaExterna] ?? { label: 'En proceso', className: 'bg-line text-ink' };
 }
 
 /** Cancellation is offered only for confirmed bookings of an experience with free cancellation. */
@@ -89,4 +89,12 @@ export function validateTaxId(numero: string, patron: string | undefined): strin
 export function consumesKey(error: unknown): boolean {
   if (!(error instanceof ProblemDetailsError)) return false;
   return error.status === 402 || error.code === 'EXTERNAL_RESERVATION_FAILED_COMPENSATED' || error.code === 'PRICE_CHANGED';
+}
+
+/** Badge variant of a booking state (the screens use the `Badge` of the design system, not raw classes). */
+export function estadoReservaVariant(estado: string): 'success' | 'outline' | 'danger' | 'secondary' {
+  if (estado === 'CONFIRMADA') return 'success';
+  if (estado === 'CANCELADA') return 'outline';
+  if (estado === 'FALLIDA_COMPENSADA') return 'danger';
+  return 'secondary';
 }

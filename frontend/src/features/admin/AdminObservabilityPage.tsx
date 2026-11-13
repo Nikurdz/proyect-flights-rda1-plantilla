@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, AlertTriangle, CheckCircle2, Pause, Play, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Pause, Play, RefreshCw } from 'lucide-react';
 import { useAdminObservabilidad, useAdminRuntime, type ObservabilidadRuntime, type VentanaObservabilidad } from '../../api/endpoints/admin';
+import { AdminPageHeader } from './AdminPageHeader';
 import { MoneyText } from '../../components/common/MoneyText';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Badge } from '../../components/ui/Badge';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
 import { orderStatusLabel } from '../../lib/labels';
 import {
   barPercent,
@@ -23,25 +25,25 @@ import {
 import { useSession } from '../../lib/session';
 
 const toneClass: Record<Tone, string> = {
-  success: 'text-emerald-700',
-  warning: 'text-amber-700',
-  danger: 'text-red-700',
-  secondary: 'text-slate-500',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
+  secondary: 'text-muted',
 };
 
 const Panel: React.FC<{ title: string; hint?: string; children: React.ReactNode }> = ({ title, hint, children }) => (
-  <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-    <h2 className="text-sm font-bold text-slate-900">{title}</h2>
-    {hint && <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p>}
+  <section className="rounded-xl border border-line bg-surface p-5">
+    <h2 className="text-body font-semibold text-ink">{title}</h2>
+    {hint && <p className="mt-0.5 text-small text-muted">{hint}</p>}
     <div className="mt-4">{children}</div>
   </section>
 );
 
 const Kpi: React.FC<{ label: string; value: React.ReactNode; tone?: Tone; note?: string }> = ({ label, value, tone = 'secondary', note }) => (
-  <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</div>
-    <div className={`mt-1 text-2xl font-black ${tone === 'secondary' ? 'text-brand-black' : toneClass[tone]}`}>{value}</div>
-    {note && <div className="mt-0.5 text-[11px] text-slate-500">{note}</div>}
+  <div className="rounded-xl border border-line bg-surface p-4">
+    <div className="text-small text-muted">{label}</div>
+    <div className={`num mt-1 text-title font-semibold ${tone === 'secondary' ? 'text-ink' : toneClass[tone]}`}>{value}</div>
+    {note && <div className="mt-0.5 text-small text-muted">{note}</div>}
   </div>
 );
 
@@ -49,17 +51,17 @@ const Kpi: React.FC<{ label: string; value: React.ReactNode; tone?: Tone; note?:
 const Bars: React.FC<{ counts: Record<string, number>; label: (state: string) => string; empty?: string }> = ({ counts, label, empty = 'Sin datos en esta ventana.' }) => {
   const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   const max = entries.reduce((m, [, n]) => Math.max(m, n), 0);
-  if (entries.length === 0) return <p className="text-xs text-slate-500">{empty}</p>;
+  if (entries.length === 0) return <p className="text-xs text-muted">{empty}</p>;
   return (
     <ul className="space-y-2">
       {entries.map(([state, count]) => (
         <li key={state} className="text-xs">
           <div className="mb-1 flex justify-between">
-            <span className="font-medium text-slate-700">{label(state)}</span>
-            <span className="font-mono font-bold text-slate-900">{count}</span>
+            <span className="font-medium text-ink">{label(state)}</span>
+            <span className="num font-bold text-ink">{count}</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100" role="presentation">
-            <div className="h-full rounded-full bg-brand-gold" style={{ width: `${barPercent(count, max)}%` }} />
+          <div className="h-2 overflow-hidden rounded-full bg-line" role="presentation">
+            <div className="h-full rounded-full bg-gold" style={{ width: `${barPercent(count, max)}%` }} />
           </div>
         </li>
       ))}
@@ -70,8 +72,8 @@ const Bars: React.FC<{ counts: Record<string, number>; label: (state: string) =>
 const Pending: React.FC<{ label: string; count: number; hint: string }> = ({ label, count, hint }) => (
   <li className="flex items-center justify-between gap-3 py-2 text-xs">
     <span>
-      <span className="font-semibold text-slate-800">{label}</span>
-      <span className="block text-[11px] text-slate-500">{hint}</span>
+      <span className="font-semibold text-ink">{label}</span>
+      <span className="block text-small text-muted">{hint}</span>
     </span>
     <Badge variant={pendingTone(count)}>{count}</Badge>
   </li>
@@ -94,23 +96,23 @@ const Flash: React.FC<{ value: React.ReactNode; className?: string; as?: 'div' |
   );
 };
 
-const hora = (iso: string | undefined): string => (iso ? new Date(iso).toLocaleTimeString('es-EC') : '—');
+const hora = (iso: string | undefined): string => (iso ? new Date(iso).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' }) : '—');
 
 const WEBHOOK_STATE: Record<string, { label: string; tone: Tone }> = {
   SUSCRITO: { label: 'Suscrito', tone: 'success' },
   SIN_CONFIGURAR: { label: 'Sin configurar', tone: 'warning' },
-  ERROR: { label: 'Error', tone: 'danger' },
+  ERROR: { label: 'Con error', tone: 'danger' },
 };
 const STOCK_MODE: Record<string, { label: string; tone: Tone }> = {
-  HTTP: { label: 'HTTP', tone: 'success' },
-  GRPC: { label: 'gRPC', tone: 'success' },
-  OFF: { label: 'Apagado', tone: 'warning' },
+  HTTP: { label: 'Activo (por HTTP)', tone: 'success' },
+  GRPC: { label: 'Activo (por gRPC)', tone: 'success' },
+  OFF: { label: 'Desactivado', tone: 'warning' },
 };
 
 const Linea: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div className="flex flex-wrap items-baseline justify-between gap-2 py-1.5">
-    <dt className="text-slate-400">{label}</dt>
-    <dd className="break-all text-right font-mono text-slate-100">{children}</dd>
+    <dt className="text-muted">{label}</dt>
+    <dd className="break-all text-right num text-ink">{children}</dd>
   </div>
 );
 
@@ -123,22 +125,22 @@ const BookingIntegrationCard: React.FC<{ runtime: ObservabilidadRuntime }> = ({ 
   const sm = stock ? (STOCK_MODE[stock.modo] ?? { label: stock.modo, tone: 'secondary' as Tone }) : null;
   const ronda = stock?.ultimaRonda;
   return (
-    <section aria-labelledby="integracion-booking" className="rounded-xl border border-white/10 bg-white/5 p-4 text-[11px]">
+    <section aria-labelledby="integracion-booking" className="rounded-xl border border-line bg-paper p-4 text-small">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 id="integracion-booking" className="text-xs font-bold text-slate-200">
+        <h3 id="integracion-booking" className="text-small font-semibold text-ink">
           Integración con Booking
         </h3>
-        <span className="text-slate-400">Datos de este proceso: se reinician al reiniciar el servidor.</span>
+        <span className="text-muted">Datos de este proceso: se reinician al reiniciar el servidor.</span>
       </div>
       <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div>
-          <h4 className="mb-1 flex items-center gap-2 font-bold text-slate-300">
+          <h4 className="mb-1 flex items-center gap-2 font-semibold text-ink">
             Webhooks a Booking {ws && <Badge variant={ws.tone === 'secondary' ? 'outline' : ws.tone}>{ws.label}</Badge>}
           </h4>
           {!webhook ? (
-            <p className="text-slate-400">Sin datos todavía: el registro se hace al arrancar.</p>
+            <p className="text-muted">Sin datos todavía: el registro se hace al arrancar.</p>
           ) : (
-            <dl className="divide-y divide-white/10">
+            <dl className="divide-y divide-line">
               <Linea label="Dueño">{webhook.owner ?? '—'}</Linea>
               <Linea label="Destino">{webhook.destino ?? '—'}</Linea>
               <Linea label="Suscripción">{webhook.suscripcionId ?? '—'}</Linea>
@@ -146,26 +148,26 @@ const BookingIntegrationCard: React.FC<{ runtime: ObservabilidadRuntime }> = ({ 
               <Linea label="Actualizado">{hora(webhook.updatedAt)}</Linea>
             </dl>
           )}
-          <Link to="/admin/webhooks" className="mt-2 inline-block font-semibold text-brand-gold underline">
+          <Link to="/admin/webhooks" className="mt-2 inline-block font-semibold text-gold-text underline">
             Ver entregas de webhooks
           </Link>
         </div>
         <div>
-          <h4 className="mb-1 flex items-center gap-2 font-bold text-slate-300">
+          <h4 className="mb-1 flex items-center gap-2 font-semibold text-ink">
             Push de stock {sm && <Badge variant={sm.tone === 'secondary' ? 'outline' : sm.tone}>{sm.label}</Badge>}
           </h4>
           {!stock ? (
-            <p className="text-slate-400">Sin datos todavía.</p>
+            <p className="text-muted">Sin datos todavía.</p>
           ) : (
-            <dl className="divide-y divide-white/10">
+            <dl className="divide-y divide-line">
               <Linea label="Destino">{stock.destino ?? '—'}</Linea>
               {stock.serviceId && <Linea label="service_id">{stock.serviceId}</Linea>}
               {stock.horizonteDias != null && <Linea label="Horizonte">{stock.horizonteDias} días</Linea>}
               <Linea label="Última ronda">
                 {ronda ? (
                   <>
-                    {hora(ronda.en)} · <span className="text-emerald-300">{ronda.enviados} enviados</span> · <span className={ronda.rechazados > 0 ? 'text-amber-300' : ''}>{ronda.rechazados} rechazados</span> ·{' '}
-                    <span className={ronda.fallidos > 0 ? 'text-red-400' : ''}>{ronda.fallidos} fallidos</span> · {ronda.sinIntentar} sin intentar de {ronda.total}
+                    {hora(ronda.en)} · <span className="text-success">{ronda.enviados} enviados</span> · <span className={ronda.rechazados > 0 ? 'text-warning' : ''}>{ronda.rechazados} rechazados</span> ·{' '}
+                    <span className={ronda.fallidos > 0 ? 'text-danger' : ''}>{ronda.fallidos} fallidos</span> · {ronda.sinIntentar} sin intentar de {ronda.total}
                   </>
                 ) : (
                   'Ninguna todavía'
@@ -175,14 +177,14 @@ const BookingIntegrationCard: React.FC<{ runtime: ObservabilidadRuntime }> = ({ 
               {stock.vuelosEnviadosAlgunaVez != null && <Linea label="Vuelos enviados alguna vez">{stock.vuelosEnviadosAlgunaVez}</Linea>}
               {stock.ultimoRechazo && (
                 <Linea label="Último rechazo">
-                  <span className="text-amber-300">
+                  <span className="text-warning">
                     {hora(stock.ultimoRechazo.en)} · {stock.ultimoRechazo.detalle}
                   </span>
                 </Linea>
               )}
               {stock.ultimoError && (
                 <Linea label="Último error">
-                  <span className="text-red-400">
+                  <span className="text-danger">
                     {hora(stock.ultimoError.en)} · {stock.ultimoError.mensaje}
                   </span>
                 </Linea>
@@ -219,48 +221,48 @@ export const AdminObservabilityPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Activity className="h-5 w-5 text-brand-gold-dark" aria-hidden="true" />
-          <h2 className="text-lg font-black text-brand-black">Observabilidad</h2>
-          {s &&
-            (attention === 0 ? (
-              <Badge variant="success" className="gap-1">
-                <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Todo en orden
-              </Badge>
-            ) : (
-              <Badge variant="warning" className="gap-1">
-                <AlertTriangle className="h-3 w-3" aria-hidden="true" /> {attention} por revisar
-              </Badge>
-            ))}
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1" role="group" aria-label="Ventana de tiempo">
-            {WINDOWS.map((w) => (
-              <button
-                key={w.value}
-                type="button"
-                aria-pressed={ventana === w.value}
-                onClick={() => setVentana(w.value)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${ventana === w.value ? 'bg-brand-black text-white' : 'text-slate-600 hover:bg-slate-100'}`}
-              >
-                {w.label}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              void resumen.refetch();
-              void runtime.refetch();
-            }}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-black"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${resumen.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />
-            {s ? `Actualizado ${new Date(s.generadoEn).toLocaleTimeString('es-EC')}` : 'Actualizar'}
-          </button>
-        </div>
-      </div>
+      <AdminPageHeader
+        page="observabilidad"
+        description="Cómo se está comportando la plataforma: compras, pagos y procesos automáticos. Las cifras de «En vivo» parten de cero cuando se reinicia el servidor."
+        actions={
+          <>
+            {s &&
+              (attention === 0 ? (
+                <Badge variant="success" className="gap-1">
+                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Todo en orden
+                </Badge>
+              ) : (
+                <Badge variant="warning" className="gap-1">
+                  <AlertTriangle className="h-3 w-3" aria-hidden="true" /> {attention} por revisar
+                </Badge>
+              ))}
+            <div className="flex gap-1 rounded-xl border border-line bg-surface p-1" role="group" aria-label="Ventana de tiempo">
+              {WINDOWS.map((w) => (
+                <button
+                  key={w.value}
+                  type="button"
+                  aria-pressed={ventana === w.value}
+                  onClick={() => setVentana(w.value)}
+                  className={`min-h-[44px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors sm:min-h-[32px] ${ventana === w.value ? 'bg-ink text-on-ink' : 'text-muted hover:bg-ink/5'}`}
+                >
+                  {w.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                void resumen.refetch();
+                void runtime.refetch();
+              }}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-muted hover:text-ink sm:min-h-[32px]"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${resumen.isFetching ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
+              {s ? `Actualizado ${new Date(s.generadoEn).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' })}` : 'Actualizar'}
+            </button>
+          </>
+        }
+      />
 
       {resumen.error != null && <ProblemAlert error={resumen.error} onRetry={() => resumen.refetch()} />}
 
@@ -268,7 +270,7 @@ export const AdminObservabilityPage: React.FC = () => {
         resumen.error == null && (
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-6" role="status" aria-busy="true" aria-label="Cargando">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="h-24 rounded-2xl" />
+              <Skeleton key={i} className="h-24 rounded-xl" />
             ))}
           </div>
         )
@@ -301,7 +303,7 @@ export const AdminObservabilityPage: React.FC = () => {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <Panel title="Pendientes de reconciliación" hint="Lo que el proceso automático cierra cada minuto; en cero es lo normal.">
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-line">
                 <Pending label="Capturas pendientes" count={s.pendientes.capturaPendiente} hint="Emitida, falta cobrar" />
                 <Pending label="Anulaciones pendientes" count={s.pendientes.anulacionPendiente} hint="Fallo de emisión, falta liberar el cobro" />
                 <Pending label="Autorizados sin capturar" count={s.pendientes.autorizadoSinCaptura} hint="Con orden, más de 1 min sin cobrar" />
@@ -309,13 +311,13 @@ export const AdminObservabilityPage: React.FC = () => {
                 <Pending label="Reservas vencidas sin liberar" count={s.holds.vencidosSinLiberar} hint="El barredor va atrasado" />
               </ul>
             </Panel>
-            <Panel title="Notificaciones" hint="Correos de la ventana (el envío es simulado en este prototipo).">
+            <Panel title="Notificaciones" hint="Correos de la ventana (el envío es simulado).">
               <Bars counts={s.notificaciones.porEstado} label={notificationStateLabel} />
-              <p className="mt-3 text-[11px] text-slate-500">Tasa de fallos: {formatRate(s.tasas.notificacionesFallidas)}</p>
+              <p className="mt-3 text-small text-muted">Tasa de fallos: {formatRate(s.tasas.notificacionesFallidas)}</p>
             </Panel>
             <Panel title="Reservas temporales (holds)" hint="Asientos retenidos mientras se completa la compra.">
               <Bars counts={s.holds.porEstado} label={holdStateLabel} />
-              <p className="mt-3 text-[11px] text-slate-500">
+              <p className="mt-3 text-small text-muted">
                 Idempotencia: {s.idempotencia.enCurso} en curso · {s.idempotencia.respuestasConError5xx} con error 5xx
               </p>
             </Panel>
@@ -323,15 +325,15 @@ export const AdminObservabilityPage: React.FC = () => {
 
           <Panel title="Cambios auditados recientes" hint="Configuración de mercados y otros cambios administrativos.">
             {s.auditoriaReciente.length === 0 ? (
-              <p className="text-xs text-slate-500">Aún no hay cambios registrados.</p>
+              <p className="text-xs text-muted">Aún no hay cambios registrados.</p>
             ) : (
-              <ul className="divide-y divide-slate-100 text-xs">
+              <ul className="divide-y divide-line text-xs">
                 {s.auditoriaReciente.map((a) => (
                   <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                     <span>
-                      <span className="font-semibold text-slate-800">{a.accion}</span> · {a.entidad} <span className="font-mono text-slate-500">{a.entidadId}</span>
+                      <span className="font-semibold text-ink">{a.accion}</span> · {a.entidad} <span className="num text-muted">{a.entidadId}</span>
                     </span>
-                    <span className="text-slate-500">{new Date(a.creadoEn).toLocaleString('es-EC')}</span>
+                    <span className="text-muted">{new Date(a.creadoEn).toLocaleString('es-EC', { timeZone: 'America/Guayaquil' })}</span>
                   </li>
                 ))}
               </ul>
@@ -340,27 +342,27 @@ export const AdminObservabilityPage: React.FC = () => {
         </>
       )}
 
-      <section aria-labelledby="en-vivo" className="space-y-4 rounded-2xl border border-brand-gold/30 bg-brand-black p-5 text-white">
+      <section aria-labelledby="en-vivo" className="space-y-4 rounded-xl border border-line bg-surface p-5 text-ink">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h2 id="en-vivo" className="text-sm font-bold">
+            <h2 id="en-vivo" className="text-body font-semibold">
               En vivo
             </h2>
-            <span role="status" className="inline-flex items-center gap-1.5 text-[11px] font-semibold">
+            <span role="status" className="inline-flex items-center gap-1.5 text-small font-semibold">
               {runtime.isError && !paused ? (
                 <>
-                  <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden="true" />
-                  <span className="text-amber-300">Sin conexión · reintentando</span>
+                  <span className="h-2 w-2 rounded-full bg-warning" aria-hidden="true" />
+                  <span className="text-warning">Sin conexión · reintentando</span>
                 </>
               ) : paused ? (
                 <>
-                  <span className="h-2 w-2 rounded-full bg-slate-500" aria-hidden="true" />
-                  <span className="text-slate-300">En pausa{runtime.dataUpdatedAt ? ` · actualizado ${new Date(runtime.dataUpdatedAt).toLocaleTimeString('es-EC')}` : ''}</span>
+                  <span className="h-2 w-2 rounded-full bg-muted" aria-hidden="true" />
+                  <span className="text-muted">En pausa{runtime.dataUpdatedAt ? ` · actualizado ${new Date(runtime.dataUpdatedAt).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' })}` : ''}</span>
                 </>
               ) : (
                 <>
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 motion-safe:animate-pulse-fast" aria-hidden="true" />
-                  <span className="text-emerald-300">En vivo{runtime.dataUpdatedAt ? ` · actualizado ${new Date(runtime.dataUpdatedAt).toLocaleTimeString('es-EC')}` : ''}</span>
+                  <span className="h-2 w-2 rounded-full bg-success motion-safe:animate-pulse-fast" aria-hidden="true" />
+                  <span className="text-success">En vivo{runtime.dataUpdatedAt ? ` · actualizado ${new Date(runtime.dataUpdatedAt).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' })}` : ''}</span>
                 </>
               )}
             </span>
@@ -368,13 +370,13 @@ export const AdminObservabilityPage: React.FC = () => {
               type="button"
               aria-pressed={paused}
               onClick={() => setPaused((p) => !p)}
-              className="inline-flex items-center gap-1 rounded-lg border border-white/20 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+              className="inline-flex items-center gap-1 rounded-lg border border-line-strong px-2 py-1 text-small font-semibold text-ink hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-text"
             >
               {paused ? <Play className="h-3 w-3" aria-hidden="true" /> : <Pause className="h-3 w-3" aria-hidden="true" />}
               {paused ? 'Reanudar' : 'Pausar'}
             </button>
           </div>
-          <span className="text-[11px] text-slate-400">Contadores de este proceso: parten de cero en cada reinicio del servidor.</span>
+          <span className="text-small text-muted">Contadores de este proceso: parten de cero en cada reinicio del servidor.</span>
         </div>
         {runtime.error != null && !r ? (
           <ProblemAlert error={runtime.error} onRetry={() => runtime.refetch()} />
@@ -390,74 +392,71 @@ export const AdminObservabilityPage: React.FC = () => {
                 ['Errores 5xx', r.requests.serverErrors],
                 ['Límites de tasa', r.rateLimited],
               ].map(([label, value]) => (
-                <div key={String(label)} className="rounded-xl bg-white/5 p-3">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
-                  <Flash value={value} className={`mt-1 rounded-md text-xl font-black ${label === 'Errores 5xx' && Number(value) > 0 ? 'text-red-400' : 'text-brand-gold'}`} />
+                <div key={String(label)} className="rounded-xl bg-paper p-3">
+                  <div className="text-small text-muted">{label}</div>
+                  <Flash value={value} className={`mt-1 rounded-md text-lead font-semibold ${label === 'Errores 5xx' && Number(value) > 0 ? 'text-danger' : 'text-gold-text'}`} />
                 </div>
               ))}
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div>
-                <h3 className="mb-2 text-xs font-bold text-slate-300">Rutas más usadas</h3>
-                <div role="region" tabIndex={0} aria-label="Rutas con más actividad, desplazable horizontalmente" className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <caption className="sr-only">Rendimiento por ruta</caption>
-                    <thead className="text-slate-400">
+                <h3 className="mb-2 text-small font-semibold text-ink">Rutas más usadas</h3>
+                <Table label="Rutas con más actividad" maxHeightClass="max-h-72" className="min-w-0 text-small">
+                  <TableHead>
+                    <tr>
+                      <TableHeaderCell className="px-2 py-1.5">Ruta</TableHeaderCell>
+                      <TableHeaderCell className="px-2 py-1.5 text-right">Veces</TableHeaderCell>
+                      <TableHeaderCell className="px-2 py-1.5 text-right">Prom.</TableHeaderCell>
+                      <TableHeaderCell className="px-2 py-1.5 text-right">Máx.</TableHeaderCell>
+                      <TableHeaderCell className="px-2 py-1.5 text-right">Err.</TableHeaderCell>
+                    </tr>
+                  </TableHead>
+                  <TableBody className="num">
+                    {r.routes.slice(0, 10).map((route) => (
+                      <TableRow key={route.route}>
+                        <TableCell className="max-w-[16rem] truncate px-2 py-1.5" title={route.route}>
+                          {route.route.replace('/api/v1', '')}
+                        </TableCell>
+                        <Flash as="td" value={route.count} className="px-2 py-1.5 text-right" />
+                        <Flash as="td" value={`${route.avgMs} ms`} className="px-2 py-1.5 text-right" />
+                        <Flash as="td" value={`${route.maxMs} ms`} className="px-2 py-1.5 text-right" />
+                        <TableCell className={`px-2 py-1.5 text-right ${route.serverErrors > 0 ? 'text-danger' : ''}`}>{route.clientErrors + route.serverErrors}</TableCell>
+                      </TableRow>
+                    ))}
+                    {r.routes.length === 0 && (
                       <tr>
-                        <th scope="col" className="py-1 pr-2 font-semibold">Ruta</th>
-                        <th scope="col" className="px-2 py-1 text-right font-semibold">Veces</th>
-                        <th scope="col" className="px-2 py-1 text-right font-semibold">Prom.</th>
-                        <th scope="col" className="px-2 py-1 text-right font-semibold">Máx.</th>
-                        <th scope="col" className="pl-2 py-1 text-right font-semibold">Err.</th>
+                        <td colSpan={5} className="px-2 py-3 text-muted">
+                          Aún sin tráfico.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="font-mono">
-                      {r.routes.slice(0, 10).map((route) => (
-                        <tr key={route.route} className="border-t border-white/10">
-                          <td className="max-w-[16rem] truncate py-1 pr-2" title={route.route}>
-                            {route.route.replace('/api/v1', '')}
-                          </td>
-                          <Flash as="td" value={route.count} className="px-2 py-1 text-right" />
-                          <Flash as="td" value={`${route.avgMs} ms`} className="px-2 py-1 text-right" />
-                          <Flash as="td" value={`${route.maxMs} ms`} className="px-2 py-1 text-right" />
-                          <td className={`pl-2 py-1 text-right ${route.serverErrors > 0 ? 'text-red-400' : ''}`}>{route.clientErrors + route.serverErrors}</td>
-                        </tr>
-                      ))}
-                      {r.routes.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="py-2 text-slate-400">
-                            Aún sin tráfico.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                    )}
+                  </TableBody>
+                </Table>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <h3 className="mb-2 text-xs font-bold text-slate-300">Procesos automáticos</h3>
-                  <ul className="space-y-1.5 text-[11px]">
-                    {Object.entries(r.jobs).length === 0 && <li className="text-slate-400">Todavía no se ejecutó ninguno desde el arranque.</li>}
+                  <h3 className="mb-2 text-small font-semibold text-ink">Procesos automáticos</h3>
+                  <ul className="space-y-1.5 text-small">
+                    {Object.entries(r.jobs).length === 0 && <li className="text-muted">Todavía no se ejecutó ninguno desde el arranque.</li>}
                     {Object.entries(r.jobs).map(([name, job]) => (
-                      <li key={name} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/5 px-3 py-2">
+                      <li key={name} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-paper px-3 py-2">
                         <span className="font-semibold">{jobLabel(name)}</span>
-                        <span className={job.lastError ? 'text-red-400' : 'text-slate-300'}>
-                          {job.lastError ? `Falló: ${job.lastError}` : `Último ciclo ${job.lastRunAt ? new Date(job.lastRunAt).toLocaleTimeString('es-EC') : '—'} · ${job.lastDurationMs} ms`}
+                        <span className={job.lastError ? 'text-danger' : 'text-muted'}>
+                          {job.lastError ? `Falló: ${job.lastError}` : `Último ciclo ${job.lastRunAt ? new Date(job.lastRunAt).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' }) : '—'} · ${job.lastDurationMs} ms`}
                         </span>
                       </li>
                     ))}
                   </ul>
                 </div>
-                <div className="grid grid-cols-2 gap-4 text-[11px]">
+                <div className="grid grid-cols-2 gap-4 text-small">
                   <div>
-                    <h3 className="mb-1 text-xs font-bold text-slate-300">Códigos de error</h3>
+                    <h3 className="mb-1 text-small font-semibold text-ink">Códigos de error</h3>
                     {Object.keys(r.problemCodes).length === 0 ? (
-                      <p className="text-slate-400">Ninguno.</p>
+                      <p className="text-muted">Ninguno.</p>
                     ) : (
-                      <ul className="font-mono">
+                      <ul className="num">
                         {Object.entries(r.problemCodes)
                           .slice(0, 8)
                           .map(([code, n]) => (
@@ -470,17 +469,17 @@ export const AdminObservabilityPage: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <h3 className="mb-1 text-xs font-bold text-slate-300">Eventos de dominio</h3>
+                    <h3 className="mb-1 text-small font-semibold text-ink">Eventos de dominio</h3>
                     {Object.keys(r.events).length === 0 ? (
-                      <p className="text-slate-400">Ninguno.</p>
+                      <p className="text-muted">Ninguno.</p>
                     ) : (
-                      <ul className="font-mono">
+                      <ul className="num">
                         {Object.entries(r.events)
                           .slice(0, 8)
                           .map(([type, n]) => (
                             <li key={type} className="flex justify-between gap-2">
                               <span className="truncate">{type}</span>
-                              <span className={r.consumerFailures[type] ? 'text-red-400' : ''}>{n}</span>
+                              <span className={r.consumerFailures[type] ? 'text-danger' : ''}>{n}</span>
                             </li>
                           ))}
                       </ul>

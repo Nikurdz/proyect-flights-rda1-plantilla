@@ -34,7 +34,7 @@ import {
   type NewFlightForm,
   type RescheduleForm,
 } from './admin-schemas';
-import { ConfirmDialog } from './ConfirmDialog';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 const Actions: React.FC<{ onClose: () => void; busy: boolean; submitLabel: string }> = ({ onClose, busy, submitLabel }) => (
   <div className="flex flex-wrap justify-end gap-2 pt-1">
@@ -166,6 +166,7 @@ export const EditFlightDialog: React.FC<{ flight: AdminVueloView; onClose: () =>
 
 export const RescheduleFlightDialog: React.FC<{ flight: AdminVueloView; onClose: () => void; onDone: (message: string) => void }> = ({ flight, onClose, onDone }) => {
   const reprogramar = useReprogramarVuelo();
+  const [pending, setPending] = useState<RescheduleForm | null>(null);
   const {
     register,
     handleSubmit,
@@ -175,7 +176,7 @@ export const RescheduleFlightDialog: React.FC<{ flight: AdminVueloView; onClose:
     defaultValues: { nuevaSalida: isoToEcuadorLocal(flight.salida), motivo: '' },
   });
 
-  const onSubmit = (form: RescheduleForm) => {
+  const send = (form: RescheduleForm) => {
     reprogramar.mutate(
       { vueloId: flight.vueloId, nuevaSalida: ecuadorLocalToIso(form.nuevaSalida), motivo: form.motivo || undefined },
       {
@@ -183,25 +184,48 @@ export const RescheduleFlightDialog: React.FC<{ flight: AdminVueloView; onClose:
           onDone(`Vuelo ${flight.codigoVuelo} reprogramado. Reservas actualizadas: ${r.reservasAfectadas}.`);
           onClose();
         },
+        onError: () => setPending(null),
       },
     );
   };
 
+  // The form stays mounted (its values are kept) while the confirmation is shown instead of it.
   return (
-    <Dialog
-      isOpen
-      onClose={onClose}
-      title={`Reprogramar vuelo ${flight.codigoVuelo}`}
-      description={`Salida actual: ${formatAdminDateTime(flight.salida)}. Las reservas confirmadas se mueven a la nueva hora y se avisa por webhooks.`}
-      maxWidth="md"
-    >
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-        {reprogramar.error != null && <ProblemAlert error={reprogramar.error} message={adminErrorMessage(reprogramar.error, 'reprogramar-vuelo')} />}
-        <Input label="Nueva salida (hora de Ecuador)" type="datetime-local" error={errors.nuevaSalida?.message} {...register('nuevaSalida')} />
-        <Input label="Motivo (opcional)" maxLength={300} error={errors.motivo?.message} {...register('motivo')} />
-        <Actions onClose={onClose} busy={reprogramar.isPending} submitLabel="Reprogramar" />
-      </form>
-    </Dialog>
+    <>
+      <Dialog
+        isOpen={!pending}
+        onClose={onClose}
+        title={`Reprogramar vuelo ${flight.codigoVuelo}`}
+        description={`Salida actual: ${formatAdminDateTime(flight.salida)} (hora de Ecuador). Antes de guardar te pediremos confirmar el cambio.`}
+        maxWidth="md"
+      >
+        <form onSubmit={handleSubmit((form) => setPending(form))} noValidate className="space-y-4">
+          {reprogramar.error != null && <ProblemAlert error={reprogramar.error} message={adminErrorMessage(reprogramar.error, 'reprogramar-vuelo')} />}
+          <Input label="Nueva salida (hora de Ecuador)" type="datetime-local" error={errors.nuevaSalida?.message} {...register('nuevaSalida')} />
+          <Input label="Motivo (opcional)" maxLength={300} error={errors.motivo?.message} {...register('motivo')} />
+          <Actions onClose={onClose} busy={false} submitLabel="Continuar" />
+        </form>
+      </Dialog>
+      <ConfirmDialog
+        isOpen={Boolean(pending)}
+        title={`¿Reprogramar el vuelo ${flight.codigoVuelo}?`}
+        confirmLabel="Reprogramar vuelo"
+        cancelLabel="Volver"
+        isLoading={reprogramar.isPending}
+        onConfirm={() => pending && send(pending)}
+        onClose={() => setPending(null)}
+      >
+        <p>
+          La salida pasará de {formatAdminDateTime(flight.salida)} a {pending ? formatAdminDateTime(ecuadorLocalToIso(pending.nuevaSalida)) : ''} (hora de Ecuador).
+        </p>
+        <p className="mt-2">
+          {flight.asientosReservados > 0
+            ? `Hay ${flight.asientosReservados} asiento(s) reservado(s) en este vuelo: sus reservas confirmadas se moverán a la nueva hora.`
+            : 'Las reservas confirmadas de este vuelo, si las hay, se moverán a la nueva hora.'}{' '}
+          Avisaremos a los clientes y socios afectados.
+        </p>
+      </ConfirmDialog>
+    </>
   );
 };
 
@@ -311,7 +335,7 @@ export const FlightStatusDialog: React.FC<{ flight: AdminVueloView; onClose: () 
     formState: { errors },
   } = useForm<FlightStatusForm>({
     resolver: zodResolver(flightStatusSchema),
-    defaultValues: { status: 'DELAYED', estimatedDepartureAt: isoToEcuadorLocal(flight.salida), departureGate: '', reason: '' },
+    defaultValues: { status: '' as FlightStatusForm['status'], estimatedDepartureAt: isoToEcuadorLocal(flight.salida), departureGate: '', reason: '' },
   });
   const delayed = useWatch({ control, name: 'status' }) === 'DELAYED';
 
@@ -320,7 +344,7 @@ export const FlightStatusDialog: React.FC<{ flight: AdminVueloView; onClose: () 
       { vueloId: flight.vueloId, cambio: flightStatusBody(form) },
       {
         onSuccess: (r) => {
-          onDone(`Vuelo ${flight.codigoVuelo}: ${STATUS_LABEL[r.previousStatus] ?? r.previousStatus} → ${STATUS_LABEL[form.status]}. Reservas afectadas: ${r.affectedBookings}. Booking lo ve al consultar el estado del vuelo.`);
+          onDone(`Vuelo ${flight.codigoVuelo}: ${STATUS_LABEL[r.previousStatus] ?? r.previousStatus} → ${STATUS_LABEL[form.status]}. Reservas afectadas: ${r.affectedBookings}. El nuevo estado ya es visible para los clientes y socios.`);
           onClose();
         },
       },
@@ -339,9 +363,10 @@ export const FlightStatusDialog: React.FC<{ flight: AdminVueloView; onClose: () 
         {cambiar.error != null && <ProblemAlert error={cambiar.error} message={adminErrorMessage(cambiar.error, 'estado-vuelo')} />}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Select label="Estado" error={errors.status?.message} {...register('status')}>
+            <option value="">Elige un estado</option>
             {FLIGHT_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {STATUS_LABEL[s]} ({s})
+                {STATUS_LABEL[s]}
               </option>
             ))}
           </Select>

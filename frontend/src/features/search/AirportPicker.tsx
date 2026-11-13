@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { MapPin, PlaneTakeoff, PlaneLanding, X, Loader2 } from 'lucide-react';
+import { AlertCircle, MapPin, PlaneTakeoff, PlaneLanding, X, Loader2 } from 'lucide-react';
 import { useLocalidades } from '../../api/endpoints/catalog';
 import type { LocalidadViewDto } from '../../api/types';
 
@@ -45,7 +45,8 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
   const cityOfValue = value
     ? localidades?.find((l) => l.iata === value)?.ciudad ?? (selectedCity || '')
     : '';
-  const displayValue = editing ? query : value ? `${value}${cityOfValue ? ` · ${cityOfValue}` : ''}` : '';
+  // The traveller reads the city first; the code stays in brackets for whoever knows it.
+  const displayValue = editing ? query : value ? (cityOfValue ? `${cityOfValue} (${value})` : value) : '';
 
   // The active option always stays inside the current results (they change while typing).
   const active = Math.min(activeIndex, options.length - 1);
@@ -147,20 +148,20 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
 
   return (
     <div ref={containerRef} className="relative w-full">
-      <label htmlFor={inputId} className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+      <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-ink">
         {label}
       </label>
 
       <div
-        className={`flex items-center w-full h-[54px] px-3.5 rounded-xl border bg-white transition-all ${
+        className={`flex h-12 w-full items-center rounded-lg border bg-surface px-3.5 transition-colors ${
           isOpen
-            ? 'border-airline-blue ring-2 ring-airline-blue/20 shadow-sm'
+            ? 'border-gold-text ring-2 ring-gold-text/25'
             : error
-            ? 'border-red-400 bg-red-50/20'
-            : 'border-slate-300 hover:border-slate-400'
+            ? 'border-danger'
+            : 'border-line-strong hover:border-ink/50'
         }`}
       >
-        <Icon className="w-5 h-5 text-airline-navy shrink-0 mr-3" aria-hidden="true" />
+        <Icon className="mr-3 h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
         <input
           ref={inputRef}
           id={inputId}
@@ -192,15 +193,15 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
           }}
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
-          className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-900 placeholder:font-normal placeholder:text-slate-500 focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent text-body text-ink placeholder:text-muted focus:outline-none"
         />
-        {isLoading && isOpen && <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" aria-hidden="true" />}
+        {isLoading && isOpen && <Loader2 className="w-4 h-4 animate-spin text-muted shrink-0" aria-hidden="true" />}
         {value && (
           <button
             type="button"
             onClick={handleClear}
             onBlur={handleBlur}
-            className="ml-1 p-1 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-ink/5 hover:text-ink"
             aria-label={`Borrar ${label.toLowerCase()}`}
           >
             <X className="w-4 h-4" aria-hidden="true" />
@@ -209,18 +210,19 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
       </div>
 
       {error && (
-        <p id={errorId} className="mt-1 text-xs text-red-600 font-medium" role="alert">
+        <p id={errorId} className="mt-1.5 flex items-start gap-1.5 text-sm font-medium text-danger" role="alert">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           {error}
         </p>
       )}
 
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in-50 zoom-in-95">
+        <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-xl border border-line bg-surface shadow-elevated overflow-hidden">
           <div
             id={listId}
             role="listbox"
             aria-label={`Aeropuertos para ${label.toLowerCase()}`}
-            className="max-h-64 overflow-y-auto divide-y divide-slate-100"
+            className="max-h-64 overflow-y-auto divide-y divide-line"
           >
             {options.map((loc, index) => (
               // Combobox pattern: the keyboard stays on the input (arrows + Enter, via aria-activedescendant),
@@ -237,19 +239,19 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
                 }}
                 onMouseMove={() => setActiveIndex(index)}
                 className={`flex items-center justify-between p-3.5 cursor-pointer transition-colors ${
-                  index === active ? 'bg-airline-blue-light/70' : 'hover:bg-airline-blue-light/50'
+                  index === active ? 'bg-gold-soft' : 'hover:bg-gold-soft/60'
                 } ${loc.iata === value ? 'font-semibold' : ''}`}
               >
                 <div className="flex items-start gap-3">
-                  <MapPin className="w-4 h-4 text-airline-blue shrink-0 mt-0.5" aria-hidden="true" />
+                  <MapPin className="w-4 h-4 text-gold-text shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
-                    <div className="text-sm font-bold text-slate-900">
+                    <div className="text-body font-medium text-ink">
                       {loc.ciudad}, {loc.paisNombre}
                     </div>
-                    <div className="text-xs text-slate-500">{loc.nombre}</div>
+                    <div className="text-small text-muted">{loc.nombre}</div>
                   </div>
                 </div>
-                <span className="font-mono text-xs font-black px-2 py-1 rounded bg-slate-100 text-airline-navy border border-slate-200 shrink-0">
+                <span className="num shrink-0 rounded-md border border-line px-2 py-1 text-small font-medium text-muted">
                   {loc.iata}
                 </span>
               </div>
@@ -257,15 +259,15 @@ export const AirportPicker: React.FC<AirportPickerProps> = ({
           </div>
 
           {isError && (
-            <div className="p-6 text-center text-xs text-slate-600" role="alert">
+            <div className="p-6 text-center text-small text-muted" role="alert">
               No pudimos cargar los aeropuertos.{' '}
-              <button type="button" onClick={() => refetch()} onBlur={handleBlur} className="inline-flex min-h-[44px] items-center font-bold text-brand-gold-dark underline">
+              <button type="button" onClick={() => refetch()} onBlur={handleBlur} className="inline-flex min-h-[44px] items-center font-semibold text-gold-text underline">
                 Reintentar
               </button>
             </div>
           )}
           {!isError && !isLoading && options.length === 0 && (
-            <div className="p-6 text-center text-xs text-slate-500">
+            <div className="p-6 text-center text-small text-muted">
               No encontramos aeropuertos para &quot;{query}&quot;.
             </div>
           )}

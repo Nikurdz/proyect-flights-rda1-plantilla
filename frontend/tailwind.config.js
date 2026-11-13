@@ -1,46 +1,87 @@
 import animate from 'tailwindcss-animate';
 
+/** A color that reads a CSS variable ("R G B" triplet from src/styles/index.css) and supports `/opacity`. */
+const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
+const slate = Object.fromEntries(
+  [50, 100, 200, 300, 400, 500, 600, 700, 800, 900].map((step) => [step, v(`slate-${step}`)]),
+);
+
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        // RAM Alliance: black chrome, one gold accent, light neutral surfaces.
+        // Semantic tokens (light and dark values live in the CSS variables).
+        ink: v('ink'),
+        'on-ink': v('on-ink'),
+        muted: v('muted'),
+        gold: v('gold'),
+        'gold-text': v('gold-text'),
+        'gold-soft': v('gold-soft'),
+        'on-gold': v('on-gold'),
+        paper: v('paper'),
+        surface: v('surface'),
+        line: v('line'),
+        'line-strong': v('line-strong'),
+        chrome: v('chrome'),
+        success: v('success'),
+        'success-soft': v('success-soft'),
+        danger: v('danger'),
+        'danger-soft': v('danger-soft'),
+        'on-danger': v('on-danger'),
+        warning: v('warning'),
+        'warning-soft': v('warning-soft'),
+
+        // Aliases so the pages that are not redesigned yet keep working. Prefer the tokens above.
         brand: {
-          black: '#0B0E14',
+          black: v('ink'),
           dark: '#05070A',
           navy: '#0F172A',
-          gold: '#AB9159',
-          'gold-light': '#F4EFE4',
-          'gold-dark': '#8C7547',
-          silver: '#94A3B8',
-          blue: '#0369A1',
-          'blue-light': '#E0F2FE',
+          gold: v('gold'),
+          'gold-light': v('gold-soft'),
+          'gold-dark': v('gold-text'),
+          silver: v('muted'),
+          blue: v('gold-text'),
+          'blue-light': v('gold-soft'),
         },
-        airline: {
-          navy: '#0B0E14',
-          'navy-dark': '#05070A',
-          'navy-light': '#1E293B',
-          blue: '#0369A1',
-          'blue-light': '#E0F2FE',
-          gold: '#AB9159',
-          'gold-hover': '#8C7547',
-          coral: '#D4AF37',
-          sky: '#38BDF8',
-          sand: '#F8FAFC',
-          border: '#E2E8F0',
-          muted: '#64748B',
-        },
+
+        // Legacy bridge: slate flips in dark mode (see index.css). Do not use in new code.
+        slate,
+      },
+      // `bg-white` is the surface color (white in light, panel color in dark); `text-white` stays white.
+      backgroundColor: {
+        white: v('surface'),
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: [
+          '"Instrument Sans Variable"',
+          '"Instrument Sans"',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Segoe UI"',
+          'Roboto',
+          'sans-serif',
+        ],
+      },
+      // Type scale 1.25: 14 / 16 / 20 / 25 / 31 / 39 / 49 (the default xs/sm/base/lg steps stay for legacy pages).
+      fontSize: {
+        small: ['0.875rem', { lineHeight: '1.25rem' }],
+        body: ['1rem', { lineHeight: '1.5rem' }],
+        lead: ['1.25rem', { lineHeight: '1.75rem' }],
+        title: ['1.5625rem', { lineHeight: '1.9rem', letterSpacing: '-0.01em' }],
+        heading: ['1.9375rem', { lineHeight: '2.25rem', letterSpacing: '-0.015em' }],
+        display: ['2.4375rem', { lineHeight: '2.75rem', letterSpacing: '-0.02em' }],
+        hero: ['3.0625rem', { lineHeight: '3.25rem', letterSpacing: '-0.025em' }],
       },
       boxShadow: {
         xs: '0 1px 2px 0 rgba(11, 14, 20, 0.06)',
-        card: '0 2px 10px -2px rgba(11, 14, 20, 0.06), 0 4px 16px -4px rgba(11, 14, 20, 0.04)',
-        'card-hover': '0 8px 24px -4px rgba(11, 14, 20, 0.12), 0 4px 12px -2px rgba(11, 14, 20, 0.06)',
-        elevated: '0 16px 36px -4px rgba(11, 14, 20, 0.18)',
+        card: '0 1px 2px 0 rgba(11, 14, 20, 0.05)',
+        'card-hover': '0 4px 12px -2px rgba(11, 14, 20, 0.10)',
+        elevated: '0 16px 36px -8px rgba(11, 14, 20, 0.28), 0 2px 6px rgba(11, 14, 20, 0.10)',
       },
       keyframes: {
         pulseFast: {

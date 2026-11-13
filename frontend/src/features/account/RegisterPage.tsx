@@ -11,6 +11,7 @@ import type { OrdenViewDto } from '../../api/types';
 import { ProblemDetailsError } from '../../api/problem-details';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
+import { useToast } from '../../lib/toast';
 import { Input } from '../../components/ui/Input';
 import { AuthShell } from './AuthShell';
 import { registrationSchema, type RegistrationForm } from './registration-schema';
@@ -25,6 +26,7 @@ export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const next = safeNext(params.get('next'));
+  const toast = useToast();
 
   const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState<unknown>(null);
@@ -87,21 +89,22 @@ export const RegisterPage: React.FC = () => {
       }
     }
     setCreated({ nombres: form.nombres, signedIn, linked });
+    toast.success('Cuenta creada', signedIn ? 'Ya iniciaste sesión.' : 'Inicia sesión para continuar.');
   };
 
   if (created) {
     return (
       <AuthShell title="Tu cuenta está lista">
         <div className="text-center focus:outline-none" role="status" tabIndex={-1} ref={focusOnMount}>
-          <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" aria-hidden="true" />
-          <p className="mt-4 text-sm leading-relaxed text-slate-700">
-            Hola, <strong>{created.nombres}</strong>. Creamos tu cuenta{created.signedIn ? ' y ya iniciaste sesión' : ''}.
+          <CheckCircle2 className="mx-auto h-12 w-12 text-success" aria-hidden="true" />
+          <p className="mt-4 text-body text-ink">
+            Hola, <strong className="font-semibold">{created.nombres}</strong>. Creamos tu cuenta{created.signedIn ? ' y ya iniciaste sesión' : ''}.
           </p>
           {created.linked && (
-            <p className="mt-2 text-sm font-semibold text-emerald-700">Agregamos tu viaje reciente a tu cuenta.</p>
+            <p className="mt-2 text-body font-medium text-success">Agregamos tu viaje reciente a tu cuenta.</p>
           )}
-          <p className="mt-2 text-xs leading-relaxed text-slate-500">
-            Enviamos un mensaje para verificar tu correo (en este prototipo el envío es simulado). No necesitas verificarlo para comprar.
+          <p className="mt-2 text-small text-muted">
+            Te enviamos un mensaje para verificar tu correo. No necesitas verificarlo para comprar.
           </p>
           <div className="mt-6 flex flex-col gap-3">
             {created.signedIn ? (
@@ -109,7 +112,7 @@ export const RegisterPage: React.FC = () => {
                 <Button type="button" variant="primary" size="lg" className="w-full" onClick={() => navigate(next)}>
                   {created.linked ? 'Ver mis viajes' : next === '/' ? 'Buscar vuelos' : 'Continuar'}
                 </Button>
-                <Link to="/mi-cuenta" className="text-xs font-semibold text-brand-gold-dark hover:underline">
+                <Link to="/mi-cuenta" className="inline-flex min-h-[44px] items-center justify-center text-small font-medium text-gold-text underline underline-offset-2 hover:text-ink">
                   Ver mi cuenta
                 </Link>
               </>
@@ -125,7 +128,7 @@ export const RegisterPage: React.FC = () => {
   }
 
   return (
-    <AuthShell title="Crear cuenta" subtitle="Guarda tus viajes y compra más rápido. Es gratis." wide>
+    <AuthShell title="Crear cuenta" subtitle="Guarda tus viajes y compra más rápido. Crear una cuenta es gratis." wide>
       {submitError != null && <ProblemAlert error={submitError} title="No pudimos crear tu cuenta" className="mb-6" />}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
@@ -142,6 +145,7 @@ export const RegisterPage: React.FC = () => {
             type="date"
             autoComplete="bday"
             max={getTodayDateString()}
+            helperText="La pedimos para confirmar que eres mayor de 18 años, requisito para crear una cuenta."
             error={errors.fechaNacimiento?.message}
             {...register('fechaNacimiento')}
           />
@@ -151,7 +155,7 @@ export const RegisterPage: React.FC = () => {
             autoComplete="tel"
             placeholder="+593999999999"
             leftIcon={<Phone className="h-4 w-4" aria-hidden="true" />}
-            helperText="Con código de país."
+            helperText="Incluye el código de país, por ejemplo +593 para Ecuador."
             error={errors.telefono?.message}
             {...register('telefono')}
           />
@@ -182,49 +186,49 @@ export const RegisterPage: React.FC = () => {
         <button
           type="button"
           onClick={() => setShowPassword((value) => !value)}
-          className="inline-flex min-h-[44px] items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-brand-black"
+          className="inline-flex min-h-[44px] items-center gap-1.5 text-small font-medium text-muted hover:text-ink"
           aria-pressed={showPassword}
         >
           {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
           {showPassword ? 'Ocultar contraseñas' : 'Mostrar contraseñas'}
         </button>
 
-        <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <label className="flex cursor-pointer items-start gap-3 text-xs text-slate-700">
-            <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-black" aria-invalid={Boolean(errors.aceptaTerminos)} aria-describedby={errors.aceptaTerminos ? 'acepta-terminos-error' : undefined} {...register('aceptaTerminos')} />
+        <div className="space-y-3 rounded-xl border border-line bg-paper p-4">
+          <label className="flex cursor-pointer items-start gap-3 text-small text-ink">
+            <input type="checkbox" className="mt-0.5 h-5 w-5 rounded border-line-strong accent-ink" aria-invalid={Boolean(errors.aceptaTerminos)} aria-describedby={errors.aceptaTerminos ? 'acepta-terminos-error' : undefined} {...register('aceptaTerminos')} />
             <span>
               Acepto los{' '}
-              <Link to="/terminos" target="_blank" className="font-bold text-brand-gold-dark underline">
+              <Link to="/terminos" target="_blank" className="font-medium text-gold-text underline underline-offset-2">
                 Términos de uso
               </Link>{' '}
               y la{' '}
-              <Link to="/privacidad" target="_blank" className="font-bold text-brand-gold-dark underline">
+              <Link to="/privacidad" target="_blank" className="font-medium text-gold-text underline underline-offset-2">
                 Política de privacidad
               </Link>
               . *
             </span>
           </label>
           {errors.aceptaTerminos && (
-            <p id="acepta-terminos-error" className="text-xs font-medium text-red-600" role="alert">
+            <p id="acepta-terminos-error" className="text-small font-medium text-danger" role="alert">
               {errors.aceptaTerminos.message}
             </p>
           )}
 
-          <label className="flex cursor-pointer items-start gap-3 text-xs text-slate-700">
-            <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-black" {...register('consentimientoMarketing')} />
-            <span>Quiero recibir ofertas y novedades por correo (opcional; puedes cambiarlo cuando quieras).</span>
+          <label className="flex cursor-pointer items-start gap-3 text-small text-ink">
+            <input type="checkbox" className="mt-0.5 h-5 w-5 rounded border-line-strong accent-ink" {...register('consentimientoMarketing')} />
+            <span>Quiero recibir ofertas y novedades por correo (opcional; lo puedes cambiar cuando quieras).</span>
           </label>
         </div>
 
-        <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting} className="w-full font-bold">
+        <Button type="submit" variant="primary" size="lg" isLoading={isSubmitting} className="w-full">
           Crear cuenta
         </Button>
       </form>
 
-      <p className="mt-6 border-t border-slate-100 pt-5 text-center text-xs text-slate-500">
+      <p className="mt-6 border-t border-line pt-5 text-small text-muted">
         ¿Ya tienes cuenta?{' '}
-        <Link to={`/login${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-bold text-brand-gold-dark hover:underline">
-          Inicia sesión
+        <Link to={`/login${next !== '/' ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-medium text-gold-text underline underline-offset-2 hover:text-ink">
+          Iniciar sesión
         </Link>
       </p>
     </AuthShell>

@@ -47,7 +47,7 @@ Aplicación web (SPA) de la plataforma de venta de vuelos directos **RAM Allianc
 
 ## Pago simulado
 
-El formulario no pide número de tarjeta: se elige cómo debe responder el pago de prueba (`tok_*` en el API). Con `VITE_SHOW_TEST_CARDS=true` aparecen además todos los escenarios (Amex, Diners, fondos insuficientes, vencida, antifraude, fallo de captura) y el token. Cada intento de pago usa su propia `Idempotency-Key`; solo un reintento idéntico la reutiliza.
+El pago es de prueba (no se cobra ni se guardan los datos de la tarjeta) y acepta cualquier número válido de Visa, Mastercard, Amex o Diners. Con `VITE_SHOW_TEST_CARDS=true` aparece el bloque «Ver tarjetas de prueba» con las tarjetas que se aprueban y las que simulan un problema (rechazada, fondos insuficientes, vencida, antifraude, fallo de captura); sin la variable el bloque no se muestra. Cada intento de pago usa su propia `Idempotency-Key`; solo un reintento idéntico la reutiliza.
 
 ## Variables de entorno
 
@@ -55,7 +55,7 @@ El formulario no pide número de tarjeta: se elige cómo debe responder el pago 
 |---|---|
 | `VITE_API_URL` | Base de la API. En desarrollo `/api/v1` (pasa por el proxy de Vite) |
 | `VITE_BACKEND_TARGET` | Destino del proxy de Vite en desarrollo (`http://localhost:3000` o la URL de Render) |
-| `VITE_SHOW_TEST_CARDS` | `true` muestra todos los escenarios de pago de prueba |
+| `VITE_SHOW_TEST_CARDS` | `true` muestra el bloque de tarjetas de prueba (aprobadas y de fallo); en producción pública, `false` o sin definir |
 | `VITE_GRAPHQL_URL` | Opcional: URL del gateway GraphQL. Si falta, se deriva de `VITE_API_URL` (`https://host/api/v1` -> `https://host/graphql`); en desarrollo el proxy de Vite reenvía `/graphql` |
 
 En producción, `VITE_API_URL` debe ser la URL completa de la API (p. ej. `https://<app>.onrender.com/api/v1`) y el origen del front debe estar en `CORS_ORIGINS` del backend.

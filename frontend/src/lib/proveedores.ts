@@ -25,17 +25,17 @@ export function semaforo(estado: string | null | undefined): Semaforo {
 }
 
 export const LED_DOT_CLASS: Record<LedTone, string> = {
-  success: 'bg-emerald-500 shadow-[0_0_8px_2px_rgba(16,185,129,0.55)]',
-  warning: 'bg-amber-400 shadow-[0_0_8px_2px_rgba(251,191,36,0.55)]',
-  danger: 'bg-red-500 shadow-[0_0_8px_2px_rgba(239,68,68,0.55)]',
-  neutral: 'bg-slate-400',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-danger',
+  neutral: 'bg-muted',
 };
 
 export const LED_TEXT_CLASS: Record<LedTone, string> = {
-  success: 'text-emerald-800',
-  warning: 'text-amber-800',
-  danger: 'text-red-800',
-  neutral: 'text-slate-600',
+  success: 'text-success',
+  warning: 'text-warning',
+  danger: 'text-danger',
+  neutral: 'text-muted',
 };
 
 export interface CircuitoInfo {

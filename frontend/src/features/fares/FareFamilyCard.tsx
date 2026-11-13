@@ -1,149 +1,100 @@
 import React from 'react';
-import { Luggage, Briefcase, RefreshCw, Undo2, Armchair } from 'lucide-react';
+import { Luggage, Briefcase, RefreshCw, Undo2, Armchair, Wallet } from 'lucide-react';
 import type { FamiliaTarifariaDto } from '../../api/types';
 import { MoneyText } from '../../components/common/MoneyText';
+import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 
 export interface FareFamilyCardProps {
   familia: FamiliaTarifariaDto;
   onSelect: (familia: FamiliaTarifariaDto) => void;
-  isPopular?: boolean;
+  /** The family with the lowest total of the list (computed from the data by the modal): «Más conveniente». */
+  isBestValue?: boolean;
 }
 
-export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({
-  familia,
-  onSelect,
-  isPopular = false,
-}) => {
+export const FareFamilyCard: React.FC<FareFamilyCardProps> = ({ familia, onSelect, isBestValue = false }) => {
   const cond = familia.condiciones;
+  const name = familia.nombre || familia.codigo;
 
-  const isFull = familia.codigo.toUpperCase() === 'FULL';
-  const isLight = familia.codigo.toUpperCase() === 'LIGHT';
+  const rows = [
+    {
+      icon: Briefcase,
+      title: 'Equipaje de mano',
+      included: Boolean(cond?.equipajeMano?.incluido),
+      yes: `Incluido (${cond?.equipajeMano?.kg} kg en cabina)`,
+      no: 'Solo un artículo personal',
+    },
+    {
+      icon: Luggage,
+      title: 'Equipaje de bodega',
+      included: Boolean(cond?.equipajeBodega?.piezas && cond.equipajeBodega.piezas > 0),
+      yes: `${cond?.equipajeBodega?.piezas} ${cond?.equipajeBodega?.piezas === 1 ? 'pieza' : 'piezas'} de 23 kg incluida`,
+      no: 'No incluido',
+    },
+    {
+      icon: RefreshCw,
+      title: 'Cambios de fecha',
+      included: Boolean(cond?.cambio?.permitido),
+      yes: 'Permitidos, con cargo o diferencia de tarifa',
+      no: 'No permitidos',
+    },
+    {
+      icon: Undo2,
+      title: 'Reembolso',
+      included: Boolean(cond?.devolucion?.permitida),
+      yes: 'Reembolsable',
+      no: 'No reembolsable',
+    },
+    {
+      icon: Armchair,
+      title: 'Elegir asiento',
+      included: Boolean(cond?.seleccionAsiento?.incluida),
+      yes: 'Asiento estándar incluido',
+      no: 'No incluido',
+    },
+  ];
 
   return (
     <div
-      className={`rounded-2xl border bg-white flex flex-col justify-between transition-all duration-200 relative overflow-hidden ${
-        isPopular || isLight
-          ? 'border-airline-blue shadow-card-hover ring-2 ring-airline-blue/20'
-          : 'border-slate-200 shadow-card hover:border-slate-300'
+      className={`relative flex flex-col justify-between overflow-hidden rounded-xl border bg-surface ${
+        isBestValue ? 'border-gold-text ring-2 ring-gold-text/25' : 'border-line'
       }`}
     >
-      {/* Popular badge */}
-      {(isPopular || isLight) && (
-        <div className="bg-airline-blue text-white text-[11px] font-bold text-center py-1 uppercase tracking-wider">
-          Más conveniente
+      <div className="border-b border-line p-5">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <h3 className="text-lead font-semibold text-ink">{name}</h3>
+          {isBestValue && (
+            <Badge variant="secondary" icon={<Wallet />}>
+              Más conveniente
+            </Badge>
+          )}
         </div>
-      )}
+        <p className="text-small text-muted">{familia.asientosDisponibles} asientos disponibles</p>
 
-      {/* Header */}
-      <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-        <div className="flex items-center justify-between mb-1">
-          <h4 className="text-lg font-black text-airline-navy tracking-tight uppercase">
-            {familia.nombre || familia.codigo}
-          </h4>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-200/80 text-slate-700">
-            Economy
-          </span>
-        </div>
-        <p className="text-xs text-slate-500">
-          {familia.asientosDisponibles} asientos disponibles
-        </p>
-
-        {/* Total price for the group */}
-        <div className="mt-4 pt-3 border-t border-slate-200/60">
-          <span className="text-xs text-slate-500 block">Total del grupo</span>
-          <div className="text-airline-navy">
-            <MoneyText
-              amount={familia.totalGrupo?.monto}
-              currency={familia.totalGrupo?.moneda}
-              size="2xl"
-            />
+        <div className="mt-4 border-t border-line pt-3">
+          <span className="block text-small text-muted">Total del grupo</span>
+          <div className="num text-ink">
+            <MoneyText amount={familia.totalGrupo?.monto} currency={familia.totalGrupo?.moneda} size="2xl" />
           </div>
-          <span className="text-[11px] text-slate-500">Tasas e impuestos incluidos</span>
+          <span className="text-small text-muted">Impuestos incluidos</span>
         </div>
       </div>
 
-      {/* Benefits List */}
-      <div className="p-5 flex-1 space-y-3.5 text-xs text-slate-700">
-        {/* Hand Luggage */}
-        <div className="flex items-start gap-2.5">
-          <Briefcase className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
-          <div>
-            <span className="font-semibold block">Equipaje de mano</span>
-            {cond?.equipajeMano?.incluido ? (
-              <span className="text-emerald-700 font-medium">
-                Incluido ({cond.equipajeMano.kg} kg en cabina)
-              </span>
-            ) : (
-              <span className="text-slate-500">Solo artículo personal</span>
-            )}
-          </div>
-        </div>
+      <ul className="flex-1 space-y-3.5 p-5 text-small">
+        {rows.map(({ icon: Icon, title, included, yes, no }) => (
+          <li key={title} className="flex items-start gap-2.5">
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+            <div>
+              <span className="block font-medium text-ink">{title}</span>
+              <span className={included ? 'text-success' : 'text-muted'}>{included ? yes : no}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
 
-        {/* Hold Luggage */}
-        <div className="flex items-start gap-2.5">
-          <Luggage className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
-          <div>
-            <span className="font-semibold block">Equipaje de bodega</span>
-            {cond?.equipajeBodega?.piezas && cond.equipajeBodega.piezas > 0 ? (
-              <span className="text-emerald-700 font-medium">
-                {cond.equipajeBodega.piezas} pieza(s) de 23 kg incluida
-              </span>
-            ) : (
-              <span className="text-slate-500">No incluido</span>
-            )}
-          </div>
-        </div>
-
-        {/* Changes */}
-        <div className="flex items-start gap-2.5">
-          <RefreshCw className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
-          <div>
-            <span className="font-semibold block">Cambios de fecha</span>
-            {cond?.cambio?.permitido ? (
-              <span className="text-emerald-700 font-medium">Permitido (aplica cargo/diferencia)</span>
-            ) : (
-              <span className="text-slate-500">No permitido</span>
-            )}
-          </div>
-        </div>
-
-        {/* Refunds */}
-        <div className="flex items-start gap-2.5">
-          <Undo2 className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
-          <div>
-            <span className="font-semibold block">Devolución / Reembolso</span>
-            {cond?.devolucion?.permitida ? (
-              <span className="text-emerald-700 font-medium">Reembolso permitido</span>
-            ) : (
-              <span className="text-slate-500">No reembolsable</span>
-            )}
-          </div>
-        </div>
-
-        {/* Seat Selection */}
-        <div className="flex items-start gap-2.5">
-          <Armchair className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
-          <div>
-            <span className="font-semibold block">Selección de asiento</span>
-            {cond?.seleccionAsiento?.incluida ? (
-              <span className="text-emerald-700 font-medium">Asiento estándar incluido</span>
-            ) : (
-              <span className="text-slate-500">No incluida</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Select button */}
       <div className="p-5 pt-0">
-        <Button
-          variant={isFull ? 'accent' : isPopular || isLight ? 'secondary' : 'outline'}
-          size="md"
-          onClick={() => onSelect(familia)}
-          className="w-full font-bold shadow-sm"
-        >
-          Elegir {familia.nombre || familia.codigo}
+        <Button variant={isBestValue ? 'accent' : 'outline'} onClick={() => onSelect(familia)} className="w-full" aria-label={`Elegir tarifa ${name}`}>
+          Elegir {name}
         </Button>
       </div>
     </div>

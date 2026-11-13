@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { addDaysToDate, getValidSearchDateString } from '../../lib/dates';
 import { MoneyText } from '../../components/common/MoneyText';
 import type { FechaAlternativaDto, MontoDto } from '../../api/types';
@@ -19,7 +19,7 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
   lowestPrice,
   fechasAlternativas = [],
   onSelectDate,
-  label = 'Selecciona otra fecha de viaje:',
+  label = 'Cambia el día de viaje',
 }) => {
   // Generate 7-day window: 3 days before, current day, 3 days after
   const daysWindow = useMemo(() => {
@@ -53,6 +53,15 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
     return map;
   }, [fechasAlternativas, lowestPrice, currentDate]);
 
+  // Keep the chosen day visible in the horizontal strip (phones), without animating if the user prefers less motion.
+  const selectedRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = selectedRef.current;
+    if (!el || typeof el.scrollIntoView !== 'function') return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+  }, [currentDate]);
+
   const canGoPrevious = addDaysToDate(currentDate, -1) >= minDate;
 
   const handlePreviousDay = () => {
@@ -65,115 +74,70 @@ export const DateNavigator: React.FC<DateNavigatorProps> = ({
     onSelectDate(addDaysToDate(currentDate, 1));
   };
 
+  const stepButton =
+    'inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-lg border border-line-strong px-2.5 text-small font-medium text-ink transition-colors hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-35';
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-sm mb-6 space-y-3">
-      {/* Header bar with controls */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-[#C5A880]" aria-hidden="true" />
-          <span className="text-xs font-bold text-slate-800">{label}</span>
-        </div>
+    <section aria-label={label} className="mb-6 rounded-xl border border-line bg-surface p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-body font-semibold text-ink">{label}</h2>
 
         <div className="flex items-center gap-2">
-          {/* Quick Step Buttons */}
-          <button
-            type="button"
-            onClick={handlePreviousDay}
-            disabled={!canGoPrevious}
-            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 min-h-[44px] min-w-[44px] justify-center rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-slate-700"
-            title="Ver día anterior"
-            aria-label="Ver día anterior"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+          <button type="button" onClick={handlePreviousDay} disabled={!canGoPrevious} className={stepButton} title="Ver día anterior" aria-label="Ver día anterior">
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             <span className="hidden sm:inline">Día anterior</span>
           </button>
 
-          <button
-            type="button"
-            onClick={handleNextDay}
-            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 min-h-[44px] min-w-[44px] justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-700"
-            title="Ver día siguiente"
-            aria-label="Ver día siguiente"
-          >
+          <button type="button" onClick={handleNextDay} className={stepButton} title="Ver día siguiente" aria-label="Ver día siguiente">
             <span className="hidden sm:inline">Día siguiente</span>
-            <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>
 
-          {/* Direct Date Picker Dropdown */}
-          <div className="relative inline-block">
-            <input
-              type="date"
-              min={minDate}
-              value={currentDate}
-              onChange={(e) => e.target.value && onSelectDate(e.target.value)}
-              aria-label="Elegir fecha específica en calendario"
-              className="text-xs font-bold border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 bg-slate-50 hover:bg-slate-100 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#C5A880]"
-            />
-          </div>
+          <input
+            type="date"
+            min={minDate}
+            value={currentDate}
+            onChange={(e) => e.target.value && onSelectDate(e.target.value)}
+            aria-label="Elegir una fecha en el calendario"
+            className="min-h-[44px] cursor-pointer rounded-lg border border-line-strong bg-surface px-2.5 text-small text-ink hover:border-ink/50 focus-visible:border-gold-text"
+          />
         </div>
       </div>
 
-      {/* 7-Days Strip Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+      {/* Phones: one scrollable row that snaps day by day. md+: the 7-column grid. */}
+      <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-7 md:overflow-visible md:px-0 md:pb-0">
         {daysWindow.map((dayStr) => {
           const isSelected = dayStr === currentDate;
           const [y, m, d] = dayStr.split('-').map(Number);
           const dateObj = new Date(Date.UTC(y, m - 1, d));
 
-          const dayOfWeek = dateObj
-            .toLocaleDateString('es-EC', { weekday: 'short', timeZone: 'UTC' })
-            .toUpperCase()
-            .replace('.', '');
-          const dayAndMonth = dateObj.toLocaleDateString('es-EC', {
-            day: 'numeric',
-            month: 'short',
-            timeZone: 'UTC',
-          });
-
+          const dayOfWeek = dateObj.toLocaleDateString('es-EC', { weekday: 'short', timeZone: 'UTC' }).replace('.', '');
+          const dayAndMonth = dateObj.toLocaleDateString('es-EC', { day: 'numeric', month: 'short', timeZone: 'UTC' });
           const price = priceMap.get(dayStr);
 
           return (
             <button
               key={dayStr}
+              ref={isSelected ? selectedRef : undefined}
               type="button"
               aria-pressed={isSelected}
+              aria-current={isSelected ? 'date' : undefined}
               onClick={() => onSelectDate(dayStr)}
-              className={`p-2.5 rounded-xl text-center transition-all flex flex-col justify-between min-h-[72px] ${
-                isSelected
-                  ? 'bg-[#0B0E14] brand-tab-active text-white border-2 border-[#C5A880] ring-2 ring-[#C5A880]/30 shadow-sm'
-                  : 'bg-slate-50/70 border border-slate-200 hover:border-slate-300 hover:bg-slate-100 text-slate-800'
+              className={`flex min-h-[72px] w-[7.5rem] shrink-0 snap-center flex-col md:w-auto md:shrink justify-between rounded-lg border p-2.5 text-left transition-colors ${
+                isSelected ? 'border-ink bg-ink text-on-ink' : 'border-line bg-paper text-ink hover:border-line-strong'
               }`}
             >
-              <div>
-                <span
-                  className={`block text-[10px] font-black tracking-wider ${
-                    isSelected ? 'text-[#C5A880]' : 'text-slate-500'
-                  }`}
-                >
-                  {dayOfWeek}
-                </span>
-                <span className="block text-xs font-bold font-sans mt-0.5">{dayAndMonth}</span>
-              </div>
-
-              <div className="mt-1">
-                {price ? (
-                  <span className={`block text-[10px] font-mono font-bold ${
-                    isSelected ? 'text-white' : 'text-emerald-700'
-                  }`}>
-                    <MoneyText amount={price.monto} currency={price.moneda} size="sm" />
-                  </span>
-                ) : (
-                  <span className={`block text-[9px] ${
-                    isSelected ? 'text-slate-300' : 'text-slate-500'
-                  }`}>
-                    {isSelected ? 'Fecha actual' : 'Ver vuelos'}
-                  </span>
-                )}
-              </div>
+              <span>
+                <span className={`block text-small capitalize ${isSelected ? 'text-on-ink/80' : 'text-muted'}`}>{dayOfWeek}</span>
+                <span className="block text-body font-medium">{dayAndMonth}</span>
+              </span>
+              <span className="num mt-1 block text-small font-semibold">
+                {price ? <MoneyText amount={price.monto} currency={price.moneda} size="sm" /> : <span className={`font-normal ${isSelected ? 'text-on-ink/80' : 'text-muted'}`}>{isSelected ? 'Día elegido' : 'Ver vuelos'}</span>}
+              </span>
             </button>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 };

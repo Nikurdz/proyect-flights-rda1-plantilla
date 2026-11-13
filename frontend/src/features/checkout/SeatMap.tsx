@@ -2,6 +2,7 @@ import React from 'react';
 import { Clock3 } from 'lucide-react';
 import type { MapaAsientosViewDto } from '../../api/types';
 import { seatTraits } from '../../lib/seats';
+import { SEAT_TONES } from './seat-tones';
 
 export interface SeatPick {
   /** Short tag shown on the seat, e.g. the passenger's number. */
@@ -25,8 +26,6 @@ const RIGHT = ['D', 'E', 'F'];
  * A seat another customer has set aside while they pay. It is told apart from an occupied seat by more than
  * colour: a dashed border, a diagonal hatch and a clock instead of the solid grey cross.
  */
-const HELD_TONE = 'cursor-not-allowed border-dashed border-slate-400 text-slate-500 bg-[repeating-linear-gradient(135deg,#ffffff_0,#ffffff_3px,#e2e8f0_3px,#e2e8f0_5px)]';
-
 /** Single-aisle economy cabin: A-B-C | D-E-F, one row per line. Pure presentation; the page owns the state. */
 export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect, takenInfo }) => {
   const byColumn = (seats: MapaAsientosViewDto['filas'][number]['seats'], column: string) => seats.find((s) => s.seatNumber.endsWith(column));
@@ -41,13 +40,13 @@ export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect, takenI
     const taken = !seat.isAvailable;
     const held = taken && seat.status === 'HELD';
 
-    let tone = 'border-slate-300 bg-white text-slate-700 hover:border-brand-gold hover:bg-brand-gold-light';
-    if (extra) tone = 'border-brand-gold/60 bg-brand-gold-light/60 text-brand-gold-dark hover:border-brand-gold';
-    if (taken) tone = held ? HELD_TONE : 'cursor-not-allowed border-slate-200 bg-slate-200 text-slate-400';
-    if (pick) tone = pick.mine ? 'border-brand-gold bg-brand-gold text-brand-black ring-2 ring-brand-gold/40' : 'border-brand-black bg-brand-black text-white';
+    let tone: string = SEAT_TONES.free;
+    if (extra) tone = SEAT_TONES.extra;
+    if (taken) tone = held ? SEAT_TONES.held : SEAT_TONES.taken;
+    if (pick) tone = pick.mine ? SEAT_TONES.mine : SEAT_TONES.other;
 
     const holder = takenInfo?.get(seat.seatNumber);
-    const state = pick ? (pick.mine ? 'elegido por ti' : `elegido (pasajero ${pick.tag})`) : taken ? (holder ? `reservado (${holder})` : held ? 'apartado por otro cliente' : 'ocupado') : 'disponible';
+    const state = pick ? (pick.mine ? 'tu elección' : `elegido (pasajero ${pick.tag})`) : taken ? (holder ? `reservado (${holder})` : held ? 'apartado por otro cliente' : 'ocupado') : 'libre';
     return (
       <button
         key={column}
@@ -57,7 +56,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect, takenI
         title={`${seat.seatNumber}${traits ? ` · ${traits}` : ''}${holder ? ` · ${holder}` : held && !pick ? ' · apartado por otro cliente' : ''}`}
         aria-label={`Asiento ${seat.seatNumber}, ${state}${traits ? `, ${traits}` : ''}`}
         aria-pressed={Boolean(pick?.mine)}
-        className={`flex h-9 w-9 items-center justify-center rounded-lg border text-[11px] font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold ${tone}`}
+        className={`num flex h-9 w-9 items-center justify-center rounded-lg border text-xs font-semibold transition-colors ${tone}`}
       >
         {pick ? pick.tag : held ? <Clock3 className="h-3.5 w-3.5" aria-hidden="true" /> : taken ? '×' : column}
       </button>
@@ -65,8 +64,8 @@ export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect, takenI
   };
 
   return (
-    <div className="mx-auto w-fit space-y-1.5 rounded-3xl border border-slate-200 bg-slate-50 px-4 py-5 sm:px-8" role="group" aria-label="Mapa de asientos">
-      <div className="flex items-center gap-1.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500" aria-hidden="true">
+    <div className="mx-auto w-fit space-y-1.5 rounded-2xl border border-line bg-paper px-4 py-5 sm:px-8" role="group" aria-label="Mapa de asientos">
+      <div className="flex items-center gap-1.5 pb-1 text-xs font-medium text-muted" aria-hidden="true">
         <span className="w-6" />
         {LEFT.map((c) => (
           <span key={c} className="w-9 text-center">
@@ -83,7 +82,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect, takenI
 
       {filas.map((fila) => (
         <div key={fila.rowNumber} className="flex items-center gap-1.5">
-          <span className="w-6 text-right text-[10px] font-semibold text-slate-500" aria-hidden="true">
+          <span className="num w-6 text-right text-xs text-muted" aria-hidden="true">
             {fila.rowNumber}
           </span>
           {LEFT.map((column) => renderSeat(column, fila.seats))}
@@ -95,35 +94,39 @@ export const SeatMap: React.FC<SeatMapProps> = ({ filas, picks, onSelect, takenI
   );
 };
 
-/** Colour key shown under the map. */
-export const SeatLegend: React.FC = () => (
-  <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] text-slate-600">
-    <li className="flex items-center gap-1.5">
-      <span className="h-4 w-4 rounded border border-slate-300 bg-white" aria-hidden="true" />
-      Disponible
-    </li>
-    <li className="flex items-center gap-1.5">
-      <span className="h-4 w-4 rounded border border-brand-gold/60 bg-brand-gold-light/60" aria-hidden="true" />
-      Más espacio / salida de emergencia
-    </li>
-    <li className="flex items-center gap-1.5">
-      <span className="h-4 w-4 rounded border border-brand-gold bg-brand-gold" aria-hidden="true" />
-      Tu elección
-    </li>
-    <li className="flex items-center gap-1.5">
-      <span className="h-4 w-4 rounded border border-brand-black bg-brand-black" aria-hidden="true" />
-      Otro pasajero tuyo
-    </li>
-    <li className="flex items-center gap-1.5" title="Otro cliente lo está comprando; puede volver a quedar disponible">
-      <span
-        className="flex h-4 w-4 items-center justify-center rounded border border-dashed border-slate-400 bg-[repeating-linear-gradient(135deg,#ffffff_0,#ffffff_3px,#e2e8f0_3px,#e2e8f0_5px)]"
-        aria-hidden="true"
-      />
-      Apartado
-    </li>
-    <li className="flex items-center gap-1.5">
-      <span className="h-4 w-4 rounded border border-slate-200 bg-slate-200" aria-hidden="true" />
-      Ocupado
-    </li>
-  </ul>
-);
+/** Key shown under the map: every state has a swatch and a word, never color alone. */
+export const SeatLegend: React.FC = () => {
+  const swatch = 'flex h-5 w-5 items-center justify-center rounded border';
+  return (
+    <ul className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-muted" aria-label="Significado de los asientos">
+      <li className="flex items-center gap-1.5">
+        <span className={`${swatch} ${SEAT_TONES.free}`} aria-hidden="true" />
+        Libre
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className={`${swatch} ${SEAT_TONES.extra}`} aria-hidden="true" />
+        Más espacio o salida de emergencia
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className={`${swatch} ${SEAT_TONES.mine}`} aria-hidden="true" />
+        Tu elección
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className={`${swatch} ${SEAT_TONES.other}`} aria-hidden="true" />
+        Otro pasajero tuyo
+      </li>
+      <li className="flex items-center gap-1.5" title="Otro cliente lo está comprando; puede volver a quedar libre">
+        <span className={`${swatch} ${SEAT_TONES.held}`} aria-hidden="true">
+          <Clock3 className="h-3 w-3" />
+        </span>
+        Apartado
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span className={`${swatch} ${SEAT_TONES.taken}`} aria-hidden="true">
+          ×
+        </span>
+        Ocupado
+      </li>
+    </ul>
+  );
+};

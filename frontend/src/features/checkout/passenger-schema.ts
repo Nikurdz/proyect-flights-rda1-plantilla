@@ -46,10 +46,16 @@ export interface PassengerRulesContext {
 
 export const contactSchema = z.object({
   correo: z.string().email('Ingresa un correo electrónico válido'),
+  // People type "+593 99 123 4567": spaces, dashes and parentheses are dropped before checking the international format.
   telefono: z
     .string()
-    .min(8, 'Ingresa un teléfono con código de país, por ejemplo +593999999999.')
-    .regex(/^\+[1-9]\d{6,14}$/, 'Usa el formato internacional: "+" y el código de país, por ejemplo +593999999999.'),
+    .transform((value) => value.replace(/[\s\-().]/g, ''))
+    .pipe(
+      z
+        .string()
+        .min(8, 'Ingresa un teléfono con código de país, por ejemplo +593 99 123 4567.')
+        .regex(/^\+[1-9]\d{6,14}$/, 'Empieza con "+" y el código de país, por ejemplo +593 99 123 4567.'),
+    ),
 });
 
 /** The form schema for one offer: field rules plus the cross-checks that need the whole party and the trip. */

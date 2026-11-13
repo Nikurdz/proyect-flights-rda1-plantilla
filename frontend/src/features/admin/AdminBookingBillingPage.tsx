@@ -15,9 +15,13 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
+import { useToast } from '../../lib/toast';
+import { FilterPanel } from './FilterPanel';
 import { useSession } from '../../lib/session';
 import { adminErrorMessage } from './admin-errors';
-import { BillingTabs } from './BillingTabs';
+import { AdminPageHeader } from './AdminPageHeader';
 import { BOOKING_STATUS_LABEL } from './reservas';
 
 interface Form {
@@ -30,18 +34,18 @@ interface Form {
 
 const initialForm = (): Form => ({ ...currentMonthRange(), partnerId: '', estado: '', soloAlertas: false });
 
-const Card: React.FC<{ label: string; children: React.ReactNode; tone?: string }> = ({ label, children, tone = 'bg-white text-brand-black' }) => (
-  <div className={`rounded-xl border border-slate-200 p-3 shadow-sm ${tone}`}>
-    <div className="text-[11px] font-bold uppercase tracking-wider opacity-70">{label}</div>
-    <div className="mt-1 text-lg font-black">{children}</div>
+const Card: React.FC<{ label: string; children: React.ReactNode; tone?: string }> = ({ label, children, tone = 'bg-surface text-ink' }) => (
+  <div className={`rounded-xl border border-line p-3 ${tone}`}>
+    <div className="text-small opacity-80">{label}</div>
+    <div className="num mt-1 text-lead font-semibold">{children}</div>
   </div>
 );
 
 const money = (amount: string | null, currency: string) => (amount == null ? '—' : <MoneyText amount={amount} currency={currency} size="sm" />);
 
 const IvaAlerta: React.FC<{ item: ConciliacionItem }> = ({ item }) => (
-  <div role="alert" className="mt-1 rounded-lg border border-amber-300 bg-amber-50 p-1.5 text-[11px] text-amber-900">
-    <span className="inline-flex items-center gap-1 font-bold">
+  <div role="alert" className="mt-1 rounded-lg border border-warning bg-warning-soft p-1.5 text-small text-warning">
+    <span className="inline-flex items-center gap-1 font-semibold">
       <AlertTriangle className="h-3 w-3" aria-hidden="true" />
       IVA no cuadra
     </span>
@@ -57,7 +61,7 @@ export const AdminBookingBillingPage: React.FC = () => {
   const [draft, setDraft] = useState<Form>(initialForm);
   const [filters, setFilters] = useState<ConciliacionFiltros>(() => ({ ...currentMonthRange(), estado: '' }));
   const [pagina, setPagina] = useState(1);
-  const [exported, setExported] = useState<string | null>(null);
+  const toast = useToast();
 
   const list = useConciliacionBooking({ ...filters, pagina }, session?.ownerId);
   const summary = useResumenConciliacionBooking(filters, session?.ownerId);
@@ -90,26 +94,22 @@ export const AdminBookingBillingPage: React.FC = () => {
   };
 
   const doExport = () => {
-    setExported(null);
-    exportCsv.mutate(filters, { onSuccess: (filename) => setExported(filename) });
+    exportCsv.mutate(filters, { onSuccess: (filename) => toast.success(`Descargado ${filename}.`) });
   };
 
   return (
     <section aria-label="Facturación de Booking">
-      <div className="mb-4 flex items-center gap-2">
-        <Receipt className="h-5 w-5 text-brand-gold-dark" aria-hidden="true" />
-        <h2 className="text-lg font-black text-brand-black">Facturación</h2>
-      </div>
-      <BillingTabs />
+      <AdminPageHeader page="facturacion-booking" description="Compara las ventas de Booking con las facturas que Booking emite." />
 
-      <p role="note" className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
-        Vista de conciliación: no es un documento fiscal. Las facturas las emite Booking (IVA 15 % incluido); aquí se comparan sus importes con los nuestros.
+      <p role="note" className="mb-4 rounded-xl border border-line bg-gold-soft p-3 text-small text-ink">
+        Vista de conciliación: no es un documento fiscal. Las facturas las emite Booking (IVA 15 % incluido); aquí se comparan sus importes con los nuestros. Los días se cuentan en hora de Ecuador.
       </p>
 
-      <form onSubmit={apply} className="mb-5 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
-        <Input label="Desde (Ecuador)" type="date" value={draft.desde} max={draft.hasta || undefined} onChange={(e) => set('desde', e.target.value)} />
-        <Input label="Hasta (Ecuador)" type="date" value={draft.hasta} min={draft.desde || undefined} onChange={(e) => set('hasta', e.target.value)} />
-        <Input label="Socio" placeholder="booking-prototipo" maxLength={60} value={draft.partnerId} onChange={(e) => set('partnerId', e.target.value)} />
+      <FilterPanel defaultOpen activeCount={Object.entries(filters).filter(([k, v]) => v && k !== 'desde' && k !== 'hasta').length}>
+      <form onSubmit={apply} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Input label="Desde (hora de Ecuador)" type="date" value={draft.desde} max={draft.hasta || undefined} onChange={(e) => set('desde', e.target.value)} />
+        <Input label="Hasta (hora de Ecuador)" type="date" value={draft.hasta} min={draft.desde || undefined} onChange={(e) => set('hasta', e.target.value)} />
+        <Input label="Socio" placeholder="Nombre del socio" helperText="Déjalo vacío para ver todos los socios." maxLength={60} value={draft.partnerId} onChange={(e) => set('partnerId', e.target.value)} />
         <Select label="Estado" value={draft.estado ?? ''} onChange={(e) => set('estado', e.target.value as Form['estado'])}>
           <option value="">Todos</option>
           {ESTADOS_RESERVA.map((s) => (
@@ -118,7 +118,7 @@ export const AdminBookingBillingPage: React.FC = () => {
             </option>
           ))}
         </Select>
-        <label className="flex items-center gap-2 self-end text-sm font-semibold text-slate-700">
+        <label className="flex items-center gap-2 self-end text-sm font-medium text-ink">
           <input type="checkbox" checked={draft.soloAlertas} onChange={(e) => set('soloAlertas', e.target.checked)} />
           Solo con IVA descuadrado
         </label>
@@ -131,9 +131,10 @@ export const AdminBookingBillingPage: React.FC = () => {
           </Button>
         </div>
       </form>
+      </FilterPanel>
 
       {resumen?.truncado && (
-        <p role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+        <p role="status" className="mb-4 rounded-lg border border-warning bg-warning-soft p-3 text-small text-warning">
           El resumen se calculó con las primeras 5000 ventas del periodo. Conviene acotar las fechas.
         </p>
       )}
@@ -155,10 +156,10 @@ export const AdminBookingBillingPage: React.FC = () => {
             <Card label="Reembolsos">{money(t.reembolsos, moneda)}</Card>
             <Card label="Penalidades">{money(t.penalidades, moneda)}</Card>
             <Card label="Equipaje + cambios de fecha">{money(String((Number(t.equipaje) + Number(t.cambiosFecha)).toFixed(2)), moneda)}</Card>
-            <Card label="Neto" tone="bg-brand-black text-brand-gold">
+            <Card label="Neto" tone="bg-chrome text-gold">
               {money(t.neto, moneda)}
             </Card>
-            <Card label="Alertas de IVA" tone={t.alertasIva > 0 ? 'bg-amber-50 text-amber-900' : 'bg-white text-brand-black'}>
+            <Card label="Alertas de IVA" tone={t.alertasIva > 0 ? 'bg-warning-soft text-warning' : 'bg-surface text-ink'}>
               {t.alertasIva}
             </Card>
           </>
@@ -166,127 +167,112 @@ export const AdminBookingBillingPage: React.FC = () => {
       </div>
 
       {resumen && resumen.dias.length > 0 && (
-        <div role="region" tabIndex={0} aria-label="Resumen por día, desplazable horizontalmente" className="mb-5 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full min-w-[760px] text-left text-xs">
-            <caption className="sr-only">Resumen por día de Ecuador</caption>
-            <thead className="bg-slate-50 font-bold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th scope="col" className="px-4 py-2">Día</th>
-                <th scope="col" className="px-4 py-2">Ventas</th>
-                <th scope="col" className="px-4 py-2">Base</th>
-                <th scope="col" className="px-4 py-2">IVA</th>
-                <th scope="col" className="px-4 py-2">Total</th>
-                <th scope="col" className="px-4 py-2">Cancelaciones</th>
-                <th scope="col" className="px-4 py-2">Reembolsos</th>
-                <th scope="col" className="px-4 py-2">Neto</th>
-                <th scope="col" className="px-4 py-2">Alertas</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {resumen.dias.map((d) => (
-                <tr key={d.fecha}>
-                  <td className="px-4 py-2 font-mono font-semibold">{d.fecha}</td>
-                  <td className="px-4 py-2">{d.ventas}</td>
-                  <td className="px-4 py-2">{money(d.base, moneda)}</td>
-                  <td className="px-4 py-2">{money(d.iva, moneda)}</td>
-                  <td className="px-4 py-2">{money(d.total, moneda)}</td>
-                  <td className="px-4 py-2">{d.cancelaciones}</td>
-                  <td className="px-4 py-2">{money(d.reembolsos, moneda)}</td>
-                  <td className="px-4 py-2 font-bold">{money(d.neto, moneda)}</td>
-                  <td className="px-4 py-2">{d.alertasIva > 0 ? <span className="font-bold text-amber-800">{d.alertasIva}</span> : 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table label="Resumen por día de Ecuador" className="min-w-[760px]" wrapperClassName="mb-5" maxHeightClass="max-h-[50vh]">
+          <TableHead>
+            <tr>
+              <TableHeaderCell>Día</TableHeaderCell>
+              <TableHeaderCell>Ventas</TableHeaderCell>
+              <TableHeaderCell>Base</TableHeaderCell>
+              <TableHeaderCell>IVA</TableHeaderCell>
+              <TableHeaderCell>Total</TableHeaderCell>
+              <TableHeaderCell>Cancelaciones</TableHeaderCell>
+              <TableHeaderCell>Reembolsos</TableHeaderCell>
+              <TableHeaderCell>Neto</TableHeaderCell>
+              <TableHeaderCell>Alertas</TableHeaderCell>
+            </tr>
+          </TableHead>
+          <TableBody>
+            {resumen.dias.map((d) => (
+              <TableRow key={d.fecha}>
+                <TableCell className="num font-semibold">{d.fecha}</TableCell>
+                <TableCell className="num">{d.ventas}</TableCell>
+                <TableCell>{money(d.base, moneda)}</TableCell>
+                <TableCell>{money(d.iva, moneda)}</TableCell>
+                <TableCell>{money(d.total, moneda)}</TableCell>
+                <TableCell className="num">{d.cancelaciones}</TableCell>
+                <TableCell>{money(d.reembolsos, moneda)}</TableCell>
+                <TableCell className="font-semibold">{money(d.neto, moneda)}</TableCell>
+                <TableCell>{d.alertasIva > 0 ? <span className="font-semibold text-warning">{d.alertasIva}</span> : 0}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3" aria-live="polite">
-        <p className="text-[11px] text-slate-500">El CSV usa los filtros aplicados (sin paginar, hasta 5000 ventas, las más antiguas primero).</p>
+        <p className="text-small text-muted">El CSV usa los filtros aplicados (sin paginar, hasta 5000 ventas, las más antiguas primero).</p>
         <Button type="button" variant="outline" size="sm" isLoading={exportCsv.isPending} onClick={doExport}>
           <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Exportar CSV
         </Button>
       </div>
-      {exported && (
-        <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-          Descargado {exported}.
-        </p>
-      )}
       {exportCsv.error != null && <ProblemAlert error={exportCsv.error} message={adminErrorMessage(exportCsv.error, 'exportar-conciliacion')} className="mb-4" />}
       {list.error != null && <ProblemAlert error={list.error} onRetry={() => list.refetch()} className="mb-4" />}
 
-      <div role="region" tabIndex={0} aria-label="Tabla de ventas de Booking, desplazable horizontalmente" className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm" aria-busy={list.isFetching}>
-        <table className="w-full min-w-[1100px] text-left text-sm">
-          <caption className="sr-only">Ventas de Booking como líneas de factura</caption>
-          <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+      <Table label="Ventas de Booking como líneas de factura" className="min-w-[1100px]" aria-busy={list.isFetching}>
+        <TableHead>
+          <tr>
+            <TableHeaderCell>Fecha</TableHeaderCell>
+            <TableHeaderCell>PNR</TableHeaderCell>
+            <TableHeaderCell>Orden del socio</TableHeaderCell>
+            <TableHeaderCell>Pago</TableHeaderCell>
+            <TableHeaderCell>Estado</TableHeaderCell>
+            <TableHeaderCell>Base</TableHeaderCell>
+            <TableHeaderCell>IVA</TableHeaderCell>
+            <TableHeaderCell>IVA según Booking</TableHeaderCell>
+            <TableHeaderCell>Total</TableHeaderCell>
+            <TableHeaderCell>Nota de crédito</TableHeaderCell>
+          </tr>
+        </TableHead>
+        <TableBody>
+          {list.isLoading && (
             <tr>
-              <th scope="col" className="px-4 py-3">Fecha</th>
-              <th scope="col" className="px-4 py-3">PNR</th>
-              <th scope="col" className="px-4 py-3">Orden del socio</th>
-              <th scope="col" className="px-4 py-3">Pago</th>
-              <th scope="col" className="px-4 py-3">Estado</th>
-              <th scope="col" className="px-4 py-3">Base</th>
-              <th scope="col" className="px-4 py-3">IVA</th>
-              <th scope="col" className="px-4 py-3">IVA según Booking</th>
-              <th scope="col" className="px-4 py-3">Total</th>
-              <th scope="col" className="px-4 py-3">Nota de crédito</th>
+              <td colSpan={10} className="p-4">
+                <div role="status" aria-busy="true" aria-label="Cargando">
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {list.isLoading && (
-              <tr>
-                <td colSpan={10} className="p-4">
-                  <div role="status" aria-busy="true" aria-label="Cargando">
-                    <Skeleton className="h-24 w-full" />
+          )}
+          {items.map((i) => (
+            <TableRow key={i.bookingId}>
+              <TableCell className="num">{i.fecha}</TableCell>
+              <TableCell className="num font-semibold text-ink">{i.pnr}</TableCell>
+              <TableCell className="num break-all text-muted">{i.partnerOrderId ?? '—'}</TableCell>
+              <TableCell className="num break-all text-muted">{i.paymentReference}</TableCell>
+              <TableCell>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${i.estado === 'CANCELLED' ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'}`}>
+                  {BOOKING_STATUS_LABEL[i.estado as keyof typeof BOOKING_STATUS_LABEL] ?? i.estado}
+                </span>
+              </TableCell>
+              <TableCell>{money(i.base, i.moneda)}</TableCell>
+              <TableCell>
+                {money(i.iva, i.moneda)}
+                {i.ivaAlerta && <IvaAlerta item={i} />}
+              </TableCell>
+              <TableCell>{money(i.ivaSegunBooking, i.moneda)}</TableCell>
+              <TableCell className="font-semibold">{money(i.total, i.moneda)}</TableCell>
+              <TableCell>
+                {i.notaCredito ? (
+                  <div>
+                    <div className="num font-semibold text-danger">{i.notaCredito.numero}</div>
+                    <div className="text-muted">Reembolso {i.notaCredito.reembolso}</div>
+                    <div className="text-muted">Penalidad {i.notaCredito.penalidad}</div>
                   </div>
-                </td>
-              </tr>
-            )}
-            {items.map((i) => (
-              <tr key={i.bookingId} className="align-top hover:bg-slate-50">
-                <td className="px-4 py-3 font-mono text-xs">{i.fecha}</td>
-                <td className="px-4 py-3 font-mono text-xs font-bold text-brand-black">{i.pnr}</td>
-                <td className="break-all px-4 py-3 font-mono text-xs text-slate-600">{i.partnerOrderId ?? '—'}</td>
-                <td className="break-all px-4 py-3 font-mono text-xs text-slate-600">{i.paymentReference}</td>
-                <td className="px-4 py-3 text-xs">
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${i.estado === 'CANCELLED' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                    {BOOKING_STATUS_LABEL[i.estado as keyof typeof BOOKING_STATUS_LABEL] ?? i.estado}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-xs">{money(i.base, i.moneda)}</td>
-                <td className="px-4 py-3 text-xs">
-                  {money(i.iva, i.moneda)}
-                  {i.ivaAlerta && <IvaAlerta item={i} />}
-                </td>
-                <td className="px-4 py-3 text-xs">{money(i.ivaSegunBooking, i.moneda)}</td>
-                <td className="px-4 py-3 text-xs font-bold">{money(i.total, i.moneda)}</td>
-                <td className="px-4 py-3 text-xs">
-                  {i.notaCredito ? (
-                    <div>
-                      <div className="font-mono font-bold text-red-800">{i.notaCredito.numero}</div>
-                      <div className="text-slate-600">Reembolso {i.notaCredito.reembolso}</div>
-                      <div className="text-slate-600">Penalidad {i.notaCredito.penalidad}</div>
-                    </div>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-              </tr>
-            ))}
-            {!list.isLoading && items.length === 0 && !list.error && (
-              <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">
-                  No hay ventas de Booking con estos filtros.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                ) : (
+                  '—'
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {!list.isLoading && items.length === 0 && !list.error && (
+        <EmptyState icon={<Receipt />} title="No hay ventas de Booking con estos filtros" description="Amplía las fechas o quita el filtro de socio o de IVA." />
+      )}
 
       {list.data && list.data.total > 0 && (
-        <nav aria-label="Paginación de ventas" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+        <nav aria-label="Paginación de ventas" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-small text-muted">
           <span>
             {list.data.total} venta(s) · página {list.data.pagina} de {totalPages}
           </span>

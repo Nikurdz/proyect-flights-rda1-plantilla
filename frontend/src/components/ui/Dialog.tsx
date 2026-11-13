@@ -117,10 +117,10 @@ export const Dialog: React.FC<DialogProps> = ({
   const dark = variant === 'dark';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 motion-safe:animate-in motion-safe:fade-in">
       {/* Backdrop: a pointer convenience only (keyboard users have Escape and the close button). */}
       <div
-        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60"
         aria-hidden="true"
         onMouseDown={requestClose}
       />
@@ -132,23 +132,23 @@ export const Dialog: React.FC<DialogProps> = ({
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
         className={clsx(
-          'relative z-10 flex w-full max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none',
+          'relative z-10 flex w-full max-h-[85vh] flex-col overflow-hidden rounded-xl border border-line bg-surface text-ink shadow-elevated focus:outline-none',
           maxWidths[maxWidth]
         )}
       >
         <div
           className={clsx(
             'flex shrink-0 items-start justify-between gap-3 px-6 py-4',
-            dark ? 'bg-brand-black text-white' : 'border-b border-slate-100'
+            dark ? 'bg-chrome text-white' : 'border-b border-line'
           )}
         >
           <div>
             {eyebrow && <div className="mb-1">{eyebrow}</div>}
-            <h2 id={titleId} className={clsx('text-lg font-bold', dark ? 'text-white' : 'text-airline-navy')}>
+            <h2 id={titleId} className={clsx('text-lg font-semibold', dark ? 'text-white' : 'text-ink')}>
               {title}
             </h2>
             {description && (
-              <p id={descId} className="mt-1 text-sm text-slate-500">
+              <p id={descId} className="mt-1 text-sm text-muted">
                 {description}
               </p>
             )}
@@ -161,7 +161,7 @@ export const Dialog: React.FC<DialogProps> = ({
               'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors',
               dark
                 ? 'text-white/70 hover:bg-white/10 hover:text-white'
-                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-600'
+                : 'text-muted hover:bg-ink/5 hover:text-ink'
             )}
             aria-label="Cerrar modal"
           >

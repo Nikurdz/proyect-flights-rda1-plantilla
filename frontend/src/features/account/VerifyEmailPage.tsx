@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { verificarCorreo } from '../../api/endpoints/auth';
+import { ButtonLink } from '../../components/ui/ButtonLink';
 import { AuthShell } from './AuthShell';
 
 type State = 'checking' | 'ok' | 'invalid' | 'missing';
@@ -27,29 +28,29 @@ export const VerifyEmailPage: React.FC = () => {
       <div className="text-center" role="status" aria-live="polite">
         {state === 'checking' && (
           <>
-            <Loader2 className="mx-auto h-10 w-10 animate-spin text-brand-gold" aria-hidden="true" />
-            <p className="mt-4 text-sm text-slate-600">Estamos verificando tu correo…</p>
+            <Loader2 className="mx-auto h-10 w-10 text-gold-text motion-safe:animate-spin" aria-hidden="true" />
+            <p className="mt-4 text-body text-muted">Estamos verificando tu correo…</p>
           </>
         )}
         {state === 'ok' && (
           <>
-            <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" aria-hidden="true" />
-            <p className="mt-4 text-sm font-semibold text-slate-800">¡Listo! Tu correo quedó verificado.</p>
-            <Link to="/" className="mt-6 inline-block text-xs font-bold text-brand-gold-dark hover:underline">
-              Ir a buscar vuelos
-            </Link>
+            <CheckCircle2 className="mx-auto h-12 w-12 text-success" aria-hidden="true" />
+            <p className="mt-4 text-lead font-semibold text-ink">Tu correo quedó verificado.</p>
+            <ButtonLink to="/" variant="accent" className="mt-6">
+              Buscar vuelos
+            </ButtonLink>
           </>
         )}
         {(state === 'invalid' || state === 'missing') && (
           <>
-            <XCircle className="mx-auto h-12 w-12 text-red-500" aria-hidden="true" />
-            <p className="mt-4 text-sm font-semibold text-slate-800">
+            <XCircle className="mx-auto h-12 w-12 text-danger" aria-hidden="true" />
+            <p className="mt-4 text-lead font-semibold text-ink">
               {state === 'missing' ? 'Falta el enlace de verificación.' : 'El enlace no es válido o ya venció.'}
             </p>
-            <p className="mt-2 text-xs text-slate-500">Si necesitas uno nuevo, contáctanos desde Ayuda.</p>
-            <Link to="/ayuda#contacto" className="mt-6 inline-block text-xs font-bold text-brand-gold-dark hover:underline">
+            <p className="mt-2 text-small text-muted">Si necesitas un enlace nuevo, mira en Ayuda cómo pedirlo.</p>
+            <ButtonLink to="/ayuda#cuenta" variant="outline" className="mt-6">
               Ir a Ayuda
-            </Link>
+            </ButtonLink>
           </>
         )}
       </div>

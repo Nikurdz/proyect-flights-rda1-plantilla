@@ -2,6 +2,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
+import { ToastProvider } from '../../src/components/ui/Toast';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -41,9 +42,11 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
+      <ToastProvider>
       <MemoryRouter>
         <AdminDashboardPage />
       </MemoryRouter>
+    </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -59,7 +62,7 @@ describe('AdminDashboardPage', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
     expect(screen.getByRole('img', { name: /Ingresos por día/ })).toBeTruthy();
     expect(screen.getByRole('img', { name: /Ocupación por ruta/ })).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toContain('entregas muertas');
+    expect(screen.getAllByRole('alert').some((a) => a.textContent?.includes('no llegaron a su destino'))).toBe(true);
     expect(mocked.mock.calls[0][0]).toBe('admin/dashboard?dias=30');
   });
 

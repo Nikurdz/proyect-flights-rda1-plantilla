@@ -1,121 +1,86 @@
 import React from 'react';
-import { Plane, Users, Shield, Clock } from 'lucide-react';
-import { Logo } from '../../components/ui/Logo';
-import { fareFamilyLabel, formatDateTime } from '../../lib/labels';
-import { timeZoneOf } from '../../lib/airports';
+import { Users } from 'lucide-react';
+import { BoardingPass } from '../../components/ui/BoardingPass';
+import { Card } from '../../components/ui/Card';
 import { MoneyText } from '../../components/common/MoneyText';
 import { Countdown } from '../../components/common/Countdown';
+import { timeZoneOf } from '../../lib/airports';
+import { formatDateInTimeZone, formatDuration, formatTimeInTimeZone } from '../../lib/dates';
+import { holdUntil } from '../../lib/checkout';
+import { fareFamilyLabel } from '../../lib/labels';
 import type { OfertaViewDto } from '../../api/types';
 
 interface CheckoutSummaryProps {
   oferta: OfertaViewDto;
   onExpire?: () => void;
+  /** Show the countdown here. On a phone the fixed bar shows it instead, so it is never announced twice. */
+  showCountdown?: boolean;
 }
 
-export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ oferta, onExpire }) => {
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({ oferta, onExpire, showCountdown = true }) => {
   const adt = oferta.pasajeros?.adultos || 0;
+  const yth = oferta.pasajeros?.jovenes || 0;
   const chd = oferta.pasajeros?.ninos || 0;
   const inf = oferta.pasajeros?.infantes || 0;
+  const until = holdUntil(oferta);
+
+  const travellers = [
+    plural(adt, 'adulto', 'adultos'),
+    yth > 0 ? plural(yth, 'joven', 'jóvenes') : null,
+    chd > 0 ? plural(chd, 'niño', 'niños') : null,
+    inf > 0 ? plural(inf, 'infante en brazos', 'infantes en brazos') : null,
+  ].filter(Boolean);
 
   return (
-    <aside aria-label="Resumen de compra" className="space-y-4">
-      {/* Expiration Countdown Card */}
-      {oferta.venceEn && (
-        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Clock className="w-4 h-4 text-amber-600 animate-pulse" aria-hidden="true" />
-            <span className="text-xs font-bold text-slate-800">Tu cupo está retenido</span>
-          </div>
-          <Countdown
-            venceEn={oferta.venceEn}
-            initialSeconds={oferta.segundosRestantes}
-            onExpire={onExpire}
+    <aside aria-label="Resumen de tu compra" className="space-y-3">
+      {(oferta.trayectos ?? []).map((leg, index, all) => {
+        const minutes = Math.round((new Date(leg.llegada).getTime() - new Date(leg.salida).getTime()) / 60000);
+        const originZone = timeZoneOf(leg.origen);
+        const destinationZone = timeZoneOf(leg.destino);
+        return (
+          <BoardingPass
+            key={leg.itinerarioId ?? index}
+            ariaLabel={`${all.length > 1 ? (index === 0 ? 'Ida' : 'Vuelta') + ': ' : ''}vuelo ${leg.numeroVuelo} de ${leg.origen} a ${leg.destino}`}
+            origin={{ code: leg.origen, time: formatTimeInTimeZone(leg.salida, originZone), date: formatDateInTimeZone(leg.salida, originZone) }}
+            destination={{ code: leg.destino, time: formatTimeInTimeZone(leg.llegada, destinationZone), date: formatDateInTimeZone(leg.llegada, destinationZone) }}
+            duration={formatDuration(minutes)}
+            details={
+              <span>
+                {all.length > 1 && <span className="font-medium text-ink">{index === 0 ? 'Ida' : 'Vuelta'}. </span>}
+                Vuelo <span className="num">{leg.numeroVuelo}</span>, tarifa {fareFamilyLabel(leg.familia)}
+              </span>
+            }
           />
-        </div>
-      )}
+        );
+      })}
 
-      {/* Main Itinerary & Price Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-        {/* Card header */}
-        <div className="bg-gradient-to-r from-brand-dark to-brand-black p-4 text-white flex items-center justify-between border-b border-brand-gold/20">
-          <Logo variant="icon" />
-          <span className="text-xs font-black tracking-widest text-brand-gold uppercase">
-            Resumen de viaje
-          </span>
+      <Card className="space-y-4">
+        <div className="flex items-start gap-2 text-small text-muted">
+          <Users className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <p>
+            {travellers.join(', ')}. Horas de Ecuador.
+          </p>
         </div>
 
-        <div className="p-5 space-y-5">
-          {/* Flight Legs */}
-          <div className="space-y-4">
-            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Tu itinerario
-            </h4>
-
-            {oferta.trayectos?.map((trayecto, idx) => (
-              <div
-                key={idx}
-                className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2 text-xs"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-extrabold text-slate-900 flex items-center gap-1.5">
-                    <Plane className="w-3.5 h-3.5 text-brand-gold" aria-hidden="true" />
-                    {trayecto.origen} → {trayecto.destino}
-                  </span>
-                  <span className="text-[11px] font-mono font-bold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
-                    {trayecto.numeroVuelo}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-slate-600 text-[11px]">
-                  <span>Salida (hora de Ecuador): {formatDateTime(trayecto.salida, timeZoneOf(trayecto.origen))}</span>
-                  <span className="font-bold text-airline-navy bg-airline-navy/5 px-2 py-0.5 rounded uppercase">
-                    Tarifa {fareFamilyLabel(trayecto.familia)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Passenger Composition */}
-          <div className="pt-3 border-t border-slate-100 text-xs">
-            <div className="flex items-center gap-2 text-slate-700 font-bold mb-1">
-              <Users className="w-4 h-4 text-slate-400" aria-hidden="true" />
-              <span>Pasajeros:</span>
+        <div className="border-t border-line pt-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <div>
+              <p className="font-medium text-ink">Total del grupo</p>
+              <p className="text-small text-muted">Tarifas e impuestos de todos los pasajeros, en dólares.</p>
             </div>
-            <div className="text-slate-500 pl-6 text-[11px] space-y-0.5">
-              <div>• {adt} Adulto{adt > 1 ? 's' : ''}</div>
-              {chd > 0 && <div>• {chd} Niño{chd > 1 ? 's' : ''}</div>}
-              {inf > 0 && <div>• {inf} Infante{inf > 1 ? 's' : ''} en brazos</div>}
-            </div>
-          </div>
-
-          {/* Price Breakdown */}
-          <div className="pt-4 border-t border-slate-200 space-y-2">
-            <p className="text-xs text-slate-500">El total incluye la tarifa y los impuestos de todos los pasajeros.</p>
-
-            <div className="pt-2 border-t border-slate-100 flex items-baseline justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-900 block">Total a pagar</span>
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Dólares (USD)</span>
-              </div>
-              <div className="text-right">
-                <MoneyText
-                  amount={oferta.total?.monto}
-                  currency={oferta.total?.moneda || oferta.moneda}
-                  size="xl"
-                  className="text-airline-navy font-black"
-                />
-              </div>
-            </div>
+            <MoneyText amount={oferta.total?.monto} currency={oferta.total?.moneda || oferta.moneda} size="2xl" className="num shrink-0 text-ink" />
           </div>
         </div>
 
-        {/* Guaranteed Protection Footer */}
-        <div className="bg-slate-50 p-4 border-t border-slate-100 flex items-center gap-3 text-[11px] text-slate-500">
-          <Shield className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
-          <span>Tus datos viajan cifrados. Los pagos de este sitio son simulados.</span>
-        </div>
-      </div>
+        {oferta.venceEn && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
+            <p className="text-small text-muted">{until ? `Tu cupo está retenido hasta las ${until}.` : 'Tu cupo está retenido.'}</p>
+            {showCountdown && <Countdown venceEn={oferta.venceEn} initialSeconds={oferta.segundosRestantes} onExpire={onExpire} />}
+          </div>
+        )}
+      </Card>
     </aside>
   );
 };
