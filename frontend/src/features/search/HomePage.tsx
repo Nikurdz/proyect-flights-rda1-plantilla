@@ -1,123 +1,88 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Clock, Luggage, PlaneTakeoff, ReceiptText } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { SearchBar } from './SearchBar';
-import { PassengerSelector, type PassengerCounts } from './PassengerSelector';
-import { addDaysToDate, getTomorrowDateString } from '../../lib/dates';
-import { buildSearchPath, describePassengers } from '../../lib/search';
 
-const FEATURES = [
-  {
-    icon: PlaneTakeoff,
-    title: 'Vuelos directos',
-    text: 'Rutas sin escalas entre las principales ciudades de Sudamérica, Panamá, Estados Unidos y España.',
-  },
-  {
-    icon: Luggage,
-    title: 'Tarifas claras',
-    text: 'Elige entre BASIC, LIGHT o FULL y conoce desde el inicio qué equipaje, cambios y reembolsos incluye cada una.',
-  },
-  {
-    icon: Clock,
-    title: 'Reserva retenida',
-    text: 'Tus asientos quedan retenidos 15 minutos mientras completas la compra.',
-  },
-  {
-    icon: ReceiptText,
-    title: 'Precio sin sorpresas',
-    text: 'Verás el desglose de tarifa e impuestos antes de pagar, siempre en dólares (USD).',
-  },
+const FACTS = [
+  { title: 'Solo vuelos directos', text: 'Sin escalas ni conexiones: la hora de llegada que ves es la real.' },
+  { title: 'Tres tarifas por vuelo', text: 'Basic, Light y Full: compara equipaje, cambios y reembolso antes de elegir.' },
+  { title: 'Asientos reservados 15 minutos', text: 'Mientras completas tus datos y el pago nadie más puede tomarlos.' },
+  { title: 'Precio final desde el inicio', text: 'Ves el desglose de tarifa e impuestos antes de pagar, siempre en dólares.' },
 ];
 
 const POPULAR_ROUTES: { from: string; to: string; fromCity: string; toCity: string }[] = [
-  { from: 'BOG', to: 'MDE', fromCity: 'Bogotá', toCity: 'Medellín' },
+  { from: 'UIO', to: 'GYE', fromCity: 'Quito', toCity: 'Guayaquil' },
   { from: 'UIO', to: 'GPS', fromCity: 'Quito', toCity: 'Galápagos' },
+  { from: 'GYE', to: 'LOH', fromCity: 'Guayaquil', toCity: 'Loja' },
+  { from: 'BOG', to: 'MDE', fromCity: 'Bogotá', toCity: 'Medellín' },
   { from: 'LIM', to: 'CUZ', fromCity: 'Lima', toCity: 'Cusco' },
   { from: 'BOG', to: 'MIA', fromCity: 'Bogotá', toCity: 'Miami' },
-  { from: 'SCL', to: 'EZE', fromCity: 'Santiago', toCity: 'Buenos Aires' },
-  { from: 'BOG', to: 'MAD', fromCity: 'Bogotá', toCity: 'Madrid' },
 ];
 
 export const HomePage: React.FC = () => {
-  const outbound = addDaysToDate(getTomorrowDateString(), 6);
-  // Chosen before clicking a popular route, so the search starts with the right party instead of one adult.
-  const [passengers, setPassengers] = useState<PassengerCounts>({ adt: 1, yth: 0, chd: 0, inf: 0 });
+  // A route shortcut fills the form (it does not search): the traveller still sets dates and passengers,
+  // then uses the one main action. The counter remounts the form so it takes the new airports.
+  const [shortcut, setShortcut] = useState<{ origin: string; destination: string; n: number } | null>(null);
+
+  useEffect(() => {
+    document.title = 'Buscar vuelos | RAM Alliance';
+  }, []);
 
   return (
-    <div className="bg-slate-50">
-      <section className="brand-hero-bg relative overflow-hidden border-b border-brand-gold/30 px-4 pb-28 pt-14 text-white sm:px-6 sm:pb-36 lg:px-8">
-        <div className="pointer-events-none absolute inset-0 opacity-10 [background-image:radial-gradient(#AB9159_1px,transparent_1px)] [background-size:24px_24px]" />
-        <div className="relative z-10 mx-auto max-w-7xl text-center">
-          <span className="mb-5 inline-block rounded-full border border-brand-gold/40 bg-white/5 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.22em] text-brand-gold">
-            Vuelos directos
-          </span>
-          <h1 className="mb-5 text-3xl font-black leading-tight tracking-tight sm:text-5xl lg:text-6xl">Reserva tu próximo vuelo</h1>
-          <p className="mx-auto max-w-2xl text-sm leading-relaxed text-slate-300 sm:text-lg">
-            Busca, compara tarifas y compra en minutos. Todos los precios se muestran en dólares estadounidenses y con el desglose de impuestos.
+    <div className="bg-paper">
+      <section className="mx-auto max-w-6xl px-4 pb-10 pt-8 sm:px-6 sm:pt-12 lg:px-8" aria-labelledby="buscar">
+        <h1 id="buscar" className="mb-2 text-title font-semibold text-ink sm:text-display">
+          ¿A dónde viajas?
+        </h1>
+        <p className="mb-6 max-w-[60ch] text-body text-muted">Elige tu ruta y tus fechas. Verás el precio final en dólares antes de pagar.</p>
+        <SearchBar
+          key={shortcut?.n ?? 0}
+          defaults={shortcut ? { origin: shortcut.origin, destination: shortcut.destination } : undefined}
+          focusSubmit={Boolean(shortcut)}
+        />
+      </section>
+
+      <section className="mx-auto max-w-6xl px-4 pb-10 sm:px-6 lg:px-8" aria-labelledby="rutas">
+        <h2 id="rutas" className="text-lead font-semibold text-ink">
+          Rutas frecuentes
+        </h2>
+        <p className="mb-4 mt-1 text-small text-muted">Toca una ruta para llenar el buscador; después elige fechas y pasajeros.</p>
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {POPULAR_ROUTES.map((route) => (
+            <li key={`${route.from}-${route.to}`}>
+              <button
+                type="button"
+                onClick={() => setShortcut({ origin: route.from, destination: route.to, n: (shortcut?.n ?? 0) + 1 })}
+                className="group flex min-h-[52px] w-full items-center justify-between rounded-lg border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-gold-text"
+              >
+                <span className="text-body font-medium text-ink">
+                  {route.fromCity} a {route.toCity}
+                </span>
+                <ChevronRight className="h-4 w-4 text-muted transition-colors group-hover:text-gold-text" aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="border-t border-line px-4 py-12 sm:px-6 lg:px-8" aria-label="Cómo compras en RAM Alliance">
+        <div className="mx-auto max-w-6xl">
+          <dl className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
+            {FACTS.map(({ title, text }) => (
+              <div key={title}>
+                <dt className="text-body font-semibold text-ink">{title}</dt>
+                <dd className="mt-1 text-small text-muted">{text}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-8 text-small text-muted">
+            ¿Quieres saber cómo se forma el precio? Lee{' '}
+            <Link to="/transparencia" className="font-medium text-gold-text underline underline-offset-2">
+              Transparencia de precios
+            </Link>
+            .
           </p>
         </div>
-      </section>
-
-      <div className="relative z-20 mx-auto -mt-16 max-w-6xl px-4 sm:-mt-20 sm:px-6 lg:px-8">
-        <SearchBar />
-      </div>
-
-      <section className="mx-auto max-w-7xl px-4 pt-16 sm:px-6 lg:px-8" aria-labelledby="rutas">
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 id="rutas" className="text-xl font-black text-brand-black sm:text-2xl">
-              Rutas populares
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Búsqueda de ida para dentro de una semana · <strong className="font-semibold text-slate-700">{describePassengers(passengers)}</strong>
-            </p>
-          </div>
-          <div className="w-full sm:w-64">
-            <PassengerSelector counts={passengers} onChange={setPassengers} />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {POPULAR_ROUTES.map((route) => (
-            <Link
-              key={`${route.from}-${route.to}`}
-              to={buildSearchPath({ origin: route.from, destination: route.to, outbound, trip: 'OW', passengers, sort: 'MAS_BARATOS' })}
-              className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-brand-gold hover:shadow-card"
-            >
-              <span>
-                <span className="block text-sm font-bold text-brand-black">
-                  {route.fromCity} → {route.toCity}
-                </span>
-                <span className="font-mono text-xs text-slate-500">
-                  {route.from} · {route.to}
-                </span>
-              </span>
-              <ArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-1 group-hover:text-brand-gold-dark" aria-hidden="true" />
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8" aria-label="Por qué comprar aquí">
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
-          {FEATURES.map(({ icon: Icon, title, text }) => (
-            <div key={title} className="flex items-start gap-4 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-card">
-              <div className="shrink-0 rounded-xl bg-brand-gold-light p-3 text-brand-gold-dark">
-                <Icon className="h-6 w-6" aria-hidden="true" />
-              </div>
-              <div>
-                <h3 className="mb-1 text-sm font-bold text-slate-900">{title}</h3>
-                <p className="text-xs leading-relaxed text-slate-500">{text}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-6 text-center text-xs text-slate-500">
-          Lee cómo se forma el precio en{' '}
-          <Link to="/transparencia" className="font-semibold text-brand-gold-dark hover:underline">
-            Transparencia
-          </Link>
-          .
-        </p>
       </section>
     </div>
   );

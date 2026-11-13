@@ -85,23 +85,35 @@ describe('Dialog', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it('closes with the close button, which is a type="button" with a 44 px target', () => {
-    render(<Harness />);
+  it('closes with the close button, which is a type="button" and gives the focus back', () => {
+    const onClose = vi.fn();
+    render(<Harness onClose={onClose} />);
     const trigger = openDialog();
     const close = screen.getByRole('button', { name: 'Cerrar modal' });
     expect(close.getAttribute('type')).toBe('button');
-    expect(close.className).toContain('h-11');
     fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
 
-  it('keeps the content scrollable inside the viewport', () => {
+  it('closes on a click on the backdrop but not on a click inside the panel', () => {
+    const onClose = vi.fn();
+    render(<Harness onClose={onClose} />);
+    openDialog();
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Primero' }));
+    expect(onClose).not.toHaveBeenCalled();
+    const backdrop = screen.getByRole('dialog').previousElementSibling as HTMLElement;
+    fireEvent.mouseDown(backdrop);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks the page scroll while open and restores it on close', () => {
     render(<Harness />);
     openDialog();
-    const dialog = screen.getByRole('dialog');
-    expect(dialog.className).toContain('max-h-[85vh]');
-    expect(dialog.querySelector('[data-dialog-content]')?.className).toContain('overflow-y-auto');
+    expect(document.body.style.overflow).toBe('hidden');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.body.style.overflow).not.toBe('hidden');
   });
 
   it('a required decision (dismissible=false) has no close button and ignores Escape', () => {

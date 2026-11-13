@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Plane } from 'lucide-react';
 import { useAdminAsientosVuelo, useAdminVuelos, type AdminFlightsFilters, type AdminVueloView } from '../../api/endpoints/admin';
 import { MoneyText } from '../../components/common/MoneyText';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
+import { useToast } from '../../lib/toast';
+import { AdminPageHeader } from './AdminPageHeader';
+import { RowActionsMenu } from './RowActionsMenu';
 import { CancelFlightDialog, CreateFlightDialog, DeleteFlightDialog, EditFlightDialog, FlightStatusDialog, RescheduleFlightDialog } from './AdminFlightDialogs';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { SeatLegend, SeatMap } from '../checkout/SeatMap';
@@ -25,7 +30,7 @@ const FlightSeatsDialog: React.FC<{ flight: AdminVueloView | null; ownerId?: str
         <div role="status" aria-busy="true" aria-label="Cargando"><Skeleton className="h-72 w-full rounded-2xl" /></div>
       ) : (
         <div className="space-y-5">
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-muted">
             Salida {formatAdminDateTime(data.salida)} · <strong>{data.reservados.length}</strong> asiento(s) reservados de {data.capacidadTotal}. Quien no eligió asiento no aparece aquí.
           </p>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-[auto_1fr]">
@@ -33,23 +38,23 @@ const FlightSeatsDialog: React.FC<{ flight: AdminVueloView | null; ownerId?: str
               <SeatMap filas={data.filas} picks={new Map()} onSelect={() => undefined} takenInfo={takenInfo} />
             </div>
             <div>
-              <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Reservados</h3>
+              <h3 className="mb-2 text-small font-semibold text-ink">Reservados</h3>
               {data.reservados.length === 0 ? (
-                <p className="text-xs text-slate-500">Ningún asiento reservado todavía.</p>
+                <p className="text-xs text-muted">Ningún asiento reservado todavía.</p>
               ) : (
                 <table className="w-full text-left text-xs">
                   <caption className="sr-only">Asientos reservados</caption>
-                  <thead className="text-slate-500">
+                  <thead className="text-muted">
                     <tr>
                       <th scope="col" className="py-1 pr-3 font-semibold">Asiento</th>
                       <th scope="col" className="py-1 pr-3 font-semibold">Reserva</th>
                       <th scope="col" className="py-1 font-semibold">Orden</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono">
+                  <tbody className="divide-y divide-line font-mono">
                     {data.reservados.map((r) => (
                       <tr key={r.asiento}>
-                        <td className="py-1.5 pr-3 font-bold text-brand-black">{r.asiento}</td>
+                        <td className="py-1.5 pr-3 font-bold text-ink">{r.asiento}</td>
                         <td className="py-1.5 pr-3">{r.pnr || '—'}</td>
                         <td className="py-1.5">{r.numeroOrden ?? '—'}</td>
                       </tr>
@@ -68,11 +73,12 @@ const FlightSeatsDialog: React.FC<{ flight: AdminVueloView | null; ownerId?: str
 
 export const AdminFlightsPage: React.FC = () => {
   const session = useSession();
+  const toast = useToast();
   const [openFlight, setOpenFlight] = useState<AdminVueloView | null>(null);
   const [creating, setCreating] = useState(false);
   const [action, setAction] = useState<{ kind: 'edit' | 'reschedule' | 'status' | 'cancel' | 'delete'; flight: AdminVueloView } | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const closeAction = () => setAction(null);
+  const done = (message: string) => toast.success(message);
   const [draft, setDraft] = useState<AdminFlightsFilters>({});
   const [filters, setFilters] = useState<AdminFlightsFilters>({});
 
@@ -91,26 +97,21 @@ export const AdminFlightsPage: React.FC = () => {
 
   return (
     <section aria-label="Vuelos">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-slate-600">Crea, edita, reprograma, cancela o elimina vuelos. Las horas se muestran y se ingresan en hora de Ecuador (UTC-5).</p>
-        <Button type="button" variant="accent" onClick={() => setCreating(true)}>
-          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
-          Nuevo vuelo
-        </Button>
-      </div>
-      {notice && (
-        <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-          <p>{notice}</p>
-          <button type="button" className="text-xs font-semibold underline" onClick={() => setNotice(null)}>
-            Cerrar aviso
-          </button>
-        </div>
-      )}
-      <form onSubmit={apply} className="mb-5 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-5">
-        <Input label="Origen" placeholder="BOG" maxLength={3} value={draft.origen ?? ''} onChange={(e) => setDraft({ ...draft, origen: e.target.value })} />
-        <Input label="Destino" placeholder="SCL" maxLength={3} value={draft.destino ?? ''} onChange={(e) => setDraft({ ...draft, destino: e.target.value })} />
+      <AdminPageHeader
+        page="vuelos"
+        description="Crea, edita, reprograma, cancela o elimina vuelos. Las horas se muestran y se ingresan en hora de Ecuador."
+        actions={
+          <Button type="button" variant="accent" onClick={() => setCreating(true)}>
+            <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+            Nuevo vuelo
+          </Button>
+        }
+      />
+      <form onSubmit={apply} className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Input label="Origen" placeholder="Ej. BOG" maxLength={3} value={draft.origen ?? ''} onChange={(e) => setDraft({ ...draft, origen: e.target.value })} />
+        <Input label="Destino" placeholder="Ej. SCL" maxLength={3} value={draft.destino ?? ''} onChange={(e) => setDraft({ ...draft, destino: e.target.value })} />
         <Input label="Fecha de salida" type="date" value={draft.fecha ?? ''} onChange={(e) => setDraft({ ...draft, fecha: e.target.value })} />
-        <Input label="N.º de vuelo" placeholder="LA800" maxLength={6} value={draft.vuelo ?? ''} onChange={(e) => setDraft({ ...draft, vuelo: e.target.value })} />
+        <Input label="N.º de vuelo" placeholder="Ej. LA800" maxLength={6} value={draft.vuelo ?? ''} onChange={(e) => setDraft({ ...draft, vuelo: e.target.value })} />
         <div className="flex items-end gap-2">
           <Button type="submit" variant="primary" className="flex-1">
             Filtrar
@@ -123,93 +124,81 @@ export const AdminFlightsPage: React.FC = () => {
 
       {error != null && <ProblemAlert error={error} onRetry={() => refetch()} className="mb-4" />}
 
-      <div role="region" tabIndex={0} aria-label="Tabla de vuelos, desplazable horizontalmente" className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1100px] text-left text-sm">
-          <caption className="sr-only">Vuelos programados</caption>
-          <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+      <Table label="Vuelos programados" className="min-w-[960px]">
+        <TableHead>
+          <tr>
+            <TableHeaderCell>Vuelo</TableHeaderCell>
+            <TableHeaderCell>Ruta</TableHeaderCell>
+            <TableHeaderCell>Salida (hora de Ecuador)</TableHeaderCell>
+            <TableHeaderCell>Aerolínea</TableHeaderCell>
+            <TableHeaderCell className="text-right">Tarifa base</TableHeaderCell>
+            <TableHeaderCell className="text-right">Libres</TableHeaderCell>
+            <TableHeaderCell className="text-right">Asientos reservados</TableHeaderCell>
+            <TableHeaderCell className="text-right">Acciones</TableHeaderCell>
+          </tr>
+        </TableHead>
+        <TableBody>
+          {isLoading && (
             <tr>
-              <th scope="col" className="px-4 py-3">Vuelo</th>
-              <th scope="col" className="px-4 py-3">Ruta</th>
-              <th scope="col" className="px-4 py-3">Salida (Ecuador)</th>
-              <th scope="col" className="px-4 py-3">Aerolínea</th>
-              <th scope="col" className="px-4 py-3 text-right">Tarifa base</th>
-              <th scope="col" className="px-4 py-3 text-right">Libres</th>
-              <th scope="col" className="px-4 py-3 text-right">Asiento elegido</th>
-              <th scope="col" className="px-4 py-3 text-right">Acciones</th>
+              <td colSpan={8} className="p-4">
+                <div role="status" aria-busy="true" aria-label="Cargando">
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={8} className="p-4">
-                  <div role="status" aria-busy="true" aria-label="Cargando">
-                    <Skeleton className="h-24 w-full" />
-                  </div>
-                </td>
-              </tr>
-            )}
-            {flights.map((flight) => {
-              const low = flight.asientosDisponibles <= Math.max(5, flight.capacidadTotal * 0.1);
-              return (
-                <tr key={flight.vueloId} className="cursor-pointer hover:bg-slate-50" onClick={() => setOpenFlight(flight)}>
-                  <td className="px-4 py-3 font-mono text-xs font-bold text-brand-black">
-                    <button type="button" className="underline-offset-2 hover:underline" onClick={() => setOpenFlight(flight)} aria-label={`Ver asientos del vuelo ${flight.codigoVuelo}`}>
-                      {flight.codigoVuelo}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-xs font-semibold">
-                    {flight.origen} → {flight.destino}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-600">
-                    {formatAdminDateTime(flight.salida)}
-                    {flight.estado && flight.estado !== 'SCHEDULED' && (
-                      <div className="mt-1 font-bold text-brand-black" data-testid={`estado-${flight.vueloId}`}>
-                        {flight.estado}
-                        {flight.salidaEstimada ? ` · est. ${formatAdminDateTime(flight.salidaEstimada)}` : ''}
-                        {flight.puertaSalida ? ` · puerta ${flight.puertaSalida}` : ''}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-600">{flight.aerolinea}</td>
-                  <td className="px-4 py-3 text-right">
-                    <MoneyText amount={flight.precioBaseUsd.toFixed(2)} currency="USD" />
-                  </td>
-                  <td className={`px-4 py-3 text-right text-xs font-bold ${low ? 'text-red-600' : 'text-slate-700'}`}>
-                    {flight.asientosDisponibles} / {flight.capacidadTotal}
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs font-bold text-slate-700">{flight.asientosReservados}</td>
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                      <Button type="button" size="sm" variant="outline" aria-label={`Editar vuelo ${flight.codigoVuelo}`} onClick={() => setAction({ kind: 'edit', flight })}>
-                        Editar
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" aria-label={`Reprogramar vuelo ${flight.codigoVuelo}`} onClick={() => setAction({ kind: 'reschedule', flight })}>
-                        Reprogramar
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" aria-label={`Cambiar el estado del vuelo ${flight.codigoVuelo}`} onClick={() => setAction({ kind: 'status', flight })}>
-                        Estado
-                      </Button>
-                      <Button type="button" size="sm" variant="outline" className="border-red-300 text-red-700 hover:bg-red-50" aria-label={`Cancelar vuelo ${flight.codigoVuelo}`} onClick={() => setAction({ kind: 'cancel', flight })}>
-                        Cancelar vuelo
-                      </Button>
-                      <Button type="button" size="sm" variant="danger" aria-label={`Eliminar vuelo ${flight.codigoVuelo}`} onClick={() => setAction({ kind: 'delete', flight })}>
-                        Eliminar
-                      </Button>
+          )}
+          {flights.map((flight) => {
+            const low = flight.asientosDisponibles <= Math.max(5, flight.capacidadTotal * 0.1);
+            return (
+              <TableRow key={flight.vueloId}>
+                <TableCell className="num font-semibold text-ink">
+                  <button type="button" className="rounded underline-offset-2 hover:underline" onClick={() => setOpenFlight(flight)} aria-label={`Ver asientos del vuelo ${flight.codigoVuelo}`}>
+                    {flight.codigoVuelo}
+                  </button>
+                </TableCell>
+                <TableCell className="font-medium">
+                  {flight.origen} → {flight.destino}
+                </TableCell>
+                <TableCell className="text-muted">
+                  <span className="num">{formatAdminDateTime(flight.salida)}</span>
+                  {flight.estado && flight.estado !== 'SCHEDULED' && (
+                    <div className="mt-1 font-semibold text-ink" data-testid={`estado-${flight.vueloId}`}>
+                      {flight.estado}
+                      {flight.salidaEstimada ? ` · est. ${formatAdminDateTime(flight.salidaEstimada)}` : ''}
+                      {flight.puertaSalida ? ` · puerta ${flight.puertaSalida}` : ''}
                     </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {!isLoading && flights.length === 0 && !error && (
-              <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-500">
-                  No hay vuelos con estos filtros.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  )}
+                </TableCell>
+                <TableCell className="text-muted">{flight.aerolinea}</TableCell>
+                <TableCell className="text-right">
+                  <MoneyText amount={flight.precioBaseUsd.toFixed(2)} currency="USD" />
+                </TableCell>
+                <TableCell className={`num text-right font-semibold ${low ? 'text-danger' : 'text-ink'}`}>
+                  {low && <span className="sr-only">Pocos asientos libres: </span>}
+                  {flight.asientosDisponibles} / {flight.capacidadTotal}
+                </TableCell>
+                <TableCell className="num text-right font-semibold">{flight.asientosReservados}</TableCell>
+                <TableCell className="text-right">
+                  <RowActionsMenu
+                    subject={`vuelo ${flight.codigoVuelo}`}
+                    actions={[
+                      { label: 'Ver asientos', onSelect: () => setOpenFlight(flight) },
+                      { label: 'Editar', onSelect: () => setAction({ kind: 'edit', flight }) },
+                      { label: 'Reprogramar', onSelect: () => setAction({ kind: 'reschedule', flight }) },
+                      { label: 'Cambiar estado', onSelect: () => setAction({ kind: 'status', flight }) },
+                      { label: 'Cancelar vuelo', onSelect: () => setAction({ kind: 'cancel', flight }), destructive: true, separated: true },
+                      { label: 'Eliminar', onSelect: () => setAction({ kind: 'delete', flight }), destructive: true },
+                    ]}
+                  />
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      {!isLoading && flights.length === 0 && !error && (
+        <EmptyState icon={<Plane />} title="No hay vuelos con estos filtros" description="Cambia los filtros o crea un vuelo nuevo." headingLevel={2} />
+      )}
 
       {hasNextPage && (
         <div className="pt-5 text-center">
@@ -219,14 +208,14 @@ export const AdminFlightsPage: React.FC = () => {
         </div>
       )}
 
-      <p className="mt-3 text-[11px] text-slate-500">Haz clic en un vuelo para ver su mapa de asientos y cuáles están reservados.</p>
-      {creating && <CreateFlightDialog onClose={() => setCreating(false)} onDone={setNotice} />}
-      {action?.kind === 'edit' && <EditFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
-      {action?.kind === 'reschedule' && <RescheduleFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
-      {action?.kind === 'status' && <FlightStatusDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
-      {action?.kind === 'cancel' && <CancelFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} />}
+      <p className="mt-3 text-small text-muted">Usa el código del vuelo para ver su mapa de asientos y cuáles están reservados.</p>
+      {creating && <CreateFlightDialog onClose={() => setCreating(false)} onDone={done} />}
+      {action?.kind === 'edit' && <EditFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={done} />}
+      {action?.kind === 'reschedule' && <RescheduleFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={done} />}
+      {action?.kind === 'status' && <FlightStatusDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={done} />}
+      {action?.kind === 'cancel' && <CancelFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={done} />}
       {action?.kind === 'delete' && (
-        <DeleteFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={setNotice} onSwitchToCancel={(flight) => setAction({ kind: 'cancel', flight })} />
+        <DeleteFlightDialog key={action.flight.vueloId} flight={action.flight} onClose={closeAction} onDone={done} onSwitchToCancel={(flight) => setAction({ kind: 'cancel', flight })} />
       )}
       <FlightSeatsDialog flight={openFlight} ownerId={session?.ownerId} onClose={() => setOpenFlight(null)} />
     </section>

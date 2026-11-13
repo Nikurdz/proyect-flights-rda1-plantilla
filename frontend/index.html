@@ -7,11 +7,22 @@
     <meta name="description" content="RAM Alliance: busca y compra vuelos directos entre Ecuador, Colombia, Perú, Chile, Argentina, Brasil, Panamá, Estados Unidos y España." />
     <meta name="theme-color" content="#0B0E14" />
     <title>RAM Alliance | Vuelos</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+      // Applies the saved theme before the first paint (no flash). Keep in sync with src/lib/theme.ts.
+      (function () {
+        var mode = 'system';
+        try {
+          var saved = localStorage.getItem('ram-theme');
+          if (saved === 'light' || saved === 'dark' || saved === 'system') mode = saved;
+        } catch (e) {}
+        var dark = mode === 'dark' || (mode === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var root = document.documentElement;
+        if (dark) root.classList.add('dark');
+        root.style.colorScheme = dark ? 'dark' : 'light';
+      })();
+    </script>
   </head>
-  <body class="bg-slate-50 text-slate-800 antialiased selection:bg-brand-gold selection:text-white">
+  <body class="bg-paper text-ink antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

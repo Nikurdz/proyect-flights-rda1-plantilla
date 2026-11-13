@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, WifiOff } from 'lucide-react';
 import { ProblemDetailsError } from '../../api/problem-details';
+import { NETWORK_MESSAGE, isNetworkError } from '../../lib/network-error';
 
 export interface ProblemAlertProps {
   error: unknown;
@@ -13,7 +14,7 @@ export interface ProblemAlertProps {
 
 const GENERIC = 'No pudimos completar la operación. Intenta de nuevo en unos segundos.';
 
-export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, className = '', title = 'No pudimos completar la acción', message: messageOverride }) => {
+export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, className = '', title, message: messageOverride }) => {
   const [copied, setCopied] = useState(false);
   const alertRef = useRef<HTMLDivElement>(null);
   const hasError = Boolean(error);
@@ -27,9 +28,12 @@ export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, clas
 
   // Only messages we wrote reach the screen: a raw Error (network, parsing) is never shown as is.
   const isProblem = error instanceof ProblemDetailsError;
-  const message = isProblem ? messageOverride ?? error.message : GENERIC;
+  const network = isNetworkError(error);
+  const message = network ? NETWORK_MESSAGE : isProblem ? messageOverride ?? error.message : GENERIC;
   const fields = isProblem ? error.invalidParams : [];
   const supportCode = isProblem && error.correlationId ? `${error.code}·${error.correlationId}` : undefined;
+  const heading = title ?? (network ? 'Sin conexión con el servidor' : 'No pudimos completar la acción');
+  const Icon = network ? WifiOff : AlertCircle;
 
   const copySupportCode = async () => {
     if (!supportCode) return;
@@ -42,15 +46,15 @@ export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, clas
   };
 
   return (
-    <div ref={alertRef} tabIndex={-1} className={`rounded-xl border border-red-200 bg-red-50 p-4 text-red-900 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${className}`} role="alert" aria-live="assertive">
+    <div ref={alertRef} tabIndex={-1} className={`rounded-xl border border-danger/40 bg-danger-soft p-4 text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-text ${className}`} role="alert" aria-live="assertive">
       <div className="flex items-start gap-3">
-        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
+        <Icon className="mt-0.5 h-5 w-5 shrink-0 text-danger" aria-hidden="true" />
         <div className="flex-1">
-          <p className="text-sm font-bold text-red-800"><strong>{title}</strong></p>
-          <p className="mt-1 text-sm leading-relaxed text-red-700">{message}</p>
+          <p className="text-sm font-semibold text-danger">{heading}</p>
+          <p className="mt-1 text-sm leading-relaxed text-ink">{message}</p>
 
           {fields.length > 0 && (
-            <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-red-700">
+            <ul className="mt-2 list-inside list-disc space-y-1 text-small text-ink">
               {fields.map((field, index) => (
                 <li key={`${field.name}-${index}`}>
                   <strong>{field.label}:</strong> {field.reason}
@@ -62,14 +66,19 @@ export const ProblemAlert: React.FC<ProblemAlertProps> = ({ error, onRetry, clas
           {(onRetry || supportCode) && (
             <div className="mt-3 flex flex-wrap items-center gap-4">
               {onRetry && (
-                <button type="button" onClick={onRetry} className="inline-flex min-h-[44px] items-center px-1 text-xs font-semibold text-red-700 underline hover:text-red-900">
+                <button type="button" onClick={onRetry} className="inline-flex min-h-[44px] items-center px-1 text-small font-semibold text-danger underline hover:text-ink">
                   Reintentar
                 </button>
               )}
               {supportCode && (
-                <button type="button" onClick={copySupportCode} className="inline-flex min-h-[44px] items-center px-1 text-xs text-red-700 underline hover:text-red-900">
-                  {copied ? 'Código copiado' : 'Copiar código para soporte'}
-                </button>
+                <>
+                  <button type="button" onClick={copySupportCode} className="inline-flex min-h-[44px] items-center px-1 text-small text-danger underline hover:text-ink">
+                    {copied ? 'Código copiado' : 'Copiar código para soporte'}
+                  </button>
+                  <span className="text-xs text-muted">
+                    Código para soporte: <code className="num select-all break-all">{supportCode}</code>
+                  </span>
+                </>
               )}
             </div>
           )}

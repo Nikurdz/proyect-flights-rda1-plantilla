@@ -2,6 +2,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { ToastProvider } from '../../src/components/ui/Toast';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,9 +30,11 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
+      <ToastProvider>
       <MemoryRouter>
         <AdminInvoicesPage />
       </MemoryRouter>
+    </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -79,6 +82,6 @@ describe('AdminInvoicesPage', () => {
   it('shows an empty state', async () => {
     mocked.mockResolvedValue({ items: [], totalEmitido: usd('0.00') } as never);
     renderPage();
-    expect(await screen.findByText('No hay facturas con estos filtros.')).toBeTruthy();
+    expect(await screen.findByText('No hay facturas con estos filtros')).toBeTruthy();
   });
 });

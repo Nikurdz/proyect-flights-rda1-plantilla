@@ -2,6 +2,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { ToastProvider } from '../../src/components/ui/Toast';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -93,9 +94,11 @@ function renderPage(initial = '/admin/auditoria') {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
+      <ToastProvider>
       <MemoryRouter initialEntries={[initial]}>
         <AdminAuditPage />
       </MemoryRouter>
+    </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -151,9 +154,9 @@ describe('AdminAuditPage (trazabilidad)', () => {
   it('reads the correlation id from the link and offers the flow for the order in the filter', async () => {
     renderPage('/admin/auditoria?correlationId=corr-bbb');
     await screen.findByText('booking.cancelled');
-    expect((screen.getByLabelText('Correlation id') as HTMLInputElement).value).toBe('corr-bbb');
+    expect((screen.getByLabelText('Id de solicitud') as HTMLInputElement).value).toBe('corr-bbb');
     expect(mocked.mock.calls[0][0]).toBe('admin/trazabilidad?correlationId=corr-bbb&limite=50');
-    const links = screen.getAllByRole('link', { name: /Ver todo lo que tocó la correlación corr-aaa/ });
+    const links = screen.getAllByRole('link', { name: /Ver todo lo que tocó la solicitud corr-aaa/ });
     expect(links[0].getAttribute('href')).toBe('/admin/auditoria?correlationId=corr-aaa');
 
     fireEvent.change(screen.getByLabelText('Orden o PNR'), { target: { value: 'ORD-1' } });
@@ -175,13 +178,13 @@ describe('AdminAuditPage (trazabilidad)', () => {
   it('shows an empty state', async () => {
     mocked.mockResolvedValue({ items: [], siguiente: null } as never);
     renderPage();
-    expect(await screen.findByText('No hay actividad registrada con estos filtros.')).toBeTruthy();
+    expect(await screen.findByText('No hay actividad registrada con estos filtros')).toBeTruthy();
   });
 
   it('shows the flow graph from a row: ordered arrows, state text, error arrow, self loop, unknown node', async () => {
     renderPage();
     const row = (await screen.findByText('booking.cancelled')).closest('tr') as HTMLElement;
-    fireEvent.click(within(row).getByRole('button', { name: /Ver flujo de la correlación corr-aaa/ }));
+    fireEvent.click(within(row).getByRole('button', { name: /Ver flujo de la solicitud corr-aaa/ }));
     const dialog = await screen.findByRole('dialog', { name: /Flujo de comunicación/ });
     await waitFor(() => expect(dialog.querySelectorAll('[data-edge]').length).toBe(4));
     expect(mocked.mock.calls.some(([u]) => u === 'admin/trazabilidad/flujo?correlationId=corr-aaa')).toBe(true);
@@ -282,8 +285,7 @@ describe('AdminAuditPage (trazabilidad)', () => {
   it('shows a 403 problem+json as a readable alert', async () => {
     mocked.mockRejectedValue(new ProblemDetailsError({ status: 403, code: 'FORBIDDEN' }));
     renderPage();
-    const alerts = await screen.findAllByRole('alert');
-    expect(alerts[0].textContent).toContain('No tienes permiso para ver esta información.');
+    await waitFor(() => expect(screen.getAllByRole('alert').some((a) => a.textContent?.includes('No tienes permiso para ver esta información.'))).toBe(true));
   });
 
   it('shows an export failure', async () => {
@@ -291,7 +293,6 @@ describe('AdminAuditPage (trazabilidad)', () => {
     renderPage();
     await screen.findByText('booking.cancelled');
     fireEvent.click(screen.getByRole('button', { name: /Exportar CSV/ }));
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain('No tienes permiso');
+    await waitFor(() => expect(screen.getAllByRole('alert').some((a) => a.textContent?.includes('No tienes permiso'))).toBe(true));
   });
 });

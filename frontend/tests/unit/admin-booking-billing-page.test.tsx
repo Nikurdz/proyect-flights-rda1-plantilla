@@ -2,6 +2,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { ToastProvider } from '../../src/components/ui/Toast';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -47,9 +48,11 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
+      <ToastProvider>
       <MemoryRouter>
         <AdminBookingBillingPage />
       </MemoryRouter>
+    </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -139,7 +142,7 @@ describe('AdminBookingBillingPage', () => {
       return { items: [], total: 0, pagina: 1, limite: 25 };
     }) as never);
     renderPage();
-    expect(await screen.findByText('No hay ventas de Booking con estos filtros.')).toBeTruthy();
+    expect(await screen.findByText('No hay ventas de Booking con estos filtros')).toBeTruthy();
     cleanup();
     mocked.mockReset();
     mocked.mockRejectedValue(new ProblemDetailsError({ type: 'about:blank', title: 'Boom', status: 500, code: 'INTERNAL_ERROR' } as never));

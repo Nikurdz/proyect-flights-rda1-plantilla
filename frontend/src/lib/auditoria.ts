@@ -36,10 +36,10 @@ export function pasoEstado(estado: string): { label: string; tone: AuditTone } {
 }
 
 export const AUDIT_BADGE_CLASS: Record<AuditTone, string> = {
-  success: 'bg-emerald-100 text-emerald-800',
-  warning: 'bg-amber-100 text-amber-800',
-  danger: 'bg-red-100 text-red-800',
-  neutral: 'bg-slate-100 text-slate-700',
+  success: 'bg-success-soft text-success',
+  warning: 'bg-warning-soft text-warning',
+  danger: 'bg-danger-soft text-danger',
+  neutral: 'bg-line text-ink',
 };
 
 /** 850 -> "850 ms"; 12400 -> "12,4 s". */

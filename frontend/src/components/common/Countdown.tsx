@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Clock } from 'lucide-react';
+import { AlertTriangle, Clock } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export interface CountdownProps {
@@ -45,8 +45,8 @@ export const Countdown: React.FC<CountdownProps> = ({
   const seconds = secondsLeft % 60;
   const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
-  const isUrgent = secondsLeft < 180; // Less than 3 mins
-  const isWarning = secondsLeft < 360; // Less than 6 mins
+  const isUrgent = secondsLeft < 120; // Less than 2 mins: shown with an icon and a text, never only a color
+  const isWarning = !isUrgent && secondsLeft < 360; // Less than 6 mins
 
   // Announce only at the 5-minute and 1-minute marks (never every second).
   const announcement = secondsLeft === 0 ? 'Tu reserva expiró.' : secondsLeft <= 60 ? 'Queda menos de 1 minuto para que expire tu reserva.' : secondsLeft <= 300 ? 'Quedan menos de 5 minutos para que expire tu reserva.' : '';
@@ -55,19 +55,21 @@ export const Countdown: React.FC<CountdownProps> = ({
     <>
     <div
       className={clsx(
-        'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-colors select-none',
+        'inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors select-none',
         isUrgent
-          ? 'bg-red-100 text-red-700'
+          ? 'bg-danger-soft text-danger'
           : isWarning
-          ? 'bg-amber-100 text-amber-800'
-          : 'bg-airline-blue-light text-airline-navy',
+          ? 'bg-warning-soft text-warning'
+          : 'bg-gold-soft text-ink',
         className
       )}
       role="timer"
       aria-live="off"
+      data-state={isUrgent ? 'urgent' : isWarning ? 'warning' : 'normal'}
     >
-      <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-      <span>Tu reserva expira en: {formattedTime}</span>
+      {isUrgent ? <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" /> : <Clock className="w-3.5 h-3.5" aria-hidden="true" />}
+      <span>Tu reserva expira en: <span className="num">{formattedTime}</span></span>
+      {isUrgent && secondsLeft > 0 && <span>· Quedan menos de 2 minutos</span>}
     </div>
     <span className="sr-only" role="status" aria-live="polite">{announcement}</span>
     </>

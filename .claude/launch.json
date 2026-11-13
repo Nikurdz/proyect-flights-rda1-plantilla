@@ -9,6 +9,31 @@
         "start"
       ],
       "port": 3000
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "frontend-micro",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev"
+      ],
+      "env": {
+        "VITE_BACKEND_TARGET": "http://localhost:8000"
+      },
+      "port": 5173
     }
   ]
 }

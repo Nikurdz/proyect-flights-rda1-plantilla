@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Info, ShieldCheck, UserPlus } from 'lucide-react';
+import { Info, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import {
   esAdministrador,
   useAdminUsuarios,
@@ -17,11 +17,15 @@ import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
+import { useToast } from '../../lib/toast';
+import { AdminPageHeader } from './AdminPageHeader';
 import { formatAdminDateTime } from '../../lib/labels';
 import { useSession } from '../../lib/session';
 import { adminErrorMessage } from './admin-errors';
 import { newUserSchema, type NewUserForm } from './admin-schemas';
-import { ConfirmDialog } from './ConfirmDialog';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 const PAGE_SIZE = 25;
 
@@ -85,11 +89,11 @@ const CreateUserDialog: React.FC<{ onClose: () => void; onCreated: (correo: stri
           <Input label="Fecha de nacimiento" type="date" error={errors.fechaNacimiento?.message} {...register('fechaNacimiento')} />
           <Input label="Teléfono (opcional)" type="tel" placeholder="+593999999999" error={errors.telefono?.message} {...register('telefono')} />
         </div>
-        <label className="flex items-start gap-2 text-sm text-slate-700">
+        <label className="flex items-start gap-2 text-sm text-ink">
           <input type="checkbox" className="mt-1 h-4 w-4" {...register('esAdmin')} />
           <span>
             Darle también el rol <strong>Administrador</strong>
-            <span className="block text-xs text-slate-500">Podrá ver órdenes, gestionar vuelos y otros usuarios.</span>
+            <span className="block text-xs text-muted">Podrá ver órdenes, gestionar vuelos y otros usuarios.</span>
           </span>
         </label>
         <div className="flex flex-wrap justify-end gap-2 pt-1">
@@ -111,7 +115,7 @@ export const AdminUsersPage: React.FC = () => {
   const [rol, setRol] = useState<RolUsuario | ''>('');
   const [creating, setCreating] = useState(false);
   const [target, setTarget] = useState<AdminUsuario | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
   const debouncedQ = useDebounced(q.trim(), 350);
 
   // The page belongs to one set of filters: changing the search or the role goes back to page 1.
@@ -140,7 +144,7 @@ export const AdminUsersPage: React.FC = () => {
       { clienteId: target.clienteId, roles: quitar ? ['CUSTOMER'] : ['CUSTOMER', 'ADMIN'] },
       {
         onSuccess: () => {
-          setNotice(
+          toast.success(
             quitar
               ? `${target.correo} ya no es administrador. El cambio se aplica cuando vuelva a iniciar sesión.`
               : `${target.correo} ahora es administrador. El cambio se aplica cuando vuelva a iniciar sesión.`,
@@ -155,14 +159,15 @@ export const AdminUsersPage: React.FC = () => {
 
   return (
     <section aria-label="Usuarios">
-      <div className="mb-4 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900" role="note">
+      <AdminPageHeader page="usuarios" description="Quién puede entrar al panel y con qué rol." />
+      <div className="mb-4 flex items-start gap-2 rounded-xl border border-line bg-gold-soft p-3 text-small text-ink" role="note">
         <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
         <p>
           Los cambios de rol se aplican cuando la persona <strong>inicia sesión de nuevo</strong>: su sesión actual conserva los roles que tenía hasta que expire.
         </p>
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_14rem_auto]">
+      <div className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-[1fr_14rem_auto]">
         <Input label="Buscar" type="search" placeholder="Correo, nombres o apellidos" value={q} onChange={(e) => setQ(e.target.value)} />
         <Select
           label="Rol"
@@ -182,93 +187,91 @@ export const AdminUsersPage: React.FC = () => {
         </div>
       </div>
 
-      {notice && (
-        <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-          <p>{notice}</p>
-          <button type="button" className="text-xs font-semibold underline" onClick={() => setNotice(null)}>
-            Cerrar aviso
-          </button>
-        </div>
-      )}
-
       {error != null && <ProblemAlert error={error} onRetry={() => refetch()} className="mb-4" />}
 
-      <div role="region" tabIndex={0} aria-label="Tabla de usuarios, desplazable horizontalmente" className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[820px] text-left text-sm" aria-busy={isFetching}>
-          <caption className="sr-only">Usuarios registrados</caption>
-          <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+      <Table label="Usuarios registrados" className="min-w-[820px]" aria-busy={isFetching}>
+        <TableHead>
+          <tr>
+            <TableHeaderCell>Usuario</TableHeaderCell>
+            <TableHeaderCell>Rol</TableHeaderCell>
+            <TableHeaderCell>Estado</TableHeaderCell>
+            <TableHeaderCell>Creado (hora de Ecuador)</TableHeaderCell>
+            <TableHeaderCell className="text-right">Acciones</TableHeaderCell>
+          </tr>
+        </TableHead>
+        <TableBody>
+          {isLoading && (
             <tr>
-              <th scope="col" className="px-4 py-3">Usuario</th>
-              <th scope="col" className="px-4 py-3">Rol</th>
-              <th scope="col" className="px-4 py-3">Estado</th>
-              <th scope="col" className="px-4 py-3">Creado</th>
-              <th scope="col" className="px-4 py-3 text-right">Acciones</th>
+              <td colSpan={5} className="p-4">
+                <div role="status" aria-busy="true" aria-label="Cargando">
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={5} className="p-4">
-                  <div role="status" aria-busy="true" aria-label="Cargando">
-                    <Skeleton className="h-24 w-full" />
-                  </div>
-                </td>
-              </tr>
-            )}
-            {users.map((u) => {
-              const admin = esAdministrador(u);
-              const isSelf = u.clienteId === myId;
-              const selfBlocked = admin && isSelf;
-              const hintId = `self-${u.clienteId}`;
-              return (
-                <tr key={u.clienteId}>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-brand-black">
-                      {u.nombres} {u.apellidos}
-                      {isSelf && <span className="ml-2 text-xs font-normal text-slate-500">(tú)</span>}
-                    </p>
-                    <p className="text-xs text-slate-600">{u.correo}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={admin ? 'primary' : 'secondary'}>{admin ? 'Administrador' : 'Cliente'}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-600">
-                    {u.bloqueada ? <Badge variant="danger">Bloqueada</Badge> : u.correoVerificado ? 'Correo verificado' : 'Correo sin verificar'}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-600">{formatAdminDateTime(u.creadoEn)}</td>
-                  <td className="px-4 py-3 text-right">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={admin ? 'outline' : 'secondary'}
-                      disabled={selfBlocked}
-                      aria-describedby={selfBlocked ? hintId : undefined}
-                      onClick={() => setTarget(u)}
-                    >
-                      <ShieldCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                      {admin ? 'Quitar administrador' : 'Hacer administrador'}
-                    </Button>
-                    {selfBlocked && (
-                      <p id={hintId} className="mt-1 text-[11px] text-slate-500">
-                        No puedes quitarte tu propio rol de administrador.
+          )}
+          {users.map((u) => {
+            const admin = esAdministrador(u);
+            const isSelf = u.clienteId === myId;
+            const selfBlocked = admin && isSelf;
+            const hintId = `self-${u.clienteId}`;
+            const lockId = `lock-${u.clienteId}`;
+            return (
+              <TableRow key={u.clienteId}>
+                <TableCell>
+                  <p className="font-semibold text-ink">
+                    {u.nombres} {u.apellidos}
+                    {isSelf && <span className="ml-2 text-small font-normal text-muted">(tú)</span>}
+                  </p>
+                  <p className="text-small text-muted">{u.correo}</p>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={admin ? 'primary' : 'secondary'}>{admin ? 'Administrador' : 'Cliente'}</Badge>
+                </TableCell>
+                <TableCell className="text-small text-muted">
+                  {u.bloqueada ? (
+                    <div>
+                      <Badge variant="danger" aria-describedby={lockId}>
+                        Bloqueada
+                      </Badge>
+                      <p id={lockId} className="mt-1 max-w-[16rem]">
+                        Se desbloquea sola cuando termina el tiempo de bloqueo; no hace falta ninguna acción.
                       </p>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {!isLoading && users.length === 0 && !error && (
-              <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
-                  No hay usuarios con estos filtros.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    </div>
+                  ) : u.correoVerificado ? (
+                    'Correo verificado'
+                  ) : (
+                    'Correo sin verificar'
+                  )}
+                </TableCell>
+                <TableCell className="num text-small text-muted">{formatAdminDateTime(u.creadoEn)}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={admin ? 'outline' : 'secondary'}
+                    disabled={selfBlocked}
+                    aria-describedby={selfBlocked ? hintId : undefined}
+                    onClick={() => setTarget(u)}
+                  >
+                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    {admin ? 'Quitar administrador' : 'Hacer administrador'}
+                  </Button>
+                  {selfBlocked && (
+                    <p id={hintId} className="mt-1 text-small text-muted">
+                      No puedes quitarte tu propio rol de administrador.
+                    </p>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+      {!isLoading && users.length === 0 && !error && (
+        <EmptyState icon={<Users />} title="No hay usuarios con estos filtros" description="Cambia la búsqueda o el rol." />
+      )}
 
-      <nav aria-label="Paginación de usuarios" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+      <nav aria-label="Paginación de usuarios" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
         <p>
           {total} usuario(s) · página {data?.pagina ?? pagina} de {pages}
         </p>
@@ -282,7 +285,7 @@ export const AdminUsersPage: React.FC = () => {
         </div>
       </nav>
 
-      {creating && <CreateUserDialog onClose={() => setCreating(false)} onCreated={(correo) => setNotice(`Usuario ${correo} creado.`)} />}
+      {creating && <CreateUserDialog onClose={() => setCreating(false)} onCreated={(correo) => toast.success(`Usuario ${correo} creado.`)} />}
 
       <ConfirmDialog
         isOpen={Boolean(target)}
@@ -301,7 +304,7 @@ export const AdminUsersPage: React.FC = () => {
               {removing ? 'Vas a quitar el rol de administrador a ' : 'Vas a dar el rol de administrador a '}
               <strong>{target.correo}</strong>.
             </p>
-            <p className="mt-2 text-xs text-slate-500">El cambio se aplica cuando esa persona inicie sesión de nuevo.</p>
+            <p className="mt-2 text-xs text-muted">El cambio se aplica cuando esa persona inicie sesión de nuevo.</p>
           </>
         )}
       </ConfirmDialog>

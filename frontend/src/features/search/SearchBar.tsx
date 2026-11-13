@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeftRight, Calendar, Search } from 'lucide-react';
+import { AlertCircle, ArrowLeftRight, Search } from 'lucide-react';
 import { AirportPicker } from './AirportPicker';
 import { PassengerSelector, type PassengerCounts } from './PassengerSelector';
 import { getValidSearchDateString, getTomorrowDateString, addDaysToDate } from '../../lib/dates';
@@ -8,9 +8,16 @@ import { Button } from '../../components/ui/Button';
 
 export interface SearchBarProps {
   className?: string;
+  /** Airports to start with when the address carries none (the route shortcuts of the home page). */
+  defaults?: { origin?: string; destination?: string };
+  /** Puts the focus on «Buscar vuelos» when the form appears (after choosing a shortcut). */
+  focusSubmit?: boolean;
 }
 
-export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
+const dateInput =
+  'h-12 w-full min-w-0 rounded-lg border bg-surface px-3 text-body text-ink focus-visible:border-gold-text disabled:cursor-not-allowed disabled:bg-ink/5 disabled:text-muted';
+
+export const SearchBar: React.FC<SearchBarProps> = ({ className = '', defaults, focusSubmit = false }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -21,8 +28,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
   const [tripType, setTripType] = useState<'RT' | 'OW'>(
     (searchParams.get('trip') as 'RT' | 'OW') || (searchParams.get('inbound') ? 'RT' : 'RT')
   );
-  const [origin, setOrigin] = useState<string>(searchParams.get('origin') || '');
-  const [destination, setDestination] = useState<string>(searchParams.get('destination') || '');
+  const [origin, setOrigin] = useState<string>(searchParams.get('origin') || defaults?.origin || '');
+  const [destination, setDestination] = useState<string>(searchParams.get('destination') || defaults?.destination || '');
   const [outbound, setOutbound] = useState<string>(
     searchParams.get('outbound') || defaultDeparture
   );
@@ -41,6 +48,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
   const [dateError, setDateError] = useState<string>('');
 
   const today = minValidDate;
+  const submitRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusSubmit) submitRef.current?.focus();
+  }, [focusSubmit]);
 
   // Swap Origin and Destination
   const handleSwap = () => {
@@ -59,15 +70,15 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
     setDestinationError('');
     setDateError('');
     if (tripType === 'RT' && !origin) {
-      setOriginError('Elige el origen.');
+      setOriginError('Elige desde dónde sales.');
       invalid = true;
     }
     if (tripType === 'RT' && !destination) {
-      setDestinationError('Elige el destino.');
+      setDestinationError('Elige a dónde viajas.');
       invalid = true;
     }
     if (origin && destination && origin === destination) {
-      setDestinationError('El destino debe ser distinto del origen.');
+      setDestinationError('El destino debe ser distinto de la ciudad de salida.');
       invalid = true;
     }
     if (!outbound || outbound < minValidDate) {
@@ -100,59 +111,37 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
     navigate(`/resultados?${params.toString()}`);
   };
 
+  const roundTrip = tripType === 'RT';
+  const tripOption = (value: 'RT' | 'OW', label: string) => (
+    <button
+      type="button"
+      onClick={() => setTripType(value)}
+      aria-pressed={tripType === value}
+      className={`min-h-[44px] rounded-full px-4 text-small font-medium transition-colors sm:min-h-[36px] ${
+        tripType === value ? 'bg-ink text-on-ink' : 'bg-ink/[0.07] text-ink hover:bg-ink/[0.12]'
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <form
       onSubmit={handleSearch}
       noValidate
       aria-label="Buscar vuelos"
-      className={`bg-white rounded-3xl shadow-elevated border border-slate-200/90 p-5 sm:p-7 ${className}`}
+      className={`rounded-xl border border-line bg-surface p-5 shadow-elevated sm:p-6 ${className}`}
     >
-      {/* Top Options: Trip Type & Cabin */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-5 border-b border-slate-100 pb-4">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setTripType('RT')}
-            aria-pressed={tripType === 'RT'}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-              tripType === 'RT'
-                ? 'bg-brand-black text-white border border-brand-gold/50 shadow-sm'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            Ida y vuelta
-          </button>
-          <button
-            type="button"
-            onClick={() => setTripType('OW')}
-            aria-pressed={tripType === 'OW'}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-              tripType === 'OW'
-                ? 'bg-brand-black text-white border border-brand-gold/50 shadow-sm'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            Solo ida
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
-            Cabina Economy
-          </span>
-          <span className="text-xs text-slate-500 hidden sm:inline">
-            Solo vuelos directos
-          </span>
-        </div>
+      <div className="mb-5 flex flex-wrap items-center gap-2" role="group" aria-label="Tipo de viaje">
+        {tripOption('RT', 'Ida y vuelta')}
+        {tripOption('OW', 'Solo ida')}
       </div>
 
-      {/* Main Grid: Origin, Swap, Destination, Dates, Passengers */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-        {/* Origin (3 cols) */}
-        <div className="md:col-span-3">
+      <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-12">
+        <div className="md:col-span-4">
           <AirportPicker
             label="Origen"
-            placeholder="Ciudad de salida (ej. BOG, MIA)..."
+            placeholder="Quito, Guayaquil…"
             type="origin"
             value={origin}
             error={originError}
@@ -164,24 +153,22 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
           />
         </div>
 
-        {/* Swap Button (1 col) */}
-        <div className="md:col-span-1 flex justify-center pb-2">
+        <div className="flex justify-center md:col-span-1 md:pb-1">
           <button
             type="button"
             onClick={handleSwap}
-            className="w-10 h-10 rounded-full border border-slate-200 hover:border-brand-gold hover:text-brand-gold text-slate-500 bg-slate-50 hover:bg-brand-gold/10 flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-line-strong text-muted transition-colors hover:bg-ink/5 hover:text-ink"
             aria-label="Invertir origen y destino"
             title="Invertir origen y destino"
           >
-            <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
+            <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
-        {/* Destination (3 cols) */}
-        <div className="md:col-span-3">
+        <div className="md:col-span-4">
           <AirportPicker
             label="Destino"
-            placeholder="Destino (ej. MAD, SCL, MEX)..."
+            placeholder="Loja, Galápagos, Bogotá…"
             type="destination"
             value={destination}
             error={destinationError}
@@ -192,90 +179,68 @@ export const SearchBar: React.FC<SearchBarProps> = ({ className = '' }) => {
           />
         </div>
 
-        {/* Dates (3 cols) */}
-        <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {/* Outbound Date */}
+        <div className="md:col-span-3">
+          <PassengerSelector counts={passengers} onChange={(next) => setPassengers(next)} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:col-span-6">
           <div className="min-w-0">
-            <label htmlFor="search-outbound" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+            <label htmlFor="search-outbound" className="mb-1.5 block text-sm font-medium text-ink">
               Ida
             </label>
-            <div className="relative">
-              <input
-                id="search-outbound"
-                aria-invalid={Boolean(dateError)}
-                aria-describedby={dateError ? 'search-date-error' : undefined}
-                type="date"
-                min={today}
-                value={outbound}
-                onChange={(e) => {
-                  setOutbound(e.target.value);
-                  if (inbound && e.target.value > inbound) {
-                    setInbound(e.target.value);
-                  }
-                }}
-                className="w-full min-w-0 h-[54px] px-3 rounded-xl border border-slate-300 text-xs sm:text-sm font-semibold text-slate-800 bg-white focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20"
-              />
-              <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block" aria-hidden="true" />
-            </div>
+            <input
+              id="search-outbound"
+              aria-invalid={Boolean(dateError)}
+              aria-describedby={dateError ? 'search-date-error' : undefined}
+              type="date"
+              min={today}
+              value={outbound}
+              onChange={(e) => {
+                setOutbound(e.target.value);
+                if (inbound && e.target.value > inbound) {
+                  setInbound(e.target.value);
+                }
+              }}
+              className={`${dateInput} ${dateError ? 'border-danger' : 'border-line-strong hover:border-ink/50'}`}
+            />
           </div>
 
-          {/* Inbound Date */}
           <div className="min-w-0">
-            <label htmlFor="search-inbound" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+            <label htmlFor="search-inbound" className="mb-1.5 block text-sm font-medium text-ink">
               Vuelta
             </label>
-            <div className="relative">
-              <input
-                id="search-inbound"
-                aria-invalid={Boolean(dateError) && tripType === 'RT'}
-                aria-describedby={dateError ? 'search-date-error' : undefined}
-                type="date"
-                min={outbound || today}
-                disabled={tripType === 'OW'}
-                value={tripType === 'OW' ? '' : inbound}
-                onChange={(e) => setInbound(e.target.value)}
-                className={`w-full min-w-0 h-[54px] px-3 rounded-xl border text-xs sm:text-sm font-semibold text-slate-800 focus:border-brand-gold focus:ring-2 focus:ring-brand-gold/20 ${
-                  tripType === 'OW'
-                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                    : 'bg-white border-slate-300'
-                }`}
-              />
-              <Calendar className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block" aria-hidden="true" />
-            </div>
+            <input
+              id="search-inbound"
+              aria-invalid={Boolean(dateError) && roundTrip}
+              aria-describedby={dateError ? 'search-date-error' : undefined}
+              type="date"
+              min={outbound || today}
+              disabled={!roundTrip}
+              value={roundTrip ? inbound : ''}
+              onChange={(e) => setInbound(e.target.value)}
+              className={`${dateInput} ${dateError && roundTrip ? 'border-danger' : 'border-line-strong hover:border-ink/50'}`}
+            />
           </div>
+        </div>
+
+        <div className="md:col-span-6">
+          <Button ref={submitRef} type="submit" variant="accent" size="lg" className="w-full gap-2">
+            <Search className="h-5 w-5" aria-hidden="true" />
+            <span>Buscar vuelos</span>
+          </Button>
         </div>
 
         {dateError && (
-          <p id="search-date-error" className="md:col-span-12 text-xs font-medium text-red-600" role="alert">
+          <p id="search-date-error" className="flex items-start gap-1.5 text-sm font-medium text-danger md:col-span-12" role="alert">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             {dateError}
           </p>
         )}
-
-        {/* Passengers (2 cols) */}
-        <div className="md:col-span-2">
-          <PassengerSelector
-            counts={passengers}
-            onChange={(next) => setPassengers(next)}
-          />
-        </div>
       </div>
 
-      {/* Action Bar */}
-      <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <p className="text-xs text-slate-500 text-center sm:text-left">
-          Elige tus aeropuertos y fechas. Todos los precios en dólares (USD).
-        </p>
-
-        <Button
-          type="submit"
-          variant="primary"
-          size="lg"
-          className="w-full sm:w-auto px-8 gap-2 bg-[#0B0E14] hover:bg-[#1E293B] border border-[#C5A880]/50 text-white hover:text-[#C5A880] shadow-md hover:shadow-lg font-black transition-all"
-        >
-          <Search className="w-4 h-4 text-[#C5A880]" aria-hidden="true" />
-          <span>Buscar vuelos</span>
-        </Button>
-      </div>
+      <p className="mt-4 text-small text-muted">
+        Todos los vuelos son directos y en clase económica. Los precios incluyen impuestos y están en dólares (USD).
+      </p>
     </form>
   );
 };

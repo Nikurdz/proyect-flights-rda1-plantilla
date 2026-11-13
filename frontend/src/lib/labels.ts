@@ -37,16 +37,16 @@ export function orderStatusTone(status: string): string {
     case 'EMITIDA':
     case 'COMPLETADA':
     case 'EN_VIAJE':
-      return 'bg-emerald-100 text-emerald-800';
+      return 'bg-success-soft text-success';
     case 'FALLIDA_COMPENSADA':
     case 'EXPIRADA':
-      return 'bg-red-100 text-red-800';
+      return 'bg-danger-soft text-danger';
     case 'PENDIENTE_PAGO':
     case 'PAGO_EN_VERIFICACION':
     case 'PAGADA':
-      return 'bg-amber-100 text-amber-800';
+      return 'bg-warning-soft text-warning';
     default:
-      return 'bg-slate-100 text-slate-700';
+      return 'bg-line text-ink';
   }
 }
 
@@ -72,6 +72,20 @@ export function formatDateTime(iso: string, timeZone: string = SYSTEM_TIME_ZONE)
     }).format(new Date(iso));
   } catch {
     return iso;
+  }
+}
+
+/** Short day for tight spaces: «sáb 14 nov». */
+export function formatShortDay(iso: string, timeZone: string = SYSTEM_TIME_ZONE): string {
+  try {
+    return new Intl.DateTimeFormat('es-EC', { weekday: 'short', day: 'numeric', month: 'short', timeZone })
+      .format(new Date(iso))
+      .replace(/[.,]/g, '')
+      .replace(/\s+/g, ' ')
+      .replace(/^(\S+) de /, '$1 ')
+      .replace(/ de /g, ' ');
+  } catch {
+    return iso.slice(0, 10);
   }
 }
 

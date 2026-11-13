@@ -17,9 +17,9 @@ export const DateStrip: React.FC<DateStripProps> = ({
   if (!fechasAlternativas || fechasAlternativas.length === 0) return null;
 
   return (
-    <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm mb-5">
-      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 mb-2 px-1">
-        <Calendar className="w-3.5 h-3.5 text-airline-blue" aria-hidden="true" />
+    <div className="bg-surface p-3 rounded-xl border border-line mb-5">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted mb-2 px-1">
+        <Calendar className="w-3.5 h-3.5 text-gold-text" aria-hidden="true" />
         <span>Fechas cercanas con vuelos disponibles:</span>
       </div>
 
@@ -39,13 +39,13 @@ export const DateStrip: React.FC<DateStripProps> = ({
               onClick={() => onSelectDate(item.fecha)}
               className={`flex-1 min-w-[110px] p-2.5 rounded-xl border text-center transition-all ${
                 isSelected
-                  ? 'border-airline-blue bg-airline-blue-light/60 ring-2 ring-airline-blue shadow-sm'
-                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  ? 'border-gold-text bg-gold-soft/60 ring-2 ring-gold-text shadow-sm'
+                  : 'border-line hover:border-line-strong hover:bg-paper'
               }`}
             >
-              <div className="text-xs font-semibold text-slate-600 capitalize">{dayName}</div>
-              <div className="text-sm font-bold text-slate-900">{dayNumber}</div>
-              <div className="mt-1 text-xs text-airline-navy font-bold">
+              <div className="text-xs font-medium text-muted capitalize">{dayName}</div>
+              <div className="text-small font-semibold text-ink">{dayNumber}</div>
+              <div className="mt-1 text-xs text-ink font-bold">
                 <MoneyText
                   amount={item.precioDesde?.monto}
                   currency={item.precioDesde?.moneda}

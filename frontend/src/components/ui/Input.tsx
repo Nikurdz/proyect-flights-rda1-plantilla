@@ -1,5 +1,6 @@
 import React from 'react';
 import { clsx } from 'clsx';
+import { AlertCircle } from 'lucide-react';
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   /** Obligatoria: cada campo necesita una etiqueta programática. */
@@ -19,17 +20,12 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
     return (
       <div className="w-full">
-        <label
-          htmlFor={inputId}
-          className={clsx(
-            hideLabel ? 'sr-only' : 'block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1'
-          )}
-        >
+        <label htmlFor={inputId} className={clsx(hideLabel ? 'sr-only' : 'mb-1.5 block text-sm font-medium text-ink')}>
           {label}
         </label>
         <div className="relative flex items-center">
           {leftIcon && (
-            <div className="absolute left-3 pointer-events-none text-slate-400" aria-hidden="true">
+            <div className="pointer-events-none absolute left-3 text-muted" aria-hidden="true">
               {leftIcon}
             </div>
           )}
@@ -37,31 +33,26 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={clsx(
-              'w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-airline-blue focus-visible:border-airline-blue disabled:bg-slate-50 disabled:text-slate-500',
+              'w-full rounded-lg border bg-surface px-3.5 py-2.5 text-body text-ink transition-colors placeholder:text-muted focus-visible:border-gold-text disabled:cursor-not-allowed disabled:bg-ink/5 disabled:text-muted',
               leftIcon && 'pl-10',
               rightIcon && 'pr-10',
-              error
-                ? 'border-red-500 focus-visible:ring-red-500 focus-visible:border-red-500'
-                : 'border-slate-300 hover:border-slate-400',
+              error ? 'border-danger focus-visible:border-danger' : 'border-line-strong hover:border-ink/50',
               className
             )}
             aria-invalid={Boolean(error)}
             aria-describedby={error ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined}
             {...props}
           />
-          {rightIcon && (
-            <div className="absolute right-3 pointer-events-none text-slate-400">
-              {rightIcon}
-            </div>
-          )}
+          {rightIcon && <div className="pointer-events-none absolute right-3 text-muted">{rightIcon}</div>}
         </div>
         {error && (
-          <p id={`${inputId}-error`} className="mt-1 text-xs text-red-600 font-medium" role="alert">
+          <p id={`${inputId}-error`} className="mt-1.5 flex items-start gap-1.5 text-sm font-medium text-danger" role="alert">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             {error}
           </p>
         )}
         {!error && helperText && (
-          <p id={`${inputId}-helper`} className="mt-1 text-xs text-slate-500">
+          <p id={`${inputId}-helper`} className="mt-1.5 text-sm text-muted">
             {helperText}
           </p>
         )}

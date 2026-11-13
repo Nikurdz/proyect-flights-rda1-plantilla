@@ -24,22 +24,22 @@ export const SortingBar: React.FC<SortingBarProps> = ({
   totalResults,
 }) => {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-4 py-3 rounded-xl border border-slate-200/80 shadow-sm mb-4">
-      <div role="status" aria-live="polite" className="text-xs sm:text-sm font-semibold text-slate-700">
-        <span className="text-airline-navy font-bold">{totalResults}</span>{' '}
+    <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+      <div role="status" aria-live="polite" className="text-small text-muted">
+        <span className="num font-semibold text-ink">{totalResults}</span>{' '}
         {totalResults === 1 ? 'vuelo directo disponible' : 'vuelos directos disponibles'}
       </div>
 
       <div className="flex items-center gap-2">
-        <ArrowUpDown className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
-        <label htmlFor="sorting-select" className="text-xs font-semibold text-slate-500 whitespace-nowrap">
-          Ordenar por:
+        <ArrowUpDown className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" />
+        <label htmlFor="sorting-select" className="whitespace-nowrap text-small text-muted">
+          Ordenar por
         </label>
         <select
           id="sorting-select"
           value={currentSort}
           onChange={(e) => onSortChange(e.target.value as Ordenamiento)}
-          className="text-xs font-bold text-airline-navy bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-airline-blue cursor-pointer"
+          className="min-h-[44px] cursor-pointer rounded-lg border border-line-strong bg-surface px-2.5 text-small text-ink hover:border-ink/50 focus-visible:border-gold-text sm:min-h-[36px]"
         >
           {SORT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>

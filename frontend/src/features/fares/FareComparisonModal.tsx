@@ -6,6 +6,8 @@ import type { FamiliaTarifariaDto, ItinerarioDto } from '../../api/types';
 import { FareFamilyCard } from './FareFamilyCard';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
+import { lowestTotalIndex } from '../../lib/best-value';
+import { formatDateTime } from '../../lib/labels';
 
 export interface FareComparisonModalProps {
   isOpen: boolean;
@@ -34,6 +36,10 @@ export const FareComparisonModal: React.FC<FareComparisonModalProps> = ({
 
   if (!isOpen || !itinerario) return null;
 
+  const families = (tarifasData?.familias ?? []) as unknown as FamiliaTarifariaDto[];
+  // Más conveniente: the family with the lowest total of the group, from the data (not a fixed code).
+  const bestIndex = lowestTotalIndex(families.map((f) => f.totalGrupo?.monto));
+
   return (
     <Dialog
       isOpen
@@ -41,15 +47,14 @@ export const FareComparisonModal: React.FC<FareComparisonModalProps> = ({
       variant="dark"
       maxWidth="5xl"
       eyebrow={
-        <div className="flex items-center gap-2 text-xs font-semibold text-brand-gold">
+        <div className="flex items-center gap-2 text-small font-medium text-gold">
           <Plane className="w-4 h-4 -rotate-45" aria-hidden="true" />
           <span>Vuelo {itinerario.numeroVuelo} · {itinerario.operador?.nombre}</span>
         </div>
       }
       title={
         <>
-          Selecciona tu tarifa: {itinerario.origen.ciudad} ({itinerario.origen.iata}) a{' '}
-          {itinerario.destino.ciudad} ({itinerario.destino.iata})
+          Elige tu tarifa: {itinerario.origen.ciudad} a {itinerario.destino.ciudad}
         </>
       }
     >
@@ -63,7 +68,7 @@ export const FareComparisonModal: React.FC<FareComparisonModalProps> = ({
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5" role="status" aria-busy="true" aria-label="Cargando">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="rounded-2xl border border-slate-200 p-5 space-y-4">
+                <div key={i} className="space-y-4 rounded-xl border border-line p-5">
                   <Skeleton className="h-6 w-24" />
                   <Skeleton className="h-10 w-36" />
                   <div className="space-y-3 pt-4">
@@ -77,20 +82,15 @@ export const FareComparisonModal: React.FC<FareComparisonModalProps> = ({
             </div>
           ) : tarifasData && tarifasData.familias ? (
             <div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                {(tarifasData.familias as unknown as FamiliaTarifariaDto[]).map((fam) => (
-                  <FareFamilyCard
-                    key={fam.codigo}
-                    familia={fam}
-                    onSelect={(f) => onSelectFare(itinerario, f)}
-                  />
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                {families.map((fam, index) => (
+                  <FareFamilyCard key={fam.codigo} familia={fam} isBestValue={index === bestIndex} onSelect={(f) => onSelectFare(itinerario, f)} />
                 ))}
               </div>
 
               {tarifasData.vigenteHasta && (
-                <p className="mt-6 text-center text-xs text-slate-500">
-                  Cotización válida hasta:{' '}
-                  {new Date(tarifasData.vigenteHasta).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' })}
+                <p className="mt-6 text-small text-muted">
+                  Precio válido hasta el {formatDateTime(tarifasData.vigenteHasta)} (hora de Ecuador).
                 </p>
               )}
             </div>

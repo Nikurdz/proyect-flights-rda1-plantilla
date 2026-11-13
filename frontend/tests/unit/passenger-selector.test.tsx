@@ -32,6 +32,13 @@ describe('PassengerSelector', () => {
     expect(screen.getByText('Desde 18 años')).toBeTruthy();
   });
 
+  it('summarises the party in plain words and does not repeat a cabin chip', () => {
+    latest = { adt: 2, yth: 0, chd: 1, inf: 0 };
+    render(<Harness start={latest} />);
+    expect(screen.getByRole('button', { name: /2 adultos, 1 niño/i })).toBeTruthy();
+    expect(screen.queryByText(/Cabina Economy/i)).toBeNull();
+  });
+
   it('adds youths, who do not count towards the infant cap', () => {
     open({ adt: 1, yth: 0, chd: 0, inf: 0 });
     fireEvent.click(screen.getByLabelText('Sumar joven'));

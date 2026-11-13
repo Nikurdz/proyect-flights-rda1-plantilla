@@ -1,17 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { PlaneTakeoff } from 'lucide-react';
+import { MapPin, PlaneTakeoff } from 'lucide-react';
 import { useAeropuertos, useCrearAeropuerto } from '../../api/endpoints/admin';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
+import { useToast } from '../../lib/toast';
+import { AdminPageHeader } from './AdminPageHeader';
 import { useSession } from '../../lib/session';
 import { adminErrorMessage } from './admin-errors';
 import { newAirportSchema, type NewAirportData, type NewAirportForm } from './admin-schemas';
-import { ConfirmDialog } from './ConfirmDialog';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 const PAGE_SIZE = 25;
 
@@ -112,20 +116,20 @@ const CreateAirportDialog: React.FC<{ onClose: () => void; onCreated: (iata: str
         {pending && (
           <>
             <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1">
-              <dt className="text-slate-500">Código</dt>
+              <dt className="text-muted">Código</dt>
               <dd className="font-bold">{pending.iata}</dd>
-              <dt className="text-slate-500">Ciudad</dt>
+              <dt className="text-muted">Ciudad</dt>
               <dd>{pending.ciudad}</dd>
-              <dt className="text-slate-500">Aeropuerto</dt>
+              <dt className="text-muted">Aeropuerto</dt>
               <dd>{pending.nombre}</dd>
-              <dt className="text-slate-500">País</dt>
+              <dt className="text-muted">País</dt>
               <dd>
                 {pending.paisNombre} ({pending.pais})
               </dd>
-              <dt className="text-slate-500">Zona horaria</dt>
+              <dt className="text-muted">Zona horaria</dt>
               <dd>{pending.zonaHoraria}</dd>
             </dl>
-            <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+            <p className="mt-3 rounded-lg bg-warning-soft p-3 text-small font-medium text-warning">
               Una vez creado, este código no se podrá borrar ni editar desde la web, porque los vuelos lo referencian. Revisa que sea correcto.
             </p>
           </>
@@ -140,7 +144,7 @@ export const AdminAirportsPage: React.FC = () => {
   const [q, setQ] = useState('');
   const [pais, setPais] = useState('');
   const [creating, setCreating] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
   const debouncedQ = useDebounced(q.trim(), 350);
   const paisFiltro = pais.trim().toUpperCase();
   const paisValido = /^[A-Z]{2}$/.test(paisFiltro) ? paisFiltro : '';
@@ -157,11 +161,12 @@ export const AdminAirportsPage: React.FC = () => {
 
   return (
     <section aria-label="Aeropuertos">
-      <div className="mb-5 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_12rem_auto]">
+      <AdminPageHeader page="aeropuertos" description="Códigos disponibles para crear vuelos. Un aeropuerto creado no se puede editar ni borrar." />
+      <div className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-[1fr_12rem_auto]">
         <Input label="Buscar" type="search" placeholder="Código, ciudad o aeropuerto" value={q} onChange={(e) => setQ(e.target.value)} />
         <Input
           label="País"
-          placeholder="EC"
+          placeholder="Ej. EC"
           maxLength={2}
           autoComplete="off"
           helperText="Código de 2 letras."
@@ -176,64 +181,48 @@ export const AdminAirportsPage: React.FC = () => {
         </div>
       </div>
 
-      {notice && (
-        <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-          <p>{notice}</p>
-          <button type="button" className="text-xs font-semibold underline" onClick={() => setNotice(null)}>
-            Cerrar aviso
-          </button>
-        </div>
-      )}
-
       {error != null && <ProblemAlert error={error} onRetry={() => refetch()} className="mb-4" />}
 
-      <div role="region" tabIndex={0} aria-label="Tabla de aeropuertos, desplazable horizontalmente" className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[760px] text-left text-sm" aria-busy={isFetching}>
-          <caption className="sr-only">Aeropuertos del catálogo</caption>
-          <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
+      <Table label="Aeropuertos del catálogo" className="min-w-[760px]" aria-busy={isFetching}>
+        <TableHead>
+          <tr>
+            <TableHeaderCell>Código</TableHeaderCell>
+            <TableHeaderCell>Ciudad</TableHeaderCell>
+            <TableHeaderCell>Aeropuerto</TableHeaderCell>
+            <TableHeaderCell>País</TableHeaderCell>
+            <TableHeaderCell>Zona horaria</TableHeaderCell>
+            <TableHeaderCell className="text-right">Vuelos</TableHeaderCell>
+          </tr>
+        </TableHead>
+        <TableBody>
+          {isLoading && (
             <tr>
-              <th scope="col" className="px-4 py-3">Código</th>
-              <th scope="col" className="px-4 py-3">Ciudad</th>
-              <th scope="col" className="px-4 py-3">Aeropuerto</th>
-              <th scope="col" className="px-4 py-3">País</th>
-              <th scope="col" className="px-4 py-3">Zona horaria</th>
-              <th scope="col" className="px-4 py-3 text-right">Vuelos</th>
+              <td colSpan={6} className="p-4">
+                <div role="status" aria-busy="true" aria-label="Cargando">
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="p-4">
-                  <div role="status" aria-busy="true" aria-label="Cargando">
-                    <Skeleton className="h-24 w-full" />
-                  </div>
-                </td>
-              </tr>
-            )}
-            {items.map((a) => (
-              <tr key={a.iata}>
-                <td className="px-4 py-3 font-black text-brand-black">{a.iata}</td>
-                <td className="px-4 py-3">{a.ciudad}</td>
-                <td className="px-4 py-3 text-slate-700">{a.nombre}</td>
-                <td className="px-4 py-3 text-xs text-slate-600">
-                  {a.paisNombre} ({a.pais})
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-600">{a.zonaHoraria}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{a.vuelos}</td>
-              </tr>
-            ))}
-            {!isLoading && items.length === 0 && !error && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
-                  No hay aeropuertos con estos filtros.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+          )}
+          {items.map((a) => (
+            <TableRow key={a.iata}>
+              <TableCell className="num font-semibold text-ink">{a.iata}</TableCell>
+              <TableCell>{a.ciudad}</TableCell>
+              <TableCell>{a.nombre}</TableCell>
+              <TableCell className="text-muted">
+                {a.paisNombre} ({a.pais})
+              </TableCell>
+              <TableCell className="text-muted">{a.zonaHoraria}</TableCell>
+              <TableCell className="num text-right">{a.vuelos}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+      {!isLoading && items.length === 0 && !error && (
+        <EmptyState icon={<MapPin />} title="No hay aeropuertos con estos filtros" description="Cambia la búsqueda o el país." />
+      )}
 
-      <nav aria-label="Paginación de aeropuertos" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+      <nav aria-label="Paginación de aeropuertos" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-muted">
         <p>
           {total} aeropuerto(s) · página {data?.pagina ?? pagina} de {pages}
         </p>
@@ -247,7 +236,7 @@ export const AdminAirportsPage: React.FC = () => {
         </div>
       </nav>
 
-      {creating && <CreateAirportDialog onClose={() => setCreating(false)} onCreated={(iata) => setNotice(`Aeropuerto ${iata} creado. Ya puedes crear vuelos desde y hacia él.`)} />}
+      {creating && <CreateAirportDialog onClose={() => setCreating(false)} onCreated={(iata) => toast.success(`Aeropuerto ${iata} creado. Ya puedes crear vuelos desde y hacia él.`)} />}
     </section>
   );
 };

@@ -28,7 +28,7 @@ export const LegalLayout: React.FC<LegalLayoutProps> = ({ title, intro, children
   const isActive = (label: string) => label === title || title.startsWith(label);
 
   return (
-    <div className="bg-airline-sand">
+    <div className="bg-paper">
       <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
         <nav aria-label="Información legal" className="no-print mb-6 flex flex-wrap gap-2">
           {RELATED.map((item) => (
@@ -38,8 +38,8 @@ export const LegalLayout: React.FC<LegalLayoutProps> = ({ title, intro, children
               aria-current={isActive(item.label) ? 'page' : undefined}
               className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
                 isActive(item.label)
-                  ? 'border-brand-black bg-brand-black text-white'
-                  : 'border-slate-300 bg-white text-slate-600 hover:border-brand-gold hover:text-brand-black'
+                  ? 'border-ink bg-ink text-on-ink'
+                  : 'border-line-strong bg-surface text-muted hover:border-gold-text hover:text-ink'
               }`}
             >
               {item.label}
@@ -47,14 +47,14 @@ export const LegalLayout: React.FC<LegalLayoutProps> = ({ title, intro, children
           ))}
         </nav>
 
-        <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card sm:p-10">
-          <header className="border-b border-slate-200 pb-5">
-            <h1 className="text-2xl font-black text-brand-black sm:text-3xl">{title}</h1>
-            {intro && <p className="mt-2 text-sm leading-relaxed text-slate-600">{intro}</p>}
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500">
+        <article className="rounded-xl border border-line bg-surface p-6 sm:p-10">
+          <header className="border-b border-line pb-5">
+            <h1 className="text-title font-semibold text-ink sm:text-heading">{title}</h1>
+            {intro && <p className="mt-2 text-small leading-relaxed text-muted">{intro}</p>}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
               <span>Versión {LEGAL_VERSION}</span>
               <span>Actualizado el {LEGAL_UPDATED}</span>
-              <button type="button" onClick={() => window.print()} className="no-print inline-flex items-center gap-1 font-semibold text-brand-gold-dark hover:text-brand-black">
+              <button type="button" onClick={() => window.print()} className="no-print inline-flex items-center gap-1 font-semibold text-gold-text hover:text-ink">
                 <Printer className="h-3.5 w-3.5" aria-hidden="true" />
                 Imprimir
               </button>
@@ -70,7 +70,7 @@ export const LegalLayout: React.FC<LegalLayoutProps> = ({ title, intro, children
 
 /** Notice shown on every legal page: this is an academic prototype. */
 export const PrototypeNotice: React.FC = () => (
-  <div className="my-5 rounded-xl border border-brand-gold/40 bg-brand-gold-light p-4 text-sm leading-relaxed text-slate-700">
-    <strong className="text-brand-black">Proyecto académico.</strong> RAM Alliance es un prototipo desarrollado para un curso de integración de sistemas. Los pagos son simulados, no se emiten boletos reales y ningún cobro se realiza. Los textos de esta página describen cómo funciona el sistema y no constituyen asesoría legal.
+  <div className="my-5 rounded-xl border border-gold-text/30 bg-gold-soft p-4 text-small leading-relaxed text-ink">
+    <strong className="text-ink">Proyecto académico.</strong> RAM Alliance es un prototipo desarrollado para un curso de integración de sistemas. Los pagos son simulados, no se emiten boletos reales y ningún cobro se realiza. Los textos de esta página describen cómo funciona el sistema y no constituyen asesoría legal.
   </div>
 );

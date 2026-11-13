@@ -4,40 +4,34 @@ import { clsx } from 'clsx';
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: 'primary' | 'secondary' | 'success' | 'warning' | 'danger' | 'outline';
   size?: 'sm' | 'md';
+  /** Optional icon (decorative). Status badges should carry one: color is never the only signal. */
+  icon?: React.ReactNode;
 }
 
-export const Badge: React.FC<BadgeProps> = ({
-  className,
-  variant = 'primary',
-  size = 'md',
-  children,
-  ...props
-}) => {
-  const variants = {
-    primary: 'bg-airline-navy text-white',
-    secondary: 'bg-airline-blue-light text-sky-800 font-semibold',
-    success: 'bg-emerald-100 text-emerald-800 font-semibold',
-    warning: 'bg-amber-100 text-amber-800 font-semibold',
-    danger: 'bg-red-100 text-red-800 font-semibold',
-    outline: 'border border-slate-300 text-slate-700 bg-white',
-  };
-
-  const sizes = {
-    sm: 'px-2 py-0.5 text-xs',
-    md: 'px-2.5 py-1 text-xs',
-  };
-
-  return (
-    <span
-      className={clsx(
-        'inline-flex items-center rounded-full font-medium leading-none tracking-wide select-none',
-        variants[variant],
-        sizes[size],
-        className
-      )}
-      {...props}
-    >
-      {children}
-    </span>
-  );
+const variants = {
+  primary: 'bg-ink text-on-ink',
+  secondary: 'bg-gold-soft text-gold-text',
+  success: 'bg-success-soft text-success',
+  warning: 'bg-warning-soft text-warning',
+  danger: 'bg-danger-soft text-danger',
+  outline: 'border border-line-strong bg-transparent text-ink',
 };
+
+const sizes = {
+  sm: 'gap-1 px-2 py-0.5 text-xs',
+  md: 'gap-1.5 px-2.5 py-1 text-xs',
+};
+
+export const Badge: React.FC<BadgeProps> = ({ className, variant = 'primary', size = 'md', icon, children, ...props }) => (
+  <span
+    className={clsx('inline-flex select-none items-center rounded-full font-medium leading-none', variants[variant], sizes[size], className)}
+    {...props}
+  >
+    {icon && (
+      <span className="inline-flex shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5" aria-hidden="true">
+        {icon}
+      </span>
+    )}
+    {children}
+  </span>
+);

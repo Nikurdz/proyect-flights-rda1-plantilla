@@ -37,7 +37,7 @@ export default tseslint.config(
   },
   {
     // Node-side files: tooling configs.
-    files: ['*.config.{js,ts}', 'vite.config.ts'],
+    files: ['*.config.{js,ts}', 'vite.config.ts', 'scripts/**/*.mjs'],
     languageOptions: { globals: { ...globals.node } },
   },
   {

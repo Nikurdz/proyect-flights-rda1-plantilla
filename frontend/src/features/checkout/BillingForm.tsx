@@ -2,58 +2,81 @@ import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowRight, ArrowLeft, Building2 } from 'lucide-react';
+import { Building2, UserRoundCheck } from 'lucide-react';
 import { useMercado } from '../../api/endpoints/markets';
 import { registrarFacturacion } from '../../api/endpoints/offers';
-import { FieldError, FieldLabel } from '../../components/ui/FormField';
-import { fieldA11y } from '../../lib/field-a11y';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
+import { countryName, type Titular } from '../../lib/checkout';
+import { StepActions } from './StepActions';
+import { CHECKOUT_FORM_ID } from './step-actions-context';
 import type { OfertaViewDto, FacturacionDto } from '../../api/types';
 
 const billingSchema = z.object({
-  tipoIdentificacion: z.string().min(1, 'Selecciona el tipo de identificación'),
-  numeroIdentificacion: z.string().min(3, 'Ingresa el número de identificación fiscal').trim(),
-  razonSocial: z.string().min(3, 'Ingresa el nombre o razón social completa').trim(),
-  direccion: z.string().min(5, 'Ingresa la dirección fiscal').trim(),
-  pais: z.string().min(2, 'Selecciona el país fiscal'),
+  tipoIdentificacion: z.string().min(1, 'Elige el tipo de documento.'),
+  numeroIdentificacion: z.string().trim().min(3, 'Escribe tu cédula, RUC o pasaporte.'),
+  razonSocial: z.string().trim().min(3, 'Escribe el nombre o la razón social completa.'),
+  direccion: z.string().trim().min(5, 'Escribe la dirección de la factura.'),
+  pais: z.string().min(2, 'Elige el país.'),
 });
 
 type FormValues = z.infer<typeof billingSchema>;
 
 interface BillingFormProps {
   oferta: OfertaViewDto;
+  /** The first traveller, when known: one tap copies their name and document into the invoice. */
+  titular?: Titular;
   onSuccess: (updatedOferta: OfertaViewDto) => void;
   onBack: () => void;
 }
 
-export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onBack }) => {
+const FALLBACK_TYPES = [
+  { tipo: 'CEDULA', etiqueta: 'Cédula de identidad', patron: '' },
+  { tipo: 'RUC', etiqueta: 'RUC', patron: '' },
+  { tipo: 'PASAPORTE', etiqueta: 'Pasaporte', patron: '' },
+];
+
+export const BillingForm: React.FC<BillingFormProps> = ({ oferta, titular, onSuccess, onBack }) => {
   const [submitError, setSubmitError] = useState<unknown>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: mercadoData } = useMercado(oferta.mercado);
-  const fiscalOptions = mercadoData?.identificacionesFiscales || [
-    { tipo: 'CEDULA', etiqueta: 'Cédula de Identidad', patron: '' },
-    { tipo: 'RUC', etiqueta: 'RUC / Registro Tributario', patron: '' },
-    { tipo: 'PASAPORTE', etiqueta: 'Pasaporte', patron: '' },
-  ];
+  const fiscalOptions = mercadoData?.identificacionesFiscales?.length ? mercadoData.identificacionesFiscales : FALLBACK_TYPES;
+  // The platform sells in one market: the invoice is issued in its country (Ecuador).
+  const countryCode = (mercadoData?.pais || 'EC').toUpperCase();
 
-  const defaultTipo = fiscalOptions[0]?.tipo || 'CEDULA';
-  const defaultPais = 'EC';
+  // Without the data typed in the previous step (e.g. after a reload) the saved name is still known.
+  const first = oferta.pasajerosRegistrados?.[0];
+  const source: Titular | undefined = titular ?? (first ? { nombres: first.nombres, apellidos: first.apellidos } : undefined);
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(billingSchema),
     defaultValues: {
-      tipoIdentificacion: defaultTipo,
+      tipoIdentificacion: fiscalOptions[0]?.tipo || 'CEDULA',
       numeroIdentificacion: '',
       razonSocial: '',
       direccion: '',
-      pais: defaultPais,
+      pais: countryCode,
     },
   });
+
+  const fillFromFirstPassenger = () => {
+    if (!source) return;
+    setValue('razonSocial', `${source.nombres} ${source.apellidos}`.trim(), { shouldValidate: true });
+    if (source.documento?.numero) {
+      const wanted = source.documento.tipo === 'PASSPORT' ? 'PASAPORTE' : 'CEDULA';
+      if (fiscalOptions.some((opt) => opt.tipo === wanted)) setValue('tipoIdentificacion', wanted, { shouldValidate: true });
+      setValue('numeroIdentificacion', source.documento.numero, { shouldValidate: true });
+    }
+  };
 
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -78,143 +101,66 @@ export const BillingForm: React.FC<BillingFormProps> = ({ oferta, onSuccess, onB
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
-      {submitError != null && <ProblemAlert error={submitError} className="mb-4" />}
+    <form id={CHECKOUT_FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+      {submitError != null && <ProblemAlert error={submitError} />}
 
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-5">
-        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-          <div className="w-8 h-8 rounded-xl bg-airline-navy/5 text-airline-navy flex items-center justify-center font-bold">
-            <Building2 className="w-4 h-4" aria-hidden="true" />
+      <Card className="space-y-5 p-5 sm:p-6" role="group" aria-labelledby="billing-title">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold-soft text-gold-text" aria-hidden="true">
+              <Building2 className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 id="billing-title" className="text-lead font-semibold text-ink">
+                A nombre de quién va la factura
+              </h2>
+              <p className="text-small text-muted">Te enviaremos la factura electrónica con estos datos.</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Datos para Comprobante Fiscal</h3>
-            <p className="text-xs text-slate-500">
-              Información tributaria para la emisión de la factura electrónica.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <FieldLabel htmlFor="bill-tipo">
-              Tipo de Identificación Fiscal *
-            </FieldLabel>
-            <select
-              {...fieldA11y('bill-tipo', errors.tipoIdentificacion?.message)}
-              {...register('tipoIdentificacion')}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
-            >
-              {fiscalOptions.map((opt) => (
-                <option key={opt.tipo} value={opt.tipo}>
-                  {opt.etiqueta || opt.tipo}
-                </option>
-              ))}
-            </select>
-            <FieldError id="bill-tipo" message={errors.tipoIdentificacion?.message} />
-          </div>
-
-          <div>
-            <FieldLabel htmlFor="bill-numero">
-              Número de Identificación (RUC / Cédula / NIT) *
-            </FieldLabel>
-            <input
-              type="text"
-              placeholder="Ej. 1790012345001"
-              {...fieldA11y('bill-numero', errors.numeroIdentificacion?.message)}
-              {...register('numeroIdentificacion')}
-              className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-                errors.numeroIdentificacion
-                  ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                  : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-              }`}
-            />
-            <FieldError id="bill-numero" message={errors.numeroIdentificacion?.message} />
-          </div>
-        </div>
-
-        <div>
-          <FieldLabel htmlFor="bill-razon">
-            Nombre / Razón Social *
-          </FieldLabel>
-          <input
-            type="text"
-            placeholder="Ej. Juan Pérez o Corporación Ejemplo S.A."
-            {...fieldA11y('bill-razon', errors.razonSocial?.message)}
-            {...register('razonSocial')}
-            className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-              errors.razonSocial
-                ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-            }`}
-          />
-          <FieldError id="bill-razon" message={errors.razonSocial?.message} />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="sm:col-span-2">
-            <FieldLabel htmlFor="bill-direccion">
-              Dirección Fiscal Completa *
-            </FieldLabel>
-            <input
-              type="text"
-              placeholder="Ej. Av. Amazonas 123 y Naciones Unidas"
-              {...fieldA11y('bill-direccion', errors.direccion?.message)}
-              {...register('direccion')}
-              className={`w-full rounded-xl border px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:ring-2 ${
-                errors.direccion
-                  ? 'border-red-400 bg-red-50/50 focus:ring-red-400'
-                  : 'border-slate-300 focus:border-airline-blue focus:ring-airline-blue/20'
-              }`}
-            />
-            <FieldError id="bill-direccion" message={errors.direccion?.message} />
-          </div>
-
-          <div>
-            <FieldLabel htmlFor="bill-pais">País *</FieldLabel>
-            <select
-              {...fieldA11y('bill-pais', errors.pais?.message)}
-              {...register('pais')}
-              className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-900 focus:border-airline-blue focus:outline-none focus:ring-2 focus:ring-airline-blue/20"
-            >
-              <option value="EC">Ecuador (EC)</option>
-              <option value="CO">Colombia (CO)</option>
-              <option value="US">Estados Unidos (US)</option>
-              <option value="ES">España (ES)</option>
-              <option value="MX">México (MX)</option>
-              <option value="PE">Perú (PE)</option>
-              <option value="CL">Chile (CL)</option>
-              <option value="AR">Argentina (AR)</option>
-            </select>
-            <FieldError id="bill-pais" message={errors.pais?.message} />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between pt-2">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-2 px-5 py-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          <span>Volver a Pasajeros</span>
-        </button>
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-airline-navy text-white font-bold text-sm hover:bg-slate-900 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? (
-            <span>Guardando facturación...</span>
-          ) : (
-            <>
-              <span>Continuar a Condiciones</span>
-              <ArrowRight className="w-4 h-4" aria-hidden="true" />
-            </>
+          {source && (
+            <Button type="button" variant="outline" size="sm" onClick={fillFromFirstPassenger}>
+              <UserRoundCheck className="mr-2 h-4 w-4" aria-hidden="true" />
+              Usar datos del pasajero 1
+            </Button>
           )}
-        </button>
-      </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Select
+            label="Tipo de documento"
+            id="bill-tipo"
+            options={fiscalOptions.map((opt) => ({ value: opt.tipo, label: opt.etiqueta || opt.tipo }))}
+            error={errors.tipoIdentificacion?.message}
+            {...register('tipoIdentificacion')}
+          />
+          <Input label="Cédula, RUC o pasaporte" id="bill-numero" placeholder="1790012345001" error={errors.numeroIdentificacion?.message} {...register('numeroIdentificacion')} />
+        </div>
+
+        <Input
+          label="Nombre o razón social"
+          id="bill-razon"
+          placeholder="Juan Pérez o Corporación Ejemplo S.A."
+          autoComplete="name"
+          error={errors.razonSocial?.message}
+          {...register('razonSocial')}
+        />
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="sm:col-span-2">
+            <Input
+              label="Dirección"
+              id="bill-direccion"
+              placeholder="Av. Amazonas N23-45 y Wilson"
+              autoComplete="street-address"
+              error={errors.direccion?.message}
+              {...register('direccion')}
+            />
+          </div>
+          <Select label="País" id="bill-pais" options={[{ value: countryCode, label: countryName(countryCode) }]} error={errors.pais?.message} {...register('pais')} />
+        </div>
+      </Card>
+
+      <StepActions submitLabel="Continuar a condiciones" loading={isSubmitting} loadingLabel="Guardando…" backLabel="Volver a pasajeros" onBack={onBack} />
     </form>
   );
 };

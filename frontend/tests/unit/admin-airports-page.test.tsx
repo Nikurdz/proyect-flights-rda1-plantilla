@@ -2,6 +2,8 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { ToastProvider } from '../../src/components/ui/Toast';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/api/client', () => ({ apiClient: vi.fn() }));
@@ -32,7 +34,11 @@ function renderPage() {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
+      <ToastProvider>
+      <MemoryRouter>
       <AdminAirportsPage />
+    </MemoryRouter>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -68,7 +74,7 @@ describe('AdminAirportsPage', () => {
   it('shows the empty state', async () => {
     mocked.mockResolvedValue({ items: [], total: 0, pagina: 1, limite: 25 } as never);
     renderPage();
-    expect(await screen.findByText('No hay aeropuertos con estos filtros.')).toBeTruthy();
+    expect(await screen.findByText('No hay aeropuertos con estos filtros')).toBeTruthy();
   });
 
   it('validates the form on the client and sends nothing', async () => {

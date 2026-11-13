@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { Users, Plus, Minus } from 'lucide-react';
 import { MAX_PASSENGERS } from '../../lib/passenger-rules';
+import { describePassengers } from '../../lib/search';
+import { Button } from '../../components/ui/Button';
 
 export interface PassengerCounts {
   adt: number;
@@ -81,195 +83,142 @@ export const PassengerSelector: React.FC<PassengerSelectorProps> = ({
     onChange(next);
   };
 
-  // Generate passenger summary label
-  const getSummaryLabel = () => {
-    const parts: string[] = [];
-    if (counts.adt === 1) parts.push('1 Adulto');
-    else parts.push(`${counts.adt} Adultos`);
-
-    if (counts.yth === 1) parts.push('1 Joven');
-    else if (counts.yth > 1) parts.push(`${counts.yth} Jóvenes`);
-
-    if (counts.chd === 1) parts.push('1 Niño');
-    else if (counts.chd > 1) parts.push(`${counts.chd} Niños`);
-
-    if (counts.inf === 1) parts.push('1 Bebé');
-    else if (counts.inf > 1) parts.push(`${counts.inf} Bebés`);
-
-    return parts.join(', ');
-  };
+  const summary = describePassengers(counts);
 
   return (
     <div ref={containerRef} className="relative w-full">
-      <span id={`${uid}-label`} className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+      <span id={`${uid}-label`} className="mb-1.5 block text-sm font-medium text-ink">
         Pasajeros
       </span>
 
-      {/* Trigger Button */}
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center justify-between w-full h-[54px] px-3.5 rounded-xl border bg-white cursor-pointer transition-all text-left ${
-          isOpen
-            ? 'border-airline-blue ring-2 ring-airline-blue/20 shadow-sm'
-            : 'border-slate-300 hover:border-slate-400'
+        className={`flex h-12 w-full items-center gap-3 rounded-lg border bg-surface px-3.5 text-left transition-colors ${
+          isOpen ? 'border-gold-text ring-2 ring-gold-text/25' : 'border-line-strong hover:border-ink/50'
         }`}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-controls={isOpen ? panelId : undefined}
         aria-labelledby={`${uid}-label ${uid}-summary`}
       >
-        <div className="flex items-center gap-3 overflow-hidden">
-          <Users className="w-5 h-5 text-airline-navy shrink-0" aria-hidden="true" />
-          <div className="text-left truncate">
-            <span id={`${uid}-summary`} className="text-sm font-semibold text-slate-900 block truncate">
-              {getSummaryLabel()}
-            </span>
-            <span className="text-xs text-slate-500">Cabina Economy</span>
-          </div>
-        </div>
+        <Users className="h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
+        <span id={`${uid}-summary`} className="block truncate text-body text-ink">
+          {summary}
+        </span>
       </button>
 
-      {/* Popover Controls */}
       {isOpen && (
         <div
           id={panelId}
           role="dialog"
-          aria-label="Seleccionar pasajeros"
-          className="absolute right-0 sm:left-0 top-full mt-2 z-50 w-72 bg-white rounded-xl shadow-2xl border border-slate-200 p-4 space-y-4 animate-in fade-in-50 zoom-in-95">
-          {/* Adultos */}
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-bold text-slate-900">Adultos</div>
-              <div className="text-xs text-slate-500">Desde 18 años</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                disabled={counts.adt <= 1}
-                onClick={() => handleUpdate('adt', -1)}
-                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                aria-label="Restar adulto"
-              >
-                <Minus className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-              <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.adt} adultos`}>{counts.adt}</span>
-              <button
-                type="button"
-                disabled={totalPassengers >= maxTotal}
-                onClick={() => handleUpdate('adt', 1)}
-                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                aria-label="Sumar adulto"
-              >
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+          aria-label="Elegir pasajeros"
+          className="absolute right-0 top-full z-50 mt-2 w-[min(18rem,calc(100vw-2rem))] space-y-1 rounded-xl border border-line bg-surface p-4 shadow-elevated sm:left-0 sm:right-auto"
+        >
+          <CounterRow
+            title="Adultos"
+            hint="Desde 18 años"
+            noun="adultos"
+            count={counts.adt}
+            removeLabel="Restar adulto"
+            addLabel="Sumar adulto"
+            removeDisabled={counts.adt <= 1}
+            addDisabled={totalPassengers >= maxTotal}
+            onRemove={() => handleUpdate('adt', -1)}
+            onAdd={() => handleUpdate('adt', 1)}
+          />
+          <CounterRow
+            title="Joven (12 a 17 años)"
+            hint="Viajan con asiento propio"
+            noun="jóvenes"
+            count={counts.yth}
+            removeLabel="Restar joven"
+            addLabel="Sumar joven"
+            removeDisabled={counts.yth <= 0}
+            addDisabled={totalPassengers >= maxTotal}
+            onRemove={() => handleUpdate('yth', -1)}
+            onAdd={() => handleUpdate('yth', 1)}
+          />
+          <CounterRow
+            title="Niños"
+            hint="De 2 a 11 años"
+            noun="niños"
+            count={counts.chd}
+            removeLabel="Restar niño"
+            addLabel="Sumar niño"
+            removeDisabled={counts.chd <= 0}
+            addDisabled={totalPassengers >= maxTotal}
+            onRemove={() => handleUpdate('chd', -1)}
+            onAdd={() => handleUpdate('chd', 1)}
+          />
+          <CounterRow
+            title="Bebés"
+            hint="Menores de 2 años (en brazos)"
+            noun="bebés"
+            count={counts.inf}
+            removeLabel="Restar bebé"
+            addLabel="Sumar bebé"
+            removeDisabled={counts.inf <= 0}
+            addDisabled={counts.inf >= counts.adt || totalPassengers >= maxTotal}
+            onRemove={() => handleUpdate('inf', -1)}
+            onAdd={() => handleUpdate('inf', 1)}
+          />
 
-          {/* Jóvenes */}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-            <div>
-              <div className="text-sm font-bold text-slate-900">Joven (12 a 17 años)</div>
-              <div className="text-xs text-slate-500">Viajan con asiento propio</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                disabled={counts.yth <= 0}
-                onClick={() => handleUpdate('yth', -1)}
-                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                aria-label="Restar joven"
-              >
-                <Minus className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-              <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.yth} jóvenes`}>{counts.yth}</span>
-              <button
-                type="button"
-                disabled={totalPassengers >= maxTotal}
-                onClick={() => handleUpdate('yth', 1)}
-                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                aria-label="Sumar joven"
-              >
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+          <p className="border-t border-line pt-3 text-small text-muted">
+            Máximo {maxTotal} pasajeros por reserva. Cada bebé viaja en brazos de un adulto.
+          </p>
 
-          {/* Niños */}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-            <div>
-              <div className="text-sm font-bold text-slate-900">Niños</div>
-              <div className="text-xs text-slate-500">De 2 a 11 años</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                disabled={counts.chd <= 0}
-                onClick={() => handleUpdate('chd', -1)}
-                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                aria-label="Restar niño"
-              >
-                <Minus className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-              <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.chd} niños`}>{counts.chd}</span>
-              <button
-                type="button"
-                disabled={totalPassengers >= maxTotal}
-                onClick={() => handleUpdate('chd', 1)}
-                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                aria-label="Sumar niño"
-              >
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-
-          {/* Infantes */}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-            <div>
-              <div className="text-sm font-bold text-slate-900">Bebés</div>
-              <div className="text-xs text-slate-500">Menores de 2 años (en brazos)</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                disabled={counts.inf <= 0}
-                onClick={() => handleUpdate('inf', -1)}
-                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                aria-label="Restar bebé"
-              >
-                <Minus className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-              <span className="w-4 text-center font-bold text-sm" role="status" aria-live="polite" aria-label={`${counts.inf} bebés`}>{counts.inf}</span>
-              <button
-                type="button"
-                disabled={counts.inf >= counts.adt || totalPassengers >= maxTotal}
-                onClick={() => handleUpdate('inf', 1)}
-                className="w-11 h-11 rounded-full border border-slate-300 flex items-center justify-center text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                aria-label="Sumar bebé"
-              >
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500">
-            Máximo {maxTotal} pasajeros por reserva. Los bebés viajan en el regazo de un adulto.
-          </div>
-
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="sm"
+            className="mt-1 w-full"
             onClick={() => {
               setIsOpen(false);
               triggerRef.current?.focus();
             }}
-            className="w-full py-2 bg-airline-navy text-white text-xs font-bold rounded-lg hover:bg-airline-navy-light transition-colors"
           >
             Listo
-          </button>
+          </Button>
         </div>
       )}
     </div>
   );
 };
+
+interface CounterRowProps {
+  title: string;
+  hint: string;
+  noun: string;
+  count: number;
+  removeLabel: string;
+  addLabel: string;
+  removeDisabled: boolean;
+  addDisabled: boolean;
+  onRemove: () => void;
+  onAdd: () => void;
+}
+
+const stepButton =
+  'inline-flex h-11 w-11 items-center justify-center rounded-full border border-line-strong text-ink transition-colors hover:bg-ink/5 disabled:pointer-events-none disabled:opacity-35';
+
+const CounterRow: React.FC<CounterRowProps> = ({ title, hint, noun, count, removeLabel, addLabel, removeDisabled, addDisabled, onRemove, onAdd }) => (
+  <div className="flex items-center justify-between gap-3 border-t border-line py-2 first:border-t-0 first:pt-0">
+    <div className="min-w-0">
+      <div className="text-body font-medium text-ink">{title}</div>
+      <div className="text-small text-muted">{hint}</div>
+    </div>
+    <div className="flex shrink-0 items-center gap-2">
+      <button type="button" disabled={removeDisabled} onClick={onRemove} className={stepButton} aria-label={removeLabel}>
+        <Minus className="h-4 w-4" aria-hidden="true" />
+      </button>
+      <span className="num w-5 text-center text-body font-semibold" role="status" aria-live="polite" aria-label={`${count} ${noun}`}>
+        {count}
+      </span>
+      <button type="button" disabled={addDisabled} onClick={onAdd} className={stepButton} aria-label={addLabel}>
+        <Plus className="h-4 w-4" aria-hidden="true" />
+      </button>
+    </div>
+  </div>
+);

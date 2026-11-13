@@ -49,6 +49,8 @@ type Handler = (url: string, init?: RequestInit) => unknown;
 let reservar: Handler;
 
 beforeEach(() => {
+  // The test cards are only offered when the build asks for them.
+  vi.stubEnv('VITE_SHOW_TEST_CARDS', 'true');
   mocked.mockReset();
   reservar = () => reserva;
   mocked.mockImplementation((async (url: string, init?: RequestInit) => {
@@ -59,7 +61,10 @@ beforeEach(() => {
     return {};
   }) as never);
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -179,7 +184,7 @@ describe('Experience reservation', () => {
     renderPage();
     const form = await fillForm();
     fireEvent.click(within(form).getByRole('button', { name: /Pagar y reservar/ }));
-    await screen.findByText(/El servicio no responde por ahora/);
+    await screen.findByText(/No pudimos conectar con el servidor/);
 
     reservar = () => reserva;
     fireEvent.change(within(form).getByLabelText('Código de seguridad'), { target: { value: '123' } });

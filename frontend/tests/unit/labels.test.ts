@@ -23,3 +23,10 @@ describe('airport time zones', () => {
     expect(formatDateTime('2026-11-10T02:30:00.000Z')).toContain('9 nov'); // 9:30 PM of the 9th in Ecuador
   });
 });
+
+describe('formatShortDay', () => {
+  it('gives a short day without commas or "de"', async () => {
+    const { formatShortDay } = await import('../../src/lib/labels');
+    expect(formatShortDay('2026-11-14T19:00:00Z', 'America/Guayaquil')).toMatch(/^[a-záéíóú]{3} 14 nov$/i);
+  });
+});
