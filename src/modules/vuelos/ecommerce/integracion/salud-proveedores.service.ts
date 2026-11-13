@@ -6,6 +6,7 @@ import { runtimeMetrics } from '../../common/runtime-metrics';
 import { ProveedorSalud } from './entities/proveedor-salud.entity';
 import { Proveedor } from './entities/proveedor.entity';
 import { ProveedoresService } from './proveedores.service';
+import { runsCore } from '../../common/service-role';
 
 // Each tick calls every active partner, so it is not frequent by default; override with PROVEEDORES_HEALTH_INTERVAL_MS.
 const INTERVAL_MS = Math.max(5_000, Number(process.env.PROVEEDORES_HEALTH_INTERVAL_MS) || 60_000);
@@ -25,6 +26,7 @@ export class SaludProveedoresService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     // Skipped while nobody uses the system, so a serverless database can sleep (common/activity-gate.ts).
     this.timer = setInterval(() => activityGate.isActive() && void this.comprobarTodos(), INTERVAL_MS);
     this.timer.unref();

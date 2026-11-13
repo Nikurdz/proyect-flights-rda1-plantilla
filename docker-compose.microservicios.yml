@@ -1,0 +1,166 @@
+# Demo local: un contenedor por microservicio (nucleo + 3 satelites), RabbitMQ, Kong y frontend.
+# Independiente de docker-compose.yml (que sigue levantando solo Postgres) y de produccion (Azure usa la imagen unica
+# del Dockerfile de la raiz). Documentacion: src/modules/vuelos/docs/RDA2-docs/CONTENEDORES-POR-MICROSERVICIO.md
+#
+#   cp docker/.env.microservicios.example docker/.env.microservicios
+#   npm run micro:build && npm run micro:up && npm run micro:smoke
+#
+# Puertos del anfitrion: 8000 Kong (puerta unica), 8080 frontend, 5434 Postgres, 5673 AMQP, 15673 consola RabbitMQ.
+# Kong usa 8000 igual que el perfil `gateway` de docker-compose.yml: no levante ambos a la vez.
+name: ram-microservicios
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgres://${POSTGRES_USER:-vuelos}:${POSTGRES_PASSWORD:-demo-postgres-pass}@postgres:5432/${POSTGRES_DB:-vuelos_demo}
+  JWT_SECRET: ${JWT_SECRET:?copie docker/.env.microservicios.example a docker/.env.microservicios}
+  DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?copie docker/.env.microservicios.example a docker/.env.microservicios}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:-vuelos}:${RABBITMQ_PASS:-demo-rabbit-pass}@rabbitmq:5672
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vuelos_demo}
+      POSTGRES_USER: ${POSTGRES_USER:-vuelos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-postgres-pass}
+    ports:
+      - '5434:5432'
+    volumes:
+      - pgdata-micro:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [micro]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-vuelos}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-demo-rabbit-pass}
+    ports:
+      - '5673:5672'
+      - '15673:15672'
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks: [micro]
+
+  # Nucleo: unico dueno del esquema (migra y siembra al arrancar) y de la compra en una transaccion.
+  vuelos-api:
+    build:
+      context: .
+      dockerfile: docker/vuelos-api/Dockerfile
+    image: ram-microservicios/vuelos-api
+    environment:
+      <<: *backend-env
+      SERVICE_ROLE: api
+      PORT: '3000'
+      TRUST_PROXY: '1'
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:8080}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin-demo@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DemoAdmin-12345}
+      PARTNER_CLIENT_ID: ${PARTNER_CLIENT_ID:-booking-prototipo}
+      PARTNER_CLIENT_SECRET: ${PARTNER_CLIENT_SECRET:-demo-partner-secret-0123456789abcd}
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [micro]
+
+  auditoria:
+    build:
+      context: .
+      dockerfile: docker/auditoria/Dockerfile
+    image: ram-microservicios/auditoria
+    environment:
+      <<: *backend-env
+      SERVICE_ROLE: auditoria
+      PORT: '3001'
+      RABBITMQ_SERVICE_QUEUE: q.svc.auditoria
+    depends_on:
+      vuelos-api: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [micro]
+
+  notificaciones:
+    build:
+      context: .
+      dockerfile: docker/notificaciones/Dockerfile
+    image: ram-microservicios/notificaciones
+    environment:
+      <<: *backend-env
+      SERVICE_ROLE: notificaciones
+      PORT: '3002'
+      RABBITMQ_SERVICE_QUEUE: q.svc.notificaciones
+      PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-http://localhost:8080}
+    depends_on:
+      vuelos-api: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [micro]
+
+  webhooks:
+    build:
+      context: .
+      dockerfile: docker/webhooks/Dockerfile
+    image: ram-microservicios/webhooks
+    environment:
+      <<: *backend-env
+      SERVICE_ROLE: webhooks
+      PORT: '3003'
+      RABBITMQ_SERVICE_QUEUE: q.svc.webhooks
+    depends_on:
+      vuelos-api: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [micro]
+
+  # Puerta unica :8000 (reglas de borde de deploy/gateway/kong.yml con upstream vuelos-api).
+  kong:
+    image: kong:3.9
+    ports:
+      - '8000:8000'
+    environment:
+      KONG_DATABASE: 'off'
+      KONG_DECLARATIVE_CONFIG: /tmp/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 'off'
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      JWT_SECRET: ${JWT_SECRET:?copie docker/.env.microservicios.example a docker/.env.microservicios}
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        [ -n "$$JWT_SECRET" ] || { echo 'JWT_SECRET is required to start the gateway' >&2; exit 1; }
+        ESC=$$(printf '%s' "$$JWT_SECRET" | sed 's/[\\&|]/\\&/g')
+        sed "s|__JWT_SECRET__|$$ESC|" /kong/kong.yml > /tmp/kong.yml
+        exec /docker-entrypoint.sh kong docker-start
+    volumes:
+      - ./deploy/gateway/kong.microservicios.yml:/kong/kong.yml:ro
+    depends_on:
+      vuelos-api: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [micro]
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: ../docker/frontend/Dockerfile
+      additional_contexts:
+        nginxconf: ./docker/frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+    image: ram-microservicios/frontend
+    ports:
+      - '8080:80'
+    restart: unless-stopped
+    networks: [micro]
+
+volumes:
+  pgdata-micro:
+
+networks:
+  micro:

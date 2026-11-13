@@ -10,6 +10,7 @@ import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
 import { activityGate } from '../common/activity-gate';
 import { WebhookSubscription } from '../entities/webhook-subscription.entity';
+import { runsDomain } from '../common/service-role';
 
 // Every 15 s so a partner hears an event soon after it happens (the activity gate skips idle ticks, so an idle database is not woken);
 // override with WEBHOOK_POLL_INTERVAL_MS (never faster than 15 s).
@@ -47,6 +48,7 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    if (!runsDomain('webhooks')) return;
     // With nobody using the system the tick is skipped, so a serverless database can sleep (common/activity-gate.ts).
     this.timer = setInterval(() => activityGate.isActive() && void this.process(), POLL_INTERVAL_MS);
     // Never keep the process (or a test run) alive just for housekeeping.

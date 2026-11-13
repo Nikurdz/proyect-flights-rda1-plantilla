@@ -11,6 +11,7 @@ import { WEBHOOK_EVENTS } from '../dto/enums';
 import type { WebhookSubscriptionDto } from '../dto/webhooks.dto';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
 import { WebhookSubscription, WebhookSubscriptionEvent } from '../entities/webhook-subscription.entity';
+import { runsDomain } from '../common/service-role';
 
 export const WEBHOOK_API_VERSION = '1.5.0.0';
 
@@ -55,6 +56,7 @@ export class WebhooksService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    if (!runsDomain('webhooks')) return;
     // Every event the contract lets a subscriber ask for is announced on the in-process bus; a failing consumer is
     // isolated by the bus, so a webhook problem can never fail the operation that produced the event.
     for (const type of new Set<string>([...WEBHOOK_EVENTS, ...VUELOS_EVENT_NAMES])) {

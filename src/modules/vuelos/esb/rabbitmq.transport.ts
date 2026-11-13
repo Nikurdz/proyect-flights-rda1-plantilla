@@ -17,6 +17,8 @@ export const Q_DEAD_LETTER = 'q.dead_letter';
 export const Q_ENTRANTES = 'q.vuelos.entrantes';
 export const ENTRANTES_ROUTING_KEYS = ['pagos.payment.confirmed', 'pagos.payment.failed', 'paquetes.package.cancelled'];
 export const MAX_REINTENTOS = 3;
+/** Every routing key the platform's events travel under: what a per-service queue (`RABBITMQ_SERVICE_QUEUE`) is bound to. */
+export const TODAS_LAS_CLAVES = [Q_CONFIRMADAS, Q_COMPENSACION, Q_GENERAL, ...ENTRANTES_ROUTING_KEYS];
 
 const CONFIRMADAS = new Set(['OrdenEmitida', 'ReservaExternaConfirmada', 'booking.confirmed', 'booking.ticket_issued']);
 const COMPENSACION = new Set(['OrdenFallidaCompensada', 'ReservaExternaFallida', 'ReservaExternaCancelada', 'PagoAnulado', 'PagoRechazado', 'PagoReembolsado', 'booking.cancelled']);
@@ -37,6 +39,11 @@ type ConectarFn = (url: string) => Promise<Conexion>;
  *   exchange `booking.events` (direct) → `q.ordenes.confirmadas` | `q.sagas.compensacion` | `q.general`
  *   a message whose consumers fail is re-published up to 3 times, then dead-lettered to `q.dead_letter`.
  *
+ * With `RABBITMQ_SERVICE_QUEUE` (a satellite container: `q.svc.auditoria`, `q.svc.notificaciones`, `q.svc.webhooks`) the process
+ * does not consume those queues: it declares its OWN durable queue bound to the exchange under every routing key, so each
+ * service receives a copy of every event and the replicas of one service compete for them. Same dead-letter exchange, same
+ * retries (a retry goes back to the service's own queue, never to the others).
+ *
  * Delivery is at least once and consumers are idempotent. If the broker is down, `publish` falls back to in-process
  * delivery, so an outage never loses an event nor fails a request.
  */
@@ -44,6 +51,8 @@ type ConectarFn = (url: string) => Promise<Conexion>;
 export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMqTransport.name);
   private readonly url: string | undefined;
+  /** Set in a satellite container: the only queue this process consumes. */
+  private readonly colaServicio: string | undefined;
   private conexion: Conexion | null = null;
   private canal: Canal | null = null;
   private cerrando = false;
@@ -56,6 +65,7 @@ export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModule
     @Optional() @Inject(AMQP_CONNECT) private readonly conectar: ConectarFn = amqp.connect as unknown as ConectarFn,
   ) {
     this.url = config.get<string>('RABBITMQ_URL') || undefined;
+    this.colaServicio = config.get<string>('RABBITMQ_SERVICE_QUEUE')?.trim() || undefined;
   }
 
   get activo(): boolean {
@@ -78,11 +88,13 @@ export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModule
     this.conexion = null;
   }
 
-  async publicar(event: DomainEvent, reintentos = 0): Promise<void> {
+  async publicar(event: DomainEvent, reintentos = 0, colaPropia?: string): Promise<void> {
     if (!this.canal) throw new Error('RabbitMQ is not connected');
     const canal = this.canal;
+    // A retry in a service queue goes straight back to it (the default exchange routes by queue name); anything else through the exchange.
+    const [exchange, clave] = colaPropia ? ['', colaPropia] : [EXCHANGE, colaDe(event.type)];
     await new Promise<void>((resolve, reject) => {
-      canal.publish(EXCHANGE, colaDe(event.type), Buffer.from(JSON.stringify(event)), { persistent: true, contentType: 'application/json', messageId: event.id, type: event.type, headers: { 'x-retries': reintentos } }, (error) => (error ? reject(error) : resolve()));
+      canal.publish(exchange, clave, Buffer.from(JSON.stringify(event)), { persistent: true, contentType: 'application/json', messageId: event.id, type: event.type, headers: { 'x-retries': reintentos } }, (error) => (error ? reject(error) : resolve()));
     });
     if (reintentos === 0) this.contadores.publicados++;
   }
@@ -98,15 +110,23 @@ export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModule
       await canal.bindQueue(Q_DEAD_LETTER, DEAD_LETTER_EXCHANGE, '');
       await canal.assertExchange(EXCHANGE, 'direct', { durable: true });
       await canal.prefetch(10);
-      for (const cola of [Q_CONFIRMADAS, Q_COMPENSACION, Q_GENERAL]) {
-        await canal.assertQueue(cola, { durable: true, arguments: { 'x-dead-letter-exchange': DEAD_LETTER_EXCHANGE } });
-        await canal.bindQueue(cola, EXCHANGE, cola);
-        await canal.consume(cola, (mensaje) => void this.alRecibir(canal, mensaje));
+      const servicio = this.colaServicio;
+      if (servicio) {
+        // A satellite service: one queue of its own that receives every event (its own copy), instead of the core's queues.
+        await canal.assertQueue(servicio, { durable: true, arguments: { 'x-dead-letter-exchange': DEAD_LETTER_EXCHANGE } });
+        for (const clave of TODAS_LAS_CLAVES) await canal.bindQueue(servicio, EXCHANGE, clave);
+        await canal.consume(servicio, (mensaje) => void this.alRecibir(canal, mensaje, undefined, servicio));
+      } else {
+        for (const cola of [Q_CONFIRMADAS, Q_COMPENSACION, Q_GENERAL]) {
+          await canal.assertQueue(cola, { durable: true, arguments: { 'x-dead-letter-exchange': DEAD_LETTER_EXCHANGE } });
+          await canal.bindQueue(cola, EXCHANGE, cola);
+          await canal.consume(cola, (mensaje) => void this.alRecibir(canal, mensaje));
+        }
+        // Events from Booking arrive as structured CloudEvents under their own routing keys.
+        await canal.assertQueue(Q_ENTRANTES, { durable: true, arguments: { 'x-dead-letter-exchange': DEAD_LETTER_EXCHANGE } });
+        for (const clave of ENTRANTES_ROUTING_KEYS) await canal.bindQueue(Q_ENTRANTES, EXCHANGE, clave);
+        await canal.consume(Q_ENTRANTES, (mensaje) => void this.alRecibir(canal, mensaje, bookingCloudEventToDomainEvent));
       }
-      // Events from Booking arrive as structured CloudEvents under their own routing keys.
-      await canal.assertQueue(Q_ENTRANTES, { durable: true, arguments: { 'x-dead-letter-exchange': DEAD_LETTER_EXCHANGE } });
-      for (const clave of ENTRANTES_ROUTING_KEYS) await canal.bindQueue(Q_ENTRANTES, EXCHANGE, clave);
-      await canal.consume(Q_ENTRANTES, (mensaje) => void this.alRecibir(canal, mensaje, bookingCloudEventToDomainEvent));
       this.conexion = conexion;
       this.canal = canal;
       this.bus.setTransport(this);
@@ -132,8 +152,10 @@ export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModule
     this.reconectar.unref();
   }
 
-  private async alRecibir(canal: Canal, mensaje: amqp.ConsumeMessage | null, convertir?: (crudo: unknown) => DomainEvent): Promise<void> {
+  private async alRecibir(canal: Canal, mensaje: amqp.ConsumeMessage | null, convertir?: (crudo: unknown) => DomainEvent, colaPropia?: string): Promise<void> {
     if (!mensaje) return;
+    // One service queue gets Booking's CloudEvents and ours: the routing key says which converter applies.
+    if (colaPropia && !convertir && ENTRANTES_ROUTING_KEYS.includes(mensaje.fields?.routingKey)) convertir = bookingCloudEventToDomainEvent;
     let evento: DomainEvent;
     try {
       const crudo = JSON.parse(mensaje.content.toString('utf8')) as unknown;
@@ -153,7 +175,7 @@ export class RabbitMqTransport implements EventTransport, OnModuleInit, OnModule
     const intentos = Number(mensaje.properties.headers?.['x-retries'] ?? 0);
     if (intentos < MAX_REINTENTOS) {
       try {
-        await this.publicar(evento, intentos + 1);
+        await this.publicar(evento, intentos + 1, colaPropia);
         this.contadores.reintentados++;
         canal.ack(mensaje);
         return;

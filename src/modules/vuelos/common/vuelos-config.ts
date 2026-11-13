@@ -1,5 +1,6 @@
 import { hkdfSync } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
+import { parseServiceRole } from './service-role';
 
 export const VUELOS_CONFIG = Symbol('VUELOS_CONFIG');
 
@@ -211,6 +212,13 @@ export function loadVuelosConfig(config: ConfigService): VuelosConfig {
   };
 
   const outboxFeedDelayMs = parseNumber(config, 'OUTBOX_FEED_DELAY_MS', '2000', errors, (v) => Number.isInteger(v) && v >= 0 && v <= 60_000, 'an integer in 0..60000');
+
+  // Which part of the platform this process runs (common/service-role.ts); unset = the monolith.
+  try {
+    parseServiceRole(config.get<string>('SERVICE_ROLE', ''));
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
 
   if (errors.length > 0) {
     throw new Error(`Invalid Vuelos configuration:\n - ${errors.join('\n - ')}`);

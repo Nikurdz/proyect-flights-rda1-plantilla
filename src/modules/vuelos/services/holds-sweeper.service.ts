@@ -8,6 +8,7 @@ import { activityGate } from '../common/activity-gate';
 import { runtimeMetrics } from '../common/runtime-metrics';
 import { IdempotencyService } from './idempotency.service';
 import { OffersService } from './offers.service';
+import { runsCore } from '../common/service-role';
 
 // Expiry is also enforced lazily per request, so a slow sweep only delays seats returning to search results.
 // Override with HOLDS_SWEEP_INTERVAL_MS.
@@ -33,6 +34,7 @@ export class HoldsSweeper implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     // Skipped while nobody uses the system, so a serverless database can sleep (common/activity-gate.ts).
     this.timer = setInterval(() => activityGate.isActive() && void this.sweep(), SWEEP_INTERVAL_MS);
     // Never keep the process (or a test run) alive just for housekeeping.

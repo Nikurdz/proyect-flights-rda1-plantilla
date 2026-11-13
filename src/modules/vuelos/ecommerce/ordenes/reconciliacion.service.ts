@@ -8,6 +8,7 @@ import { Notificacion } from '../notificaciones/entities/notificacion.entity';
 import { PagosService } from '../pagos/pagos.service';
 import { ComprasService } from './compras.service';
 import { Orden } from './entities/orden.entity';
+import { runsCore } from '../../common/service-role';
 
 // Every tick queries the database, which keeps a serverless Postgres (Neon) awake; override with RECONCILIATION_INTERVAL_MS.
 const INTERVAL_MS = Math.max(30_000, Number(process.env.RECONCILIATION_INTERVAL_MS) || 5 * 60_000);
@@ -35,6 +36,7 @@ export class ReconciliacionService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     // Skipped while nobody uses the system, so a serverless database can sleep (common/activity-gate.ts).
     this.timer = setInterval(() => activityGate.isActive() && void this.reconciliar(), INTERVAL_MS);
     this.timer.unref();

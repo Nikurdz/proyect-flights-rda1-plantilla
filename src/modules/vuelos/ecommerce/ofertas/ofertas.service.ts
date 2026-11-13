@@ -49,6 +49,7 @@ import { OfertaPasajero, OfertaPasajeroAsiento, OfertaPasajeroNecesidad } from '
 import { OfertaTrayecto } from './entities/oferta-trayecto.entity';
 import { OfertaTrayectoPrecio } from './entities/oferta-trayecto-precio.entity';
 import { cargarOferta, completarOferta } from './oferta-loader';
+import { runsCore } from '../../common/service-role';
 
 const ROUTE_ARMAR = 'POST /ofertas';
 // A purchase marked EN_PAGO longer than this is considered abandoned (crash) and may be taken over.
@@ -92,6 +93,7 @@ export class OfertasService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     // The flight core expires holds (lazily and from its sweeper); the offers they back follow.
     this.events.subscribe('hold.expired', async (event) => {
       const { holdId } = event.payload as { holdId: string };

@@ -50,6 +50,8 @@ const ISOLATED_ENV = [
   'PARTNER_CLIENT_ID',
   'PARTNER_CLIENT_SECRET',
   'OUTBOX_FEED_DELAY_MS',
+  'SERVICE_ROLE',
+  'RABBITMQ_SERVICE_QUEUE',
 ];
 
 export async function createIntegrationApp(env: Record<string, string> = {}): Promise<IntegrationApp> {

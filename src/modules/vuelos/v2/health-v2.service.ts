@@ -6,6 +6,7 @@ import { todayUtc, utcDayRange } from '../common/date.util';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { FlightHold } from '../entities/flight-hold.entity';
 import { Vuelo } from '../entities/vuelo.entity';
+import { runsCore } from '../common/service-role';
 
 export interface VuelosHealth {
   status: 'HEALTHY' | 'DEGRADED' | 'DOWN';
@@ -52,6 +53,7 @@ export class HealthV2Service implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     this.timer = setInterval(() => {
       // Like the other periodic jobs: with nobody around the database is left alone (the idle gate).
       if (activityGate.isActive()) void this.refresh();

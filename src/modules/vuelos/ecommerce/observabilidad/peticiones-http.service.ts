@@ -5,6 +5,7 @@ import { activityGate } from '../../common/activity-gate';
 import { HttpRequestRecord, setHttpRequestSink } from '../../common/correlation';
 import { runtimeMetrics } from '../../common/runtime-metrics';
 import { PeticionHttp } from './entities/auditoria.entity';
+import { runsCore } from '../../common/service-role';
 
 const FLUSH_MS = Math.max(1_000, Number(process.env.HTTP_LOG_FLUSH_MS) || 10_000);
 const PURGE_MS = 6 * 60 * 60_000;
@@ -29,6 +30,7 @@ export class PeticionesHttpService implements OnModuleInit, OnModuleDestroy {
   constructor(@InjectRepository(PeticionHttp) private readonly peticiones: Repository<PeticionHttp>) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     setHttpRequestSink((record) => this.encolar(record));
     this.flushTimer = setInterval(() => void this.vaciar(), FLUSH_MS);
     this.purgeTimer = setInterval(() => activityGate.isActive() && void this.purgar(), PURGE_MS);

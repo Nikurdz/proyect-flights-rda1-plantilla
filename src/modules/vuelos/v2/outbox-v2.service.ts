@@ -7,6 +7,7 @@ import { ProblemDetailsException } from '../common/problem-details.exception';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { OutboxEvent } from '../entities/outbox-event.entity';
 import { EventsQueryDto } from './dto-v2';
+import { runsDomain } from '../common/service-role';
 
 /** A cursor that is neither `evt-vue-<n>` nor a known event id: refused, never silently restarted from the beginning. */
 const unknownCursor = (after: string): ProblemDetailsException =>
@@ -26,6 +27,7 @@ export class OutboxV2Service implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    if (!runsDomain('webhooks')) return;
     this.events.subscribeAll((event) => this.record(event));
   }
 

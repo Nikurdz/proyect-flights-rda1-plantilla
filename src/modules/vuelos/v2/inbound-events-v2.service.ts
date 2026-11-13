@@ -6,6 +6,7 @@ import { DomainEvent, DomainEventBus } from '../common/domain-event-bus';
 import { Booking } from '../entities/booking.entity';
 import { CancellationService } from '../services/cancellation.service';
 import { TicketsV2Service } from './tickets-v2.service';
+import { runsCore } from '../common/service-role';
 
 /** An event id as the UUID the idempotency guard expects (the same event always maps to the same key). */
 const keyFor = (eventId: string): string => {
@@ -33,6 +34,7 @@ export class InboundEventsV2Service implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     this.events.subscribe('pagos.payment.confirmed', (e) => this.paymentConfirmed(e));
     this.events.subscribe('pagos.payment.failed', (e) => this.paymentFailed(e));
     this.events.subscribe('paquetes.package.cancelled', (e) => this.packageCancelled(e));
