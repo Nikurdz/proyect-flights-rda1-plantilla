@@ -27,14 +27,10 @@ describe('AdminLayout navigation', () => {
   it('groups the pages in Ventas, Operación, Finanzas and Sistema with the unchanged routes', () => {
     renderAt('/admin/dashboard');
     const nav = screen.getByRole('navigation', { name: 'Administración' });
-    const groups = within(nav)
-      .getAllByRole('list')
-      .map((list) => ({
-        name: list.getAttribute('aria-labelledby') ? document.getElementById(list.getAttribute('aria-labelledby') as string)?.textContent : '',
-        links: within(list)
-          .getAllByRole('link')
-          .map((a) => [a.textContent, a.getAttribute('href')]),
-      }));
+    const groups = Array.from(nav.querySelectorAll('ul')).map((list) => ({
+      name: list.getAttribute('aria-label'),
+      links: Array.from(list.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')]),
+    }));
     expect(groups).toEqual([
       { name: 'Ventas', links: [['Resumen', '/admin/dashboard'], ['Órdenes', '/admin/ordenes'], ['Reservas de mostrador', '/admin/reservas']] },
       { name: 'Operación', links: [['Vuelos', '/admin/vuelos'], ['Aeropuertos', '/admin/aeropuertos']] },
@@ -44,6 +40,59 @@ describe('AdminLayout navigation', () => {
         links: [['Usuarios', '/admin/usuarios'], ['Webhooks', '/admin/webhooks'], ['Trazabilidad', '/admin/auditoria'], ['Observabilidad', '/admin/observabilidad']],
       },
     ]);
+  });
+
+  const groupButton = (name: string) => within(screen.getByRole('navigation', { name: 'Administración' })).getByRole('button', { name: new RegExp(name) });
+
+  it('opens the group of the active page on load and folds the others', () => {
+    renderAt('/admin/auditoria');
+    expect(groupButton('Sistema').getAttribute('aria-expanded')).toBe('true');
+    for (const g of ['Ventas', 'Operación', 'Finanzas']) expect(groupButton(g).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('links each button to its list with aria-controls', () => {
+    renderAt('/admin/auditoria');
+    const btn = groupButton('Finanzas');
+    const list = document.getElementById(btn.getAttribute('aria-controls') as string);
+    expect(list?.tagName).toBe('UL');
+    expect(list?.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('keeps links of folded groups out of the accessibility tree', () => {
+    renderAt('/admin/auditoria');
+    const nav = screen.getByRole('navigation', { name: 'Administración' });
+    expect(within(nav).queryByRole('link', { name: 'Facturas' })).toBeNull();
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Usuarios', 'Webhooks', 'Trazabilidad', 'Observabilidad']);
+  });
+
+  it('toggles a group with a click and updates aria-expanded', () => {
+    renderAt('/admin/auditoria');
+    const btn = groupButton('Finanzas');
+    fireEvent.click(btn);
+    expect(btn.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('link', { name: 'Facturas' })).toBeTruthy();
+    fireEvent.click(btn);
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('link', { name: 'Facturas' })).toBeNull();
+  });
+
+  it('keyboard: group titles are native buttons and no focusable element lives in a folded group', () => {
+    renderAt('/admin/auditoria');
+    const nav = screen.getByRole('navigation', { name: 'Administración' });
+    const tabbable = Array.from(nav.querySelectorAll<HTMLElement>('button, a[href]')).filter((el) => !el.closest('[hidden]'));
+    expect(tabbable.map((el) => el.textContent?.replace('(sección actual)', ''))).toEqual([
+      'Ventas',
+      'Operación',
+      'Finanzas',
+      'Sistema',
+      'Usuarios',
+      'Webhooks',
+      'Trazabilidad',
+      'Observabilidad',
+    ]);
+    expect(Array.from(nav.querySelectorAll('button')).every((b) => b.tagName === 'BUTTON' && b.getAttribute('type') === 'button')).toBe(true);
+    groupButton('Ventas').focus();
+    expect(document.activeElement).toBe(groupButton('Ventas'));
   });
 
   it('marks only the current page with aria-current="page"', () => {
