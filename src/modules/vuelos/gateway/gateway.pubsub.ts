@@ -1,6 +1,7 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { PubSub } from 'graphql-subscriptions';
 import { DomainEvent, DomainEventBus } from '../common/domain-event-bus';
+import { runsCore } from '../common/service-role';
 
 export const PUBSUB = Symbol('GATEWAY_PUBSUB');
 export const TOPIC_ESTADO = 'estadoReservaCambiado';
@@ -18,6 +19,7 @@ export class GatewayEventBridge implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     this.events.subscribeAll((event) => this.publicar(event));
   }
 

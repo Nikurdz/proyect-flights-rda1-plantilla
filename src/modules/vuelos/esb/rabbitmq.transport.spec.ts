@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
+import { BOOKING_CLOUD_EVENT_PREFIX } from '../common/cloud-events';
 import { DomainEventBus } from '../common/domain-event-bus';
-import { EXCHANGE, MAX_REINTENTOS, Q_COMPENSACION, Q_CONFIRMADAS, Q_GENERAL, RabbitMqTransport, colaDe } from './rabbitmq.transport';
+import { EXCHANGE, MAX_REINTENTOS, Q_COMPENSACION, Q_CONFIRMADAS, Q_GENERAL, RabbitMqTransport, TODAS_LAS_CLAVES, colaDe } from './rabbitmq.transport';
 
 interface Publicado {
   exchange: string;
@@ -138,5 +139,70 @@ describe('RabbitMqTransport', () => {
     expect(transporte.activo).toBe(false);
     expect(visto).toHaveBeenCalledTimes(1);
     await transporte.onModuleDestroy(); // cancels the reconnection timer
+  });
+});
+
+describe('RabbitMqTransport with RABBITMQ_SERVICE_QUEUE (one queue per service)', () => {
+  const configServicio = (cola?: string) => ({ get: (k: string) => (k === 'RABBITMQ_URL' ? 'amqp://fake' : k === 'RABBITMQ_SERVICE_QUEUE' ? cola : undefined) }) as unknown as ConfigService;
+  const crear = async (cola?: string) => {
+    const broker = brokerFalso();
+    const bus = new DomainEventBus();
+    const transporte = new RabbitMqTransport(bus, configServicio(cola), broker.conectar);
+    await transporte.onModuleInit();
+    return { bus, transporte, broker };
+  };
+  const colasDeclaradas = (canal: ReturnType<typeof brokerFalso>['canal']) => canal.assertQueue.mock.calls.map(([nombre]) => nombre as string);
+
+  it('without the variable the topology is the current one: the three category queues plus the incoming one', async () => {
+    const { transporte, broker } = await crear(undefined);
+    expect(colasDeclaradas(broker.canal)).toEqual(['q.dead_letter', Q_CONFIRMADAS, Q_COMPENSACION, Q_GENERAL, 'q.vuelos.entrantes']);
+    expect([...broker.consumidores.keys()]).toEqual([Q_CONFIRMADAS, Q_COMPENSACION, Q_GENERAL, 'q.vuelos.entrantes']);
+    await transporte.onModuleDestroy();
+  });
+
+  it('with the variable the process declares and consumes only its own queue, bound to every routing key', async () => {
+    const { transporte, broker } = await crear('q.svc.auditoria');
+    expect(colasDeclaradas(broker.canal)).toEqual(['q.dead_letter', 'q.svc.auditoria']);
+    expect(broker.canal.assertQueue).toHaveBeenCalledWith('q.svc.auditoria', { durable: true, arguments: { 'x-dead-letter-exchange': 'booking.dlx' } });
+    const enlaces = broker.canal.bindQueue.mock.calls.filter(([cola]) => cola === 'q.svc.auditoria').map(([, exchange, clave]) => [exchange, clave]);
+    expect(enlaces).toEqual(TODAS_LAS_CLAVES.map((clave) => [EXCHANGE, clave]));
+    expect(TODAS_LAS_CLAVES).toEqual(expect.arrayContaining([Q_CONFIRMADAS, Q_COMPENSACION, Q_GENERAL, 'pagos.payment.confirmed', 'pagos.payment.failed', 'paquetes.package.cancelled']));
+    expect([...broker.consumidores.keys()]).toEqual(['q.svc.auditoria']);
+    await transporte.onModuleDestroy();
+  });
+
+  it('retries go back to the service queue (not to the other services) and end in the dead letters', async () => {
+    const { bus, transporte, broker } = await crear('q.svc.webhooks');
+    bus.subscribe('PagoAnulado', () => {
+      throw new Error('boom');
+    });
+    const evento = { id: '00000000-0000-4000-8000-000000000001', type: 'PagoAnulado', schemaVersion: 1, occurredAt: new Date().toISOString(), market: null, correlationId: 'c', aggregateId: 'p1', payload: { pagoId: 'p1' } };
+    let mensaje: unknown = { content: Buffer.from(JSON.stringify(evento)), properties: { headers: { 'x-retries': 0 } }, fields: { routingKey: Q_COMPENSACION } };
+    for (let intento = 0; intento <= MAX_REINTENTOS; intento++) {
+      broker.consumidores.get('q.svc.webhooks')!(mensaje);
+      await new Promise((r) => setImmediate(r));
+      const ultimo = broker.publicados[broker.publicados.length - 1];
+      if (ultimo) mensaje = { ...broker.entrega(ultimo), fields: { routingKey: 'q.svc.webhooks' } };
+    }
+    expect(broker.publicados.map((p) => [p.exchange, p.key, p.retries])).toEqual([
+      ['', 'q.svc.webhooks', 1],
+      ['', 'q.svc.webhooks', 2],
+      ['', 'q.svc.webhooks', 3],
+    ]);
+    expect(broker.nacks).toHaveLength(1);
+    expect(transporte.contadores).toMatchObject({ reintentados: 3, muertos: 1 });
+    await transporte.onModuleDestroy();
+  });
+
+  it('converts the CloudEvents of Booking that arrive under their own routing key', async () => {
+    const { bus, transporte, broker } = await crear('q.svc.auditoria');
+    const visto = jest.fn();
+    bus.subscribeAll(visto);
+    const cloud = { specversion: '1.0', id: '00000000-0000-4000-8000-000000000002', type: `${BOOKING_CLOUD_EVENT_PREFIX}pagos.payment.confirmed`, source: '/booking', time: new Date().toISOString(), subject: 'b1', data: { paymentReference: 'p1', bookingId: 'b1' } };
+    broker.consumidores.get('q.svc.auditoria')!({ content: Buffer.from(JSON.stringify(cloud)), properties: { headers: {} }, fields: { routingKey: 'pagos.payment.confirmed' } });
+    await new Promise((r) => setImmediate(r));
+    expect(visto).toHaveBeenCalledTimes(1);
+    expect(visto.mock.calls[0][0]).toMatchObject({ type: 'pagos.payment.confirmed' });
+    await transporte.onModuleDestroy();
   });
 });

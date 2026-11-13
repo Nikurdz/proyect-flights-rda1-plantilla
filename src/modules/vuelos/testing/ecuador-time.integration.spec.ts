@@ -12,7 +12,8 @@ jest.setTimeout(240_000);
 const DAY_MS = 86_400_000;
 const dayAhead = (days: number): string => new Date(Date.now() + days * DAY_MS).toISOString().slice(0, 10);
 const dayAfter = (date: string): string => new Date(new Date(`${date}T00:00:00Z`).getTime() + DAY_MS).toISOString().slice(0, 10);
-const departures = (offers: unknown): string[] => [...JSON.stringify(offers).matchAll(/"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)"/g)].map((m) => m[1]);
+/** Every instant of an answer as UTC ISO (v1 writes `…Z`, v2 writes the real offset: the instant is what is compared). */
+const departures = (offers: unknown): string[] => [...JSON.stringify(offers).matchAll(/"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))"/g)].map((m) => new Date(m[1]).toISOString());
 
 /** The next instant, strictly after now, at which the UTC clock reads `hh:mm`. */
 const nextUtc = (hh: number, mm: number): Date => {

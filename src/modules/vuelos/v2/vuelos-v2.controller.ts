@@ -118,7 +118,8 @@ export class VuelosV2Controller {
   @Get('offers/:offerId/seatmap')
   @ApiOperation({ operationId: 'getSeatMap', summary: 'Mapa de asientos por segmento, con el estado de cada asiento' })
   async getSeatMap(@Param('offerId', ParseUUIDPipe) offerId: string, @Query() query: SeatmapQueryDto) {
-    return this.view.seatmap(await this.offersService.getSeatmap(offerId, query.segmentId));
+    const data = await this.offersService.loadSeatmapData(offerId, query.segmentId);
+    return this.view.seatmap(this.offersService.buildSeatmap(data), data);
   }
 
   @Get('flights/:flightNumber/status')

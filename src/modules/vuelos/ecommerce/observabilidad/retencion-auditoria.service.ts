@@ -7,6 +7,7 @@ import { OutboxEvent } from '../../entities/outbox-event.entity';
 import { WebhookDelivery } from '../../entities/webhook-delivery.entity';
 import { AuditoriaCambio } from '../mercados/entities/auditoria-cambio.entity';
 import { AuditoriaSaga, AuditoriaTransaccion } from './entities/auditoria.entity';
+import { runsDomain } from '../../common/service-role';
 
 const PURGE_MS = 6 * 60 * 60_000;
 /** How long the durable trail is kept (the HTTP sample has its own, shorter, retention). Aiven free has little disk. */
@@ -25,6 +26,7 @@ export class RetencionAuditoriaService implements OnModuleInit, OnModuleDestroy 
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
   onModuleInit(): void {
+    if (!runsDomain('auditoria')) return;
     this.timer = setInterval(() => activityGate.isActive() && void this.purgar(), PURGE_MS);
     this.timer.unref();
   }

@@ -12,6 +12,9 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
+    "start:auditoria": "node dist/servicios/auditoria/main",
+    "start:notificaciones": "node dist/servicios/notificaciones/main",
+    "start:webhooks": "node dist/servicios/webhooks/main",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "contract:export": "node scripts/export-openapi.js",
@@ -30,7 +33,12 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "docs:modelo": "ts-node scripts/export-modelo-datos.ts",
-    "contract:events:check": "ts-node scripts/check-schema-compat.ts"
+    "contract:events:check": "ts-node scripts/check-schema-compat.ts",
+    "micro:build": "docker compose --env-file docker/.env.microservicios -f docker-compose.microservicios.yml build",
+    "micro:up": "docker compose --env-file docker/.env.microservicios -f docker-compose.microservicios.yml up -d",
+    "micro:down": "docker compose --env-file docker/.env.microservicios -f docker-compose.microservicios.yml down",
+    "micro:logs": "docker compose --env-file docker/.env.microservicios -f docker-compose.microservicios.yml logs -f --tail=100",
+    "micro:smoke": "node scripts/micro-smoke.js"
   },
   "jest": {
     "moduleFileExtensions": [

@@ -8,6 +8,7 @@ import { MercadosService } from '../mercados/mercados.service';
 import { Notificacion, TipoNotificacion } from './entities/notificacion.entity';
 import { PlantillaNotificacion } from './entities/plantilla.entity';
 import { CANAL_MENSAJERIA, CanalMensajeria } from './ports/mensajeria.port';
+import { runsDomain } from '../../common/service-role';
 
 const MAX_ATTEMPTS = 3;
 const FALLBACK_LANGUAGE = 'es';
@@ -43,6 +44,7 @@ export class NotificacionesService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    if (!runsDomain('notificaciones')) return;
     this.events.subscribe('OrdenEmitida', (e) => this.alEmitirse(e));
     this.events.subscribe('OrdenFallidaCompensada', (e) => this.alFallarEmision(e));
     this.events.subscribe('ClienteRegistrado', (e) => this.alRegistrarse(e));

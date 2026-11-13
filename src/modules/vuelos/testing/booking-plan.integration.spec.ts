@@ -136,7 +136,8 @@ describeIntegration('Booking test plan A-01..A-16 against a real Postgres', () =
     expect(offer.itineraries).toHaveLength(2);
     offer.itineraries.forEach((i) => expect(i.itineraryId).toBeDefined());
     const text = JSON.stringify(offer);
-    expect(text).toMatch(/"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z"/); // times with their zone (UTC)
+    expect(text).toMatch(/"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?-05:00"/); // times with their zone (real offset of the airport)
+    expect(text).not.toMatch(/T\d{2}:\d{2}:\d{2}(\.\d+)?Z"/);
     ['pricingOptions', 'baseFare', 'taxes', 'total'].forEach((field) => expect(text).toContain(`"${field}"`));
   });
 

@@ -5,7 +5,7 @@ import type { AuthClaims } from '../auth/token.service';
 import { assertGroupSize, assertInfantRatio } from '../common/business-rules';
 import { DomainEventBus } from '../common/domain-event-bus';
 import { toIso } from '../common/date.util';
-import { claimHoldSeats, heldSeatNumbers, releaseHoldSeats } from '../common/held-seats';
+import { claimHoldSeats, heldSeatNumbers, lockSeats, ownActiveHoldIdsWithSeats, releaseHoldSeats } from '../common/held-seats';
 import { moneyAmount, toMinorUnits } from '../common/money.util';
 import { PassengerBreakdown, priceForPartyParts, seatsRequired } from '../common/pricing.util';
 import { ProblemDetailsException } from '../common/problem-details.exception';
@@ -26,6 +26,15 @@ import { breakdownColumns } from './search.service';
 
 const HOLD_ROUTE = 'POST /offers/hold';
 
+/** What a seat map is made of, as read from the database (the v2 map adds the status of every taken seat from it). */
+export interface SeatmapData {
+  segmentId: string;
+  vuelo: Vuelo;
+  assignments: SeatAssignment[];
+  /** Seats an active hold has set aside. */
+  held: Set<string>;
+}
+
 @Injectable()
 export class OffersService {
   private readonly logger = new Logger(OffersService.name);
@@ -43,6 +52,29 @@ export class OffersService {
   ) {}
 
   async getSeatmap(offerId: string, requestedSegmentId?: string) {
+    return this.buildSeatmap(await this.loadSeatmapData(offerId, requestedSegmentId));
+  }
+
+  /** The v1 seat map of already loaded data: not available = sold seats and the seats an active hold has set aside. */
+  buildSeatmap({ segmentId, vuelo, assignments, held }: SeatmapData) {
+    const taken = new Set([...assignments.map((s) => s.seatNumber), ...held]);
+    const rows = buildSeatGrid(vuelo.capacidadTotal).map((row) => ({
+      rowNumber: row.rowNumber,
+      seats: row.seats.map((seat) => ({
+        seatNumber: seat.seatNumber,
+        isAvailable: !taken.has(seat.seatNumber),
+        characteristics: seat.characteristics,
+      })),
+    }));
+
+    return { segmentId, cabins: [{ cabinClass: 'ECONOMY', rows }] };
+  }
+
+  /**
+   * Everything a seat map needs, each read once: the offer, then the flight, its sold seats and its held seats at the
+   * same time (the three are independent, and a round trip to the database is the main cost).
+   */
+  async loadSeatmapData(offerId: string, requestedSegmentId?: string): Promise<SeatmapData> {
     const offer = await this.requireLiveOffer(this.offers.manager, offerId);
     const segmentId = requestedSegmentId ?? offer.itineraries[0].vueloId;
 
@@ -57,7 +89,12 @@ export class OffersService {
       );
     }
 
-    const vuelo = await this.vuelos.findOne({ where: { id: segmentId } });
+    // `find` rather than `findOne`: the flight has an eager relation, and with a join `findOne` costs two queries.
+    const [[vuelo], assignments, held] = await Promise.all([
+      this.vuelos.find({ where: { id: segmentId } }),
+      this.seatAssignments.find({ where: { vueloId: segmentId } }),
+      heldSeatNumbers(this.seatAssignments.manager, segmentId),
+    ]);
     if (!vuelo) {
       throw new ProblemDetailsException(
         HttpStatus.GONE,
@@ -66,42 +103,34 @@ export class OffersService {
         `The flight behind segment ${segmentId} no longer exists.`,
       );
     }
-
-    // Not available: sold seats and the seats an active hold has set aside (v2 tells them apart with `status`).
-    const taken = new Set([
-      ...(await this.seatAssignments.find({ where: { vueloId: vuelo.id } })).map((s) => s.seatNumber),
-      ...(await heldSeatNumbers(this.seatAssignments.manager, vuelo.id)),
-    ]);
-    const rows = buildSeatGrid(vuelo.capacidadTotal).map((row) => ({
-      rowNumber: row.rowNumber,
-      seats: row.seats.map((seat) => ({
-        seatNumber: seat.seatNumber,
-        isAvailable: !taken.has(seat.seatNumber),
-        characteristics: seat.characteristics,
-      })),
-    }));
-
-    return { segmentId, cabins: [{ cabinClass: 'ECONOMY', rows }] };
+    return { segmentId, vuelo, assignments, held };
   }
 
   async createHold(auth: AuthClaims, idempotencyKey: string, request: HoldRequestDto): Promise<HoldResponseDto> {
     const scope = { key: idempotencyKey, route: HOLD_ROUTE, ownerId: auth.ownerId, body: request };
 
+    // Holds of the same purchase this request released; rebuilt on every attempt (a rolled-back one releases nothing).
+    let released: { holdId: string; ownerId: string }[] = [];
+    const attempt = () =>
+      this.idempotency.execute(scope, HttpStatus.CREATED, (manager) => {
+        released = [];
+        return this.createHoldWithin(manager, auth.ownerId, request, released);
+      });
+
     let outcome;
     try {
-      outcome = await this.idempotency.execute(scope, HttpStatus.CREATED, (manager) =>
-        this.createHoldWithin(manager, auth.ownerId, request),
-      );
+      outcome = await attempt();
     } catch (error) {
       // Seats may look sold out only because expired holds were not swept yet: release
       // them and try once more before reporting SEAT_TAKEN.
       const soldOut = error instanceof ProblemDetailsException && (error.getResponse() as { code?: string }).code === 'SEAT_TAKEN';
       if (!soldOut || (await this.expireDueHolds()) === 0) throw error;
-      outcome = await this.idempotency.execute(scope, HttpStatus.CREATED, (manager) =>
-        this.createHoldWithin(manager, auth.ownerId, request),
-      );
+      outcome = await attempt();
     }
     if (!outcome.replayed) {
+      for (const previous of released) {
+        await this.events.publish('hold.released', previous.holdId, { holdId: previous.holdId, ownerId: previous.ownerId, status: 'RELEASED' });
+      }
       const hold = outcome.result;
       const party = request.passengersBreakdown;
       await this.events.publish('hold.created', hold.holdId, {
@@ -126,6 +155,7 @@ export class OffersService {
     manager: EntityManager,
     ownerId: string,
     request: HoldRequestDto,
+    released?: { holdId: string; ownerId: string }[],
   ): Promise<HoldResponseDto> {
     const offer = await this.requireLiveOffer(manager, request.offerId);
 
@@ -226,6 +256,19 @@ export class OffersService {
     // Seats the hold sets aside: validated before anything is taken, claimed once the hold row exists.
     const assignedSeats = request.assignedSeats ?? [];
     assertHoldSeats(assignedSeats, vuelos, seats);
+
+    // Re-doing a hold of the same purchase: the owner's active hold of this same offer that has set aside any of
+    // these seats is released first, in this transaction (it comes back whole if anything below fails). Any other
+    // holder of a seat still gets 409 SEAT_TAKEN from claimHoldSeats.
+    if (assignedSeats.length > 0) {
+      await lockSeats(manager, assignedSeats);
+      for (const holdId of await ownActiveHoldIdsWithSeats(manager, assignedSeats, ownerId, offer.offerId)) {
+        const previous = await findHold(manager, holdId, { lock: true });
+        if (previous && previous.status === 'HELD' && previous.expiresAt.getTime() > Date.now() && (await this.transition(manager, previous, 'RELEASED'))) {
+          released?.push({ holdId, ownerId });
+        }
+      }
+    }
 
     await this.inventory.reserve(manager, inventory);
 
@@ -388,7 +431,8 @@ export class OffersService {
   }
 
   private async requireLiveOffer(manager: EntityManager, offerId: string): Promise<FlightOffer> {
-    const offer = await manager.findOne(FlightOffer, { where: { offerId }, relations: { itineraries: true }, order: { itineraries: { orden: 'ASC' } } });
+    // `find` (not `findOne`): with a join `findOne` adds a LIMIT, and TypeORM then runs two queries (ids, then rows); the id is unique anyway.
+    const [offer] = await manager.find(FlightOffer, { where: { offerId }, relations: { itineraries: true }, order: { itineraries: { orden: 'ASC' } } });
     if (!offer) {
       throw new ProblemDetailsException(HttpStatus.NOT_FOUND, 'OFFER_NO_LONGER_AVAILABLE', 'Offer not found', `Offer ${offerId} was not found or has expired.`);
     }

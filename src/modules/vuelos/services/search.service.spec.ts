@@ -25,6 +25,7 @@ const config: VuelosConfig = {
   stockGrpcUrl: '',
   stockPush: { horizonDays: 14, fullResyncMinutes: 60 },
   booking: { webhookUrl: '', webhookSecret: '', stockHttpUrl: '', stockApiKey: '', pagosApiKey: '' },
+  outboxFeedDelayMs: 2000,
 };
 
 const vuelo = (id: string, precioBase: number): Vuelo => ({
@@ -71,7 +72,11 @@ describe('SearchService', () => {
   };
   const vuelosRepo = { createQueryBuilder: jest.fn(() => queryBuilder) };
   const fareFamiliesRepo = { find: jest.fn(async () => families) };
-  const offersRepo = { create: jest.fn((data) => data), save: jest.fn(async (data) => data) };
+  // Offers and itineraries go in one transaction with two multi-row INSERTs.
+  const insertValues = jest.fn();
+  const insertBuilder = { insert: jest.fn().mockReturnThis(), into: jest.fn().mockReturnThis(), values: jest.fn((rows) => (insertValues(rows), insertBuilder)), execute: jest.fn(async () => undefined) };
+  const txManager = { createQueryBuilder: jest.fn(() => insertBuilder) };
+  const offersRepo = { manager: { transaction: jest.fn(async (work: (m: typeof txManager) => Promise<void>) => work(txManager)) } };
   const airportZones = { zoneOf: jest.fn(async (iata?: string) => (iata === 'GPS' ? 'Pacific/Galapagos' : 'America/Guayaquil')) };
 
   const request = (passengers: Record<string, number>, legs = 1) => ({
@@ -111,12 +116,22 @@ describe('SearchService', () => {
     expect(byType).toEqual({ ADULT: '345.00', CHILD: '258.75', INFANT: '34.50' });
     // 2 adults + 1 child + 1 infant
     expect(result.offers[0].grandTotal.total).toBe('983.25');
-    expect(offersRepo.save).toHaveBeenCalledTimes(1);
+    expect(offersRepo.manager.transaction).toHaveBeenCalledTimes(1);
+    expect(insertBuilder.execute).toHaveBeenCalledTimes(2); // offers, then itineraries
+    expect(insertValues.mock.calls[0][0]).toHaveLength(1);
+    expect(insertValues.mock.calls[1][0]).toEqual([expect.objectContaining({ orden: 0, vueloId: '1', offerId: result.offers[0].offerId })]);
   });
 
   it('returns an empty, differentiated result when no flight matches (RF-031)', async () => {
     flights = [];
     expect(await service.search(request({}))).toEqual({ totalOffers: 0, offers: [] });
+    expect(offersRepo.manager.transaction).not.toHaveBeenCalled();
+  });
+
+  it('reads the fare families once per minute', async () => {
+    await service.search(request({}));
+    await service.search(request({}));
+    expect(fareFamiliesRepo.find).toHaveBeenCalledTimes(1);
   });
 
   it('fails with 503 instead of quoting "Infinity" when no fare families exist', async () => {

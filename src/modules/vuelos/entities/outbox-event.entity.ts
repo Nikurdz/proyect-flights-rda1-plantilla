@@ -9,6 +9,7 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 
 @Entity('vuelos_outbox')
 @Index('UQ_vuelos_outbox_evento', ['eventoId'], { unique: true })
 @Index('IDX_vuelos_outbox_tipo', ['type', 'seq'])
+@Index('IDX_vuelos_outbox_created', ['createdAt'])
 export class OutboxEvent {
   @PrimaryGeneratedColumn('increment', { type: 'bigint' })
   seq: string;

@@ -56,3 +56,6 @@ docker-compose.override.yml
 # Azure deploy secrets
 /deploy/azure/.env.azure
 /deploy/azure/.app.generada.json
+
+# Demo de microservicios: variables locales del compose
+/docker/.env.microservicios

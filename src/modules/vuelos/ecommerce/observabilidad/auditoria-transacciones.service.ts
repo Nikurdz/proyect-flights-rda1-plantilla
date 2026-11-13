@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DomainEvent, DomainEventBus } from '../../common/domain-event-bus';
 import { currentActor, currentCorrelationId } from '../../common/correlation';
+import { runsCore, runsDomain } from '../../common/service-role';
 import { enlaceDeEvento } from '../../common/topologia';
 import { AccionTraza, setAccionSink } from '../../common/traza-acciones';
 import { escribirAuditoria } from '../../common/winston-logger';
@@ -26,8 +27,10 @@ export class AuditoriaTransaccionesService implements OnModuleInit, OnModuleDest
   ) {}
 
   onModuleInit(): void {
-    this.events.subscribeAll((event) => this.registrar(event));
-    setAccionSink((accion) => void this.registrarAccion(accion));
+    // The audit domain: every event of the bus. With separate containers the audit service does this and the core does not.
+    if (runsDomain('auditoria')) this.events.subscribeAll((event) => this.registrar(event));
+    // Actions that are not events (sign-ins, OAuth2, stock pushes, webhook deliveries) happen in the core, so the sink lives there.
+    if (runsCore()) setAccionSink((accion) => void this.registrarAccion(accion));
   }
 
   onModuleDestroy(): void {

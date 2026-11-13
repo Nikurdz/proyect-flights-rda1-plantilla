@@ -2,12 +2,15 @@ import { registrarAccion } from '../common/traza-acciones';
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { AirportZones } from '../common/airport-zones';
+import { toZonedBody } from '../common/zoned-time';
 import { runtimeMetrics } from '../common/runtime-metrics';
 import { postJson, resolveSafeTarget, signWebhookBody, signWebhookBodyV2 } from '../common/safe-http';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { WebhookDelivery } from '../entities/webhook-delivery.entity';
 import { activityGate } from '../common/activity-gate';
 import { WebhookSubscription } from '../entities/webhook-subscription.entity';
+import { runsDomain } from '../common/service-role';
 
 // Every 15 s so a partner hears an event soon after it happens (the activity gate skips idle ticks, so an idle database is not woken);
 // override with WEBHOOK_POLL_INTERVAL_MS (never faster than 15 s).
@@ -41,9 +44,11 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @Inject(VUELOS_CONFIG) private readonly config: VuelosConfig,
+    private readonly airportZones: AirportZones,
   ) {}
 
   onModuleInit(): void {
+    if (!runsDomain('webhooks')) return;
     // With nobody using the system the tick is skipped, so a serverless database can sleep (common/activity-gate.ts).
     this.timer = setInterval(() => activityGate.isActive() && void this.process(), POLL_INTERVAL_MS);
     // Never keep the process (or a test run) alive just for housekeeping.
@@ -107,10 +112,11 @@ export class WebhookDispatcherService implements OnModuleInit, OnModuleDestroy {
     try {
       // Resolved again at every attempt: an address that turned private since registration is refused.
       const target = await resolveSafeTarget(subscription.url, this.config.webhooks.allowPrivateHosts);
-      const body = JSON.stringify(delivery.payload);
       const timestamp = String(Math.floor(now.getTime() / 1000));
       // Contract v2 subscribers get a structured CloudEvent signed over the body; v1.5 ones keep `timestamp.body`.
       const v2 = subscription.apiVersion === 2;
+      // v2 instants go out with their real offset (the stored payload stays in UTC); converted BEFORE signing, the HMAC covers what is sent.
+      const body = JSON.stringify(v2 ? await toZonedBody(delivery.payload, this.airportZones) : delivery.payload);
       const response = await postJson(
         target,
         body,

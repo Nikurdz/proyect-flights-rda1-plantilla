@@ -12,6 +12,7 @@ import { runtimeMetrics } from '../common/runtime-metrics';
 import { requestJson, resolveSafeTarget, SafeTarget } from '../common/safe-http';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { Vuelo } from '../entities/vuelo.entity';
+import { runsCore } from '../common/service-role';
 
 /** Events after which the free seats of a flight may have changed: every hold, release, sale, cancellation and change. */
 const STOCK_EVENTS = [
@@ -97,6 +98,7 @@ export class StockPushService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     if (this.config.booking.stockHttpUrl) {
       this.transport = 'http';
       if (this.config.stockGrpcUrl) this.logger.warn('BOOKING_STOCK_URL and GRPC_STOCK_URL are both set: the stock goes by HTTP');

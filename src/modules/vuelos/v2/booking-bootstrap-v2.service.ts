@@ -6,6 +6,7 @@ import { runtimeMetrics } from '../common/runtime-metrics';
 import { VUELOS_CONFIG, VuelosConfig } from '../common/vuelos-config';
 import { WebhookSubscription, WebhookSubscriptionEvent } from '../entities/webhook-subscription.entity';
 import { WebhooksService } from '../services/webhooks.service';
+import { runsCore } from '../common/service-role';
 
 /**
  * Registers Booking Prototipo as a webhook subscriber from the environment (BOOKING_WEBHOOK_URL + BOOKING_WEBHOOK_SECRET):
@@ -24,6 +25,7 @@ export class BookingBootstrapV2Service implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
+    if (!runsCore()) return;
     const { webhookUrl, webhookSecret } = this.config.booking;
     if (!webhookUrl) {
       runtimeMetrics.setIntegration('booking-webhook', { estado: 'SIN_CONFIGURAR', detalle: 'BOOKING_WEBHOOK_URL no está definida: Booking no recibe nuestros webhooks.' });

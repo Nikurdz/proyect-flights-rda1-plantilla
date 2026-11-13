@@ -26,6 +26,7 @@ import { Pago } from '../pagos/entities/pago.entity';
 import { HistorialOrdenesQueryDto, OrdenViewDto, OrdenesPaginaViewDto, RecuperarOrdenQueryDto, VerificacionBilleteViewDto } from './dto/ordenes.dto';
 import { EstadoOrden, Orden, TRANSICIONES } from './entities/orden.entity';
 import { OrdenHistorial } from './entities/orden-historial.entity';
+import { runsCore } from '../../common/service-role';
 
 const ORDER_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -89,6 +90,7 @@ export class OrdenesService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     // After-sale operations happen in the flight core, which only announces them; the order follows. Every handler is
     // idempotent and safe to receive in any order (a refund can be announced before the cancellation is handled).
     this.events.subscribe('booking.cancelled', (event) => this.alCancelarReserva(event));

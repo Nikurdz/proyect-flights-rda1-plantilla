@@ -8,6 +8,7 @@ import { Mercado } from '../mercados/entities/mercado.entity';
 import { Pago } from './entities/pago.entity';
 import { PagoAntifraudeMotivo } from './entities/pago-antifraude-motivo.entity';
 import { ANTIFRAUDE, Antifraude, PASARELA_PAGO, PasarelaPago } from './ports/pagos.ports';
+import { runsCore } from '../../common/service-role';
 
 export interface SolicitudPago {
   /** What is being paid: an offer (a flight) or a reservation of a partner product. Exactly one. */
@@ -42,6 +43,7 @@ export class PagosService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    if (!runsCore()) return;
     // A cancelled booking is paid back through the gateway. The flight core only announces the cancellation (it
     // knows a payment reference, not a gateway); this consumer finds the payment behind that reference.
     this.events.subscribe('booking.cancelled', (event) => this.reembolsarPorCancelacion(event));
