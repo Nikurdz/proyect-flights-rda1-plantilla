@@ -141,8 +141,10 @@ describeIntegration('Admin counter: reservations of every channel against a real
 
   it('marks a flight delayed with a gate from the back office: still on sale, visible in its status and announced', async () => {
     const booking = await partnerBooking('user-3', 22, `ORD-BKP-${randomUUID().slice(0, 8)}`);
-    const vueloId = (await api().get(`/api/v1/admin/reservas/${booking.bookingId}`).set(bearer(adminToken)).expect(200)).body.vuelos[0].vueloId as string;
-    const departure = (await api().get(`/api/v1/admin/reservas/${booking.bookingId}`).set(bearer(adminToken))).body.vuelos[0].salida as string;
+    const detail = await api().get(`/api/v1/admin/reservas/${booking.bookingId}`).set(bearer(adminToken)).expect(200);
+    const vueloId = detail.body.vuelos[0].vueloId as string;
+    const departure = detail.body.vuelos[0].salida as string;
+    const flightCode = detail.body.vuelos[0].codigoVuelo as string; // the booked flight, not a fixed one: UIO-GYE is flown by several airlines
 
     const bad = await api().patch(`/api/v1/admin/vuelos/${vueloId}/estado`).set(bearer(adminToken)).send({ status: 'DELAYED' });
     expect(bad.status).toBe(400); // a delay needs the estimated departure
@@ -150,7 +152,7 @@ describeIntegration('Admin counter: reservations of every channel against a real
     const ok = await api().patch(`/api/v1/admin/vuelos/${vueloId}/estado`).set(bearer(adminToken)).send({ status: 'DELAYED', estimatedDepartureAt: estimated, departureGate: 'B12', reason: 'Retraso por tráfico aéreo' });
     expect(ok.status).toBe(200);
 
-    const status = await api().get(`${V2}/flights/LA2402/status`).query({ date: departure.slice(0, 10) }).set(bearer(partnerToken)).expect(200);
+    const status = await api().get(`${V2}/flights/${flightCode}/status`).query({ date: departure.slice(0, 10) }).set(bearer(partnerToken)).expect(200);
     expect(status.body).toMatchObject({ status: 'DELAYED' });
     expect(JSON.stringify(status.body)).toContain('B12');
     const search = await api().post(`${V2}/search`).set('X-Device-Fingerprint', 'it').send({ itineraries: [{ origin: 'UIO', destination: 'GYE', departureDate: departure.slice(0, 10) }], passengers: { adults: 1 } }).expect(200);
