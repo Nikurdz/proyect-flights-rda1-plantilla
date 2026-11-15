@@ -12,6 +12,8 @@ import {
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { SuggestInput } from '../../components/ui/SuggestInput';
+import { uniqueSuggestions } from '../../lib/suggestions';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { Dialog } from '../../components/ui/Dialog';
@@ -146,6 +148,9 @@ export const AdminAuditPage: React.FC = () => {
   const query = useTrazabilidad(filters, ownerId);
   const items = useMemo(() => query.data?.pages.flatMap((p) => p.items) ?? [], [query.data]);
   const exportCsv = useExportarTrazaCsv();
+  const numeroSuggestions = useMemo(() => uniqueSuggestions(items.map((i) => i.numero)), [items]);
+  const actorSuggestions = useMemo(() => uniqueSuggestions(items.map((i) => i.actorId)), [items]);
+  const tipoSuggestions = useMemo(() => uniqueSuggestions(items.map((i) => i.tipo)), [items]);
 
   const set = <K extends keyof TrazaForm>(key: K, value: TrazaForm[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
@@ -198,10 +203,10 @@ export const AdminAuditPage: React.FC = () => {
 
       <FilterPanel defaultOpen activeCount={Object.values(filters).filter(Boolean).length}>
       <form onSubmit={apply} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Filtros de trazabilidad">
-        <Input label="Orden o PNR" placeholder="Ej. el número de orden o ABC123" value={draft.numero} onChange={(e) => set('numero', e.target.value)} leftIcon={<Search className="h-4 w-4" />} />
+        <SuggestInput label="Orden o PNR" placeholder="Ej. el número de orden o ABC123" suggestions={numeroSuggestions} value={draft.numero} onChange={(e) => set('numero', e.target.value)} leftIcon={<Search className="h-4 w-4" />} />
         <Input label="Id de solicitud" placeholder="Pega el id de una solicitud" helperText="Sale en cada fila y agrupa todo lo que hizo una misma acción." value={draft.correlationId} onChange={(e) => set('correlationId', e.target.value)} />
-        <Input label="Quién lo hizo" placeholder="Id de la persona o del sistema" value={draft.actor} onChange={(e) => set('actor', e.target.value)} />
-        <Input label="Tipo" placeholder="Parte del nombre del evento" helperText="Escribe una palabra del Tipo que ves en la tabla." value={draft.tipo} onChange={(e) => set('tipo', e.target.value)} />
+        <SuggestInput label="Quién lo hizo" placeholder="Id de la persona o del sistema" suggestions={actorSuggestions} value={draft.actor} onChange={(e) => set('actor', e.target.value)} />
+        <SuggestInput label="Tipo" placeholder="Parte del nombre del evento" helperText="Escribe una palabra del Tipo que ves en la tabla." suggestions={tipoSuggestions} value={draft.tipo} onChange={(e) => set('tipo', e.target.value)} />
         <Select label="Fuente" value={draft.fuente} onChange={(e) => set('fuente', e.target.value as TrazaForm['fuente'])}>
           <option value="">Todas</option>
           {Object.entries(FUENTE_LABEL).map(([value, label]) => (

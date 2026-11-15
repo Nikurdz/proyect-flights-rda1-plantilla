@@ -118,8 +118,8 @@ export const newFlightSchema = z
       .transform((v) => v.toUpperCase())
       .refine((v) => FLIGHT_CODE.test(v), 'Usa 2 letras o dígitos y de 1 a 4 números, por ejemplo LA900.'),
     aerolinea: airline,
-    origen: z.string().regex(IATA, 'Elige el aeropuerto de origen.'),
-    destino: z.string().regex(IATA, 'Elige el aeropuerto de destino.'),
+    origen: z.string().trim().toUpperCase().regex(IATA, 'Elige el aeropuerto de origen.'),
+    destino: z.string().trim().toUpperCase().regex(IATA, 'Elige el aeropuerto de destino.'),
     salida: z.string().min(1, 'Ingresa la fecha y hora de salida.').refine(futureEcuador, 'La salida debe ser una fecha y hora futuras.'),
     duracionMinutos: minutes,
     precioBaseUsd: price,

@@ -8,6 +8,7 @@ import {
   useEditarVuelo,
   useEliminarVuelo,
   useReprogramarVuelo,
+  useAdminVuelos,
   type AdminVueloView,
 } from '../../api/endpoints/admin';
 import { useLocalidades } from '../../api/endpoints/catalog';
@@ -17,6 +18,11 @@ import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
+import { SuggestInput } from '../../components/ui/SuggestInput';
+import { normalizeText } from '../../lib/suggestions';
+import { TriangleAlert } from 'lucide-react';
+import { formatDuration, suggestDuration, suggestPrice } from '../../lib/flight-estimates';
+import { useSession } from '../../lib/session';
 import { formatAdminDateTime } from '../../lib/labels';
 import { adminErrorMessage } from './admin-errors';
 import {
@@ -51,19 +57,93 @@ const Actions: React.FC<{ onClose: () => void; busy: boolean; submitLabel: strin
  * Each dialog is mounted only while it is open (the page renders it with a `key`), so its form and
  * mutation state start clean every time without a reset effect.
  */
+/** Aerolíneas del seed: respaldo cuando todavía no hay vuelos de esa aerolínea cargados. Código de 2 caracteres -> nombre. */
+const SEED_CARRIERS: Readonly<Record<string, string>> = {
+  LA: 'LATAM Airlines',
+  AV: 'Avianca',
+  CM: 'Copa Airlines',
+  G3: 'Gol Linhas Aéreas',
+  AR: 'Aerolíneas Argentinas',
+  UX: 'Air Europa',
+};
+
+const IATA_RE = /^[A-Z]{3}$/;
+
+const Warning: React.FC<{ id: string; children: React.ReactNode }> = ({ id, children }) => (
+  <p id={id} role="status" className="mt-1.5 flex items-start gap-1.5 text-sm text-ink">
+    <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+    {children}
+  </p>
+);
+
+/** «Sugerido: … · Usar»: solo rellena al pulsar «Usar», nunca por su cuenta. */
+const SuggestionChip: React.FC<{ text: string; onUse: () => void; label: string }> = ({ text, onUse, label }) => (
+  <div className="mt-1.5 inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-ink/5 py-1 pl-3 pr-1 text-sm text-ink">
+    <span className="min-w-0 truncate">{text}</span>
+    <button
+      type="button"
+      onClick={onUse}
+      aria-label={label}
+      className="shrink-0 rounded-full bg-surface px-2.5 py-0.5 text-sm font-semibold text-ink ring-1 ring-line-strong hover:bg-ink/10"
+    >
+      Usar
+    </button>
+  </div>
+);
+
 export const CreateFlightDialog: React.FC<{ onClose: () => void; onDone: (message: string) => void }> = ({ onClose, onDone }) => {
   const crear = useCrearVuelo();
   const localidades = useLocalidades();
+  const session = useSession();
   const {
     register,
     handleSubmit,
+    setValue,
+    control,
     formState: { errors },
   } = useForm<NewFlightForm>({ resolver: zodResolver(newFlightSchema), defaultValues: { capacidad: '180' } });
 
-  const airports = [
-    { value: '', label: 'Elige un aeropuerto' },
-    ...(localidades.data ?? []).map((l) => ({ value: l.iata, label: `${l.iata} · ${l.ciudad} (${l.nombre})` })),
-  ];
+  const [codigo, aerolinea, origenRaw, destinoRaw, duracion, precio] = useWatch({
+    control,
+    name: ['codigoVuelo', 'aerolinea', 'origen', 'destino', 'duracionMinutos', 'precioBaseUsd'],
+  });
+  const origen = (origenRaw ?? '').trim().toUpperCase();
+  const destino = (destinoRaw ?? '').trim().toUpperCase();
+  const routeReady = IATA_RE.test(origen) && IATA_RE.test(destino) && origen !== destino;
+
+  // Vuelos ya cargados: de ellos salen las aerolíneas conocidas y los datos de la misma ruta.
+  const allFlights = useAdminVuelos({}, session?.ownerId);
+  const routeFlights = useAdminVuelos(routeReady ? { origen, destino } : {}, session?.ownerId);
+
+  const airports = React.useMemo(
+    () => (Array.isArray(localidades.data) ? localidades.data : []).map((l) => ({ value: l.iata, label: `${l.iata} · ${l.ciudad}`, hint: l.nombre })),
+    [localidades.data],
+  );
+
+  // Prefijo del código de vuelo -> nombre de aerolínea (lo cargado manda sobre el seed).
+  const carriersByPrefix = React.useMemo(() => {
+    const map = new Map<string, string>(Object.entries(SEED_CARRIERS));
+    for (const f of allFlights.data?.pages.flatMap((p) => p.items) ?? []) map.set(f.codigoVuelo.slice(0, 2).toUpperCase(), f.aerolinea);
+    return map;
+  }, [allFlights.data]);
+  const airlineSuggestions = React.useMemo(() => [...new Set(carriersByPrefix.values())].map((name) => ({ value: name })), [carriersByPrefix]);
+
+  const typedAirline = normalizeText(aerolinea ?? '');
+  const prefix = (codigo ?? '').trim().toUpperCase().slice(0, 2);
+  const prefixOwner = prefix.length === 2 ? carriersByPrefix.get(prefix) : undefined;
+  const airlineKnown = airlineSuggestions.some((s) => normalizeText(s.value) === typedAirline);
+  let airlineWarning: string | null = null;
+  if (prefixOwner && typedAirline.length >= 2 && normalizeText(prefixOwner) !== typedAirline) {
+    airlineWarning = `El código ${prefix} ya pertenece a ${prefixOwner}; se conservará ese nombre.`;
+  } else if (!prefixOwner && typedAirline.length >= 2 && !airlineKnown) {
+    airlineWarning = 'No existe; se creará una nueva.';
+  }
+
+  const routeList = React.useMemo(() => routeFlights.data?.pages.flatMap((p) => p.items) ?? [], [routeFlights.data]);
+  const durationHint = routeReady ? suggestDuration(origen, destino, routeList) : null;
+  const priceHint = routeReady ? suggestPrice(origen, destino, routeList) : null;
+  const useDuration = () => durationHint && setValue('duracionMinutos', String(durationHint.minutes), { shouldValidate: true, shouldDirty: true });
+  const usePrice = () => priceHint && setValue('precioBaseUsd', priceHint.amount.toFixed(2), { shouldValidate: true, shouldDirty: true });
 
   const onSubmit = (form: NewFlightForm) =>
     crear.mutate(
@@ -92,12 +172,40 @@ export const CreateFlightDialog: React.FC<{ onClose: () => void; onDone: (messag
         {localidades.isError && <ProblemAlert error={localidades.error} onRetry={() => localidades.refetch()} title="No pudimos cargar los aeropuertos" />}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input label="Código de vuelo" placeholder="LA900" maxLength={6} autoComplete="off" error={errors.codigoVuelo?.message} {...register('codigoVuelo')} />
-          <Input label="Aerolínea" placeholder="LATAM Airlines" autoComplete="off" error={errors.aerolinea?.message} {...register('aerolinea')} />
-          <Select label="Origen" options={airports} error={errors.origen?.message} {...register('origen')} />
-          <Select label="Destino" options={airports} error={errors.destino?.message} {...register('destino')} />
+          <div>
+            <SuggestInput
+              label="Aerolínea"
+              placeholder="LATAM Airlines"
+              suggestions={airlineSuggestions}
+              aria-describedby={airlineWarning ? 'aerolinea-aviso' : undefined}
+              error={errors.aerolinea?.message}
+              {...register('aerolinea')}
+            />
+            {airlineWarning && !errors.aerolinea && <Warning id="aerolinea-aviso">{airlineWarning}</Warning>}
+          </div>
+          <SuggestInput label="Origen" placeholder="Código o ciudad, ej. UIO" suggestions={airports} maxLength={40} error={errors.origen?.message} {...register('origen')} />
+          <SuggestInput label="Destino" placeholder="Código o ciudad, ej. GYE" suggestions={airports} maxLength={40} error={errors.destino?.message} {...register('destino')} />
           <Input label="Salida (hora de Ecuador)" type="datetime-local" error={errors.salida?.message} {...register('salida')} />
-          <Input label="Duración (minutos)" type="number" inputMode="numeric" min={20} max={1500} error={errors.duracionMinutos?.message} {...register('duracionMinutos')} />
-          <Input label="Tarifa base (USD)" inputMode="decimal" placeholder="120.00" error={errors.precioBaseUsd?.message} {...register('precioBaseUsd')} />
+          <div>
+            <Input label="Duración (minutos)" type="number" inputMode="numeric" min={20} max={1500} error={errors.duracionMinutos?.message} {...register('duracionMinutos')} />
+            {durationHint && !duracion && (
+              <SuggestionChip
+                text={`Sugerido: ${formatDuration(durationHint.minutes)} (${durationHint.source === 'ruta' ? 'según vuelos de esta ruta' : 'según la distancia'})`}
+                label={`Usar la duración sugerida de ${durationHint.minutes} minutos`}
+                onUse={useDuration}
+              />
+            )}
+          </div>
+          <div>
+            <Input label="Tarifa base (USD)" inputMode="decimal" placeholder="120.00" error={errors.precioBaseUsd?.message} {...register('precioBaseUsd')} />
+            {priceHint && !precio && (
+              <SuggestionChip
+                text={`Sugerido: ${priceHint.amount.toFixed(2)} USD${priceHint.range ? ` (rango ${priceHint.range.min}–${priceHint.range.max})` : ' (según la distancia)'}`}
+                label={`Usar la tarifa sugerida de ${priceHint.amount.toFixed(2)} dólares`}
+                onUse={usePrice}
+              />
+            )}
+          </div>
           <Input label="Capacidad" type="number" inputMode="numeric" min={1} max={400} helperText="De 1 a 400; por defecto 180." error={errors.capacidad?.message} {...register('capacidad')} />
         </div>
         <Actions onClose={onClose} busy={crear.isPending} submitLabel="Crear vuelo" />

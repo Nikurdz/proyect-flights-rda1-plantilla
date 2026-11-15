@@ -14,6 +14,7 @@ import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
+import { SuggestInput } from '../../components/ui/SuggestInput';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
@@ -128,6 +129,10 @@ export const AdminUsersPage: React.FC = () => {
   const cambiar = useCambiarRoles();
 
   const users = data?.items ?? [];
+  const userSuggestions = React.useMemo(
+    () => (data?.items ?? []).map((u) => ({ value: u.correo, hint: `${u.nombres} ${u.apellidos}`.trim() })),
+    [data],
+  );
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const myId = session?.ownerId;
@@ -168,7 +173,7 @@ export const AdminUsersPage: React.FC = () => {
       </div>
 
       <div className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-[1fr_14rem_auto]">
-        <Input label="Buscar" type="search" placeholder="Correo, nombres o apellidos" value={q} onChange={(e) => setQ(e.target.value)} />
+        <SuggestInput label="Buscar" type="search" placeholder="Correo, nombres o apellidos" suggestions={userSuggestions} value={q} onChange={(e) => setQ(e.target.value)} />
         <Select
           label="Rol"
           value={rol}

@@ -16,6 +16,8 @@ import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
+import { SuggestInput } from '../../components/ui/SuggestInput';
+import { uniqueSuggestions } from '../../lib/suggestions';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -340,6 +342,21 @@ const ReservationDetailDialog: React.FC<{ bookingId: string; ownerId?: string; o
   );
 };
 
+/** Nacionalidades frecuentes (ISO 3166-1 alfa-2); el campo sigue aceptando cualquier código de 2 letras. */
+const NATIONALITIES = [
+  { value: 'EC', hint: 'Ecuador' },
+  { value: 'CO', hint: 'Colombia' },
+  { value: 'PE', hint: 'Perú' },
+  { value: 'US', hint: 'Estados Unidos' },
+  { value: 'ES', hint: 'España' },
+  { value: 'AR', hint: 'Argentina' },
+  { value: 'CL', hint: 'Chile' },
+  { value: 'BR', hint: 'Brasil' },
+  { value: 'PA', hint: 'Panamá' },
+  { value: 'MX', hint: 'México' },
+  { value: 'VE', hint: 'Venezuela' },
+];
+
 export const AdminReservationsPage: React.FC = () => {
   const session = useSession();
   const [draft, setDraft] = useState<ReservasSearchForm>(EMPTY_SEARCH);
@@ -351,6 +368,9 @@ export const AdminReservationsPage: React.FC = () => {
   const items = useMemo(() => data?.items ?? [], [data]);
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limite)) : 1;
   const shared = useMemo(() => sharedTravellers(items), [items]);
+  const pnrSuggestions = useMemo(() => items.map((r) => ({ value: r.pnr, hint: r.socio?.partnerOrderId ?? undefined })), [items]);
+  const partnerOrderSuggestions = useMemo(() => uniqueSuggestions(items.map((r) => r.socio?.partnerOrderId)), [items]);
+  const paymentSuggestions = useMemo(() => uniqueSuggestions(items.map((r) => r.paymentReference)), [items]);
   const exportCsv = useExportarReservasCsv();
   const toast = useToast();
 
@@ -380,9 +400,9 @@ export const AdminReservationsPage: React.FC = () => {
       />
       <FilterPanel defaultOpen activeCount={Object.keys(filters).length}>
       <form onSubmit={apply} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Input label="Localizador (PNR)" placeholder="Ej. ABC123" maxLength={6} value={draft.pnr} onChange={(e) => set('pnr', e.target.value)} />
-        <Input label="Orden del socio" placeholder="Número de orden del socio" value={draft.partnerOrderId} onChange={(e) => set('partnerOrderId', e.target.value)} />
-        <Input label="Referencia de pago" placeholder="Referencia del pago" value={draft.paymentReference} onChange={(e) => set('paymentReference', e.target.value)} />
+        <SuggestInput label="Localizador (PNR)" placeholder="Ej. ABC123" maxLength={6} suggestions={pnrSuggestions} value={draft.pnr} onChange={(e) => set('pnr', e.target.value)} />
+        <SuggestInput label="Orden del socio" placeholder="Número de orden del socio" suggestions={partnerOrderSuggestions} value={draft.partnerOrderId} onChange={(e) => set('partnerOrderId', e.target.value)} />
+        <SuggestInput label="Referencia de pago" placeholder="Referencia del pago" suggestions={paymentSuggestions} value={draft.paymentReference} onChange={(e) => set('paymentReference', e.target.value)} />
         <Select label="Canal" value={draft.canal} onChange={(e) => set('canal', e.target.value as ReservasSearchForm['canal'])}>
           <option value="">Todos</option>
           <option value="SOCIO">Socio (Booking)</option>
@@ -393,7 +413,7 @@ export const AdminReservationsPage: React.FC = () => {
           <option value="PASSPORT">Pasaporte</option>
         </Select>
         <Input label="Documento del pasajero" autoComplete="off" value={draft.documento} onChange={(e) => set('documento', e.target.value)} />
-        <Input label="Nacionalidad" maxLength={2} placeholder="Ej. EC" value={draft.nacionalidad} onChange={(e) => set('nacionalidad', e.target.value.toUpperCase())} />
+        <SuggestInput label="Nacionalidad" maxLength={2} placeholder="Ej. EC" suggestions={NATIONALITIES} value={draft.nacionalidad} onChange={(e) => set('nacionalidad', e.target.value.toUpperCase())} />
         <Select label="Estado" value={draft.estado} onChange={(e) => set('estado', e.target.value as ReservasSearchForm['estado'])}>
           <option value="">Todos</option>
           {ESTADOS_RESERVA.map((s) => (

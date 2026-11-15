@@ -13,6 +13,7 @@ import { MoneyText } from '../../components/common/MoneyText';
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { SuggestInput } from '../../components/ui/SuggestInput';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -56,6 +57,9 @@ const IvaAlerta: React.FC<{ item: ConciliacionItem }> = ({ item }) => (
 );
 
 /** ADMIN only: reconciliation of Booking's sales with the invoices Booking issues (read only, not a fiscal document). */
+/** La conciliación solo cubre al socio Booking; los datos cargados no traen el id del socio. */
+const PARTNERS = [{ value: 'booking', hint: 'Booking' }];
+
 export const AdminBookingBillingPage: React.FC = () => {
   const session = useSession();
   const [draft, setDraft] = useState<Form>(initialForm);
@@ -109,7 +113,7 @@ export const AdminBookingBillingPage: React.FC = () => {
       <form onSubmit={apply} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Input label="Desde (hora de Ecuador)" type="date" value={draft.desde} max={draft.hasta || undefined} onChange={(e) => set('desde', e.target.value)} />
         <Input label="Hasta (hora de Ecuador)" type="date" value={draft.hasta} min={draft.desde || undefined} onChange={(e) => set('hasta', e.target.value)} />
-        <Input label="Socio" placeholder="Nombre del socio" helperText="Déjalo vacío para ver todos los socios." maxLength={60} value={draft.partnerId} onChange={(e) => set('partnerId', e.target.value)} />
+        <SuggestInput label="Socio" placeholder="Nombre del socio" suggestions={PARTNERS} helperText="Déjalo vacío para ver todos los socios." maxLength={60} value={draft.partnerId} onChange={(e) => set('partnerId', e.target.value)} />
         <Select label="Estado" value={draft.estado ?? ''} onChange={(e) => set('estado', e.target.value as Form['estado'])}>
           <option value="">Todos</option>
           {ESTADOS_RESERVA.map((s) => (

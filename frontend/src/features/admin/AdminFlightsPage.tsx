@@ -6,6 +6,8 @@ import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
+import { SuggestInput } from '../../components/ui/SuggestInput';
+import { useLocalidades } from '../../api/endpoints/catalog';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
 import { useToast } from '../../lib/toast';
@@ -84,6 +86,12 @@ export const AdminFlightsPage: React.FC = () => {
 
   const { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useAdminVuelos(filters, session?.ownerId);
   const flights = data?.pages.flatMap((page) => page.items) ?? [];
+  const localidades = useLocalidades();
+  const airportSuggestions = React.useMemo(() => (Array.isArray(localidades.data) ? localidades.data : []).map((l) => ({ value: l.iata, label: `${l.iata} · ${l.ciudad}`, hint: l.nombre })), [localidades.data]);
+  const flightCodeSuggestions = React.useMemo(
+    () => [...new Set((data?.pages.flatMap((page) => page.items) ?? []).map((f) => f.codigoVuelo))].map((value) => ({ value })),
+    [data],
+  );
 
   const apply = (event: React.FormEvent) => {
     event.preventDefault();
@@ -108,10 +116,10 @@ export const AdminFlightsPage: React.FC = () => {
         }
       />
       <form onSubmit={apply} className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Input label="Origen" placeholder="Ej. BOG" maxLength={3} value={draft.origen ?? ''} onChange={(e) => setDraft({ ...draft, origen: e.target.value })} />
-        <Input label="Destino" placeholder="Ej. SCL" maxLength={3} value={draft.destino ?? ''} onChange={(e) => setDraft({ ...draft, destino: e.target.value })} />
+        <SuggestInput label="Origen" placeholder="Ej. BOG" maxLength={3} suggestions={airportSuggestions} value={draft.origen ?? ''} onChange={(e) => setDraft({ ...draft, origen: e.target.value })} />
+        <SuggestInput label="Destino" placeholder="Ej. SCL" maxLength={3} suggestions={airportSuggestions} value={draft.destino ?? ''} onChange={(e) => setDraft({ ...draft, destino: e.target.value })} />
         <Input label="Fecha de salida" type="date" value={draft.fecha ?? ''} onChange={(e) => setDraft({ ...draft, fecha: e.target.value })} />
-        <Input label="N.º de vuelo" placeholder="Ej. LA800" maxLength={6} value={draft.vuelo ?? ''} onChange={(e) => setDraft({ ...draft, vuelo: e.target.value })} />
+        <SuggestInput label="N.º de vuelo" placeholder="Ej. LA800" maxLength={6} suggestions={flightCodeSuggestions} value={draft.vuelo ?? ''} onChange={(e) => setDraft({ ...draft, vuelo: e.target.value })} />
         <div className="flex items-end gap-2">
           <Button type="submit" variant="primary" className="flex-1">
             Filtrar

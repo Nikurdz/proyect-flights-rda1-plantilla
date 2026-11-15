@@ -6,6 +6,7 @@ import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
+import { SuggestInput } from '../../components/ui/SuggestInput';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
 import { AdminPageHeader } from './AdminPageHeader';
@@ -31,7 +32,12 @@ export const AdminOrdersPage: React.FC = () => {
   const [selected, setSelected] = useState<AdminOrdenView | null>(null);
 
   const { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useAdminOrdenes(filters, session?.ownerId);
-  const orders = data?.pages.flatMap((page) => page.items) ?? [];
+  const orders = React.useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
+  const orderSuggestions = React.useMemo(() => orders.map((o) => ({ value: o.numeroOrden, hint: o.pnr ?? undefined })), [orders]);
+  const pnrSuggestions = React.useMemo(
+    () => orders.filter((o) => o.pnr).map((o) => ({ value: o.pnr as string, hint: o.numeroOrden })),
+    [orders],
+  );
 
   const apply = (event: React.FormEvent) => {
     event.preventDefault();
@@ -56,8 +62,8 @@ export const AdminOrdersPage: React.FC = () => {
               </option>
             ))}
           </Select>
-          <Input label="N.º de orden" placeholder="Ej. ORD-2026-0001" value={draft.numero ?? ''} onChange={(e) => setDraft({ ...draft, numero: e.target.value })} />
-          <Input label="Código de reserva" placeholder="Ej. ABC123" maxLength={6} value={draft.pnr ?? ''} onChange={(e) => setDraft({ ...draft, pnr: e.target.value })} />
+          <SuggestInput label="N.º de orden" placeholder="Ej. ORD-2026-0001" suggestions={orderSuggestions} value={draft.numero ?? ''} onChange={(e) => setDraft({ ...draft, numero: e.target.value })} />
+          <SuggestInput label="Código de reserva" placeholder="Ej. ABC123" maxLength={6} suggestions={pnrSuggestions} value={draft.pnr ?? ''} onChange={(e) => setDraft({ ...draft, pnr: e.target.value })} />
           <Input label="Desde (hora de Ecuador)" type="date" value={draft.desde ?? ''} onChange={(e) => setDraft({ ...draft, desde: e.target.value })} />
           <Input label="Hasta (hora de Ecuador)" type="date" value={draft.hasta ?? ''} onChange={(e) => setDraft({ ...draft, hasta: e.target.value })} />
           <div className="flex items-end gap-2">
