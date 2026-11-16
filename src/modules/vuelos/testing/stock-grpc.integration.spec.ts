@@ -17,7 +17,7 @@ interface Received {
   apiKeys: string[];
 }
 
-const waitFor = async (condition: () => boolean, ms = 60_000): Promise<void> => {
+const waitFor = async (condition: () => boolean, ms = 120_000): Promise<void> => {
   const start = Date.now();
   while (!condition()) {
     if (Date.now() - start > ms) throw new Error('timed out waiting for the gRPC push');
@@ -76,6 +76,8 @@ describeIntegration('gRPC stock push to Booking (contract v2, section 9)', () =>
     expect(first.available_units).toBeGreaterThan(0);
     expect(new Set(received.apiKeys)).toEqual(new Set(['bk_test_key_0123456789'])); // Booking's key travels as x-api-key
 
+    await stock.flush(); // let the first full round finish: under load it outlasts the test's pace, and a hold taken meanwhile would be folded into it
+
     const tokens = app.get(TokenService);
     const auth = { Authorization: `Bearer ${tokens.sign({ ownerId: 'owner-grpc', kind: 'customer', roles: [] }).accessToken}` };
     const day = new Date(Date.now() + 9 * 86_400_000).toISOString().slice(0, 10);
@@ -90,10 +92,12 @@ describeIntegration('gRPC stock push to Booking (contract v2, section 9)', () =>
       .send({ offerId: offer.offerId, itinerarySelections: offer.itineraries.map((i: { itineraryId: string }) => ({ itineraryId: i.itineraryId, cabinClass: 'ECONOMY', fareBrand: 'LIGHT' })), passengersBreakdown: { adults: 2 } })
       .expect(201);
 
+    await stock.flush();
     await waitFor(() => received.changes.length >= 1);
     expect(received.changes[received.changes.length - 1]).toMatchObject({ delta: -2, correlation });
 
     await request(app.getHttpServer()).delete(`/api/v1/offers/hold/${hold.body.holdId}`).set(auth).expect(204);
+    await stock.flush();
     await waitFor(() => received.changes.length >= 2);
     expect(received.changes[received.changes.length - 1]).toMatchObject({ delta: 2 });
     expect(received.changes[0].item_id).toBe(received.changes[1].item_id);

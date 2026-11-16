@@ -1,6 +1,30 @@
-# Módulo de Vuelos (GDS Flight Core API)
+# src/modules/vuelos — el dominio de Vuelos (núcleo GDS + e-commerce + API v2)
 
-Este microservicio centraliza la lógica de Búsqueda, Ofertas, Retención (Hold), Reservas, Emisión de Tickets, Postventa, Check-in y Estado de Vuelos.
+Este módulo centraliza Búsqueda, Ofertas, Retención (Hold), Reservas, Emisión de Tickets, Postventa, Check-in, Estado de Vuelos y la venta e-commerce. Estado vigente: API en **Azure Container Apps**, base **Aiven**, frontend en **Netlify**; la API v2 (`/api/v2/vuelos`) se integra con Booking; pago, antifraude y correo siguen **simulados** tras puertos.
+
+## Mapa de carpetas
+
+| Carpeta | Qué contiene |
+|---|---|
+| [auth/](auth/README.md) | JWT HS256, guards de sesión y roles |
+| [common/](common/README.md) | Config, dinero, tiempo, eventos, cifrado, errores, asientos |
+| [dto/](dto/README.md) | DTOs del contrato v1 |
+| [entities/](entities/README.md) | Entidades TypeORM del núcleo |
+| [services/](services/README.md) | Servicios del núcleo (búsqueda, hold, reserva, posventa, webhooks) |
+| [v2/](v2/README.md) | Capa del contrato v2 para Booking (OAuth2, stock push, CloudEvents) |
+| [ecommerce/](ecommerce/README.md) | Identidad, ofertas, pagos, órdenes, admin, integración con proveedores |
+| [gateway/](gateway/README.md) | BFF GraphQL en `/graphql` |
+| [esb/](esb/README.md) | Bus interno, orquestador de sagas, transporte RabbitMQ |
+| [migrations/](migrations/README.md) | Migraciones TypeORM (producción) |
+| [seed/](seed/README.md) | Datos iniciales: vuelos, aeropuertos, demo |
+| [testing/](testing/README.md) | Pruebas de integración y de contrato |
+| [docs/](docs/README.md) | Planes, auditorías, modelo de datos, arquitectura |
+
+Raíz del módulo: `vuelos.module.ts` (= núcleo + e-commerce + controlador), `vuelos-core.module.ts` (servicios, config y bus compartidos), `vuelos.controller.ts` (rutas v1 del contrato).
+
+← Volver a [src/README.md](../../README.md)
+
+---
 
 ## Estado de la implementación
 
@@ -70,7 +94,7 @@ La compra **revalida el precio** (si cambió → `409 PRICE_CHANGED` hasta que e
 ```bash
 docker-compose up -d              # o docker compose (ver docker-compose.override.yml si el puerto 5432 ya está en uso)
 npm run start:dev                 # crea el esquema vía TypeORM synchronize (solo fuera de producción)
-npm run seed:vuelos               # vuelos de los próximos 45 días, familias tarifarias, mercados, localidades y plantillas
+npm run seed:vuelos               # vuelos de los próximos 45 días (nacionales de Ecuador, 180), familias tarifarias, mercados, localidades y plantillas
 ```
 
 El seed es idempotente: no duplica ni pisa lo que un administrador editó, y cada ejecución extiende el calendario de vuelos. También deja **vuelos llenos o casi llenos a propósito** para la demo (`DEMO_SCENARIOS` en `seed/flights.seed.ts`, días relativos a hoy: `LA800` BOG→SCL lleno a +3, +10, +17 y +24 días; `LA1500` con 2 asientos a +5 y +12; `LA801`, `LA2402` y `LA1412` en otros días); nunca toca un vuelo que ya tenga una retención o una reserva, y `SEED_DEMO_SCENARIOS=false` lo desactiva. El catálogo los muestra como `agotado` y crear la oferta responde `409 SEAT_TAKEN`. Para crear un administrador defina `ADMIN_EMAIL` y `ADMIN_PASSWORD` (≥ 12 caracteres) al ejecutarlo; no existe ninguna cuenta por defecto. En desarrollo el cuerpo de los correos simulados se imprime en la consola y también se puede leer con `GET /admin/notificaciones?referencia=…`.
@@ -97,7 +121,7 @@ npm run migration:generate:vuelos -- src/modules/vuelos/migrations/NombreDelCamb
 npm run migration:check:vuelos        # falla si las entidades difieren de las migraciones (úsese contra una BD migrada)
 ```
 
-`render.yaml` ejecuta `npm run start:render` (migrar → sembrar → iniciar). `JWT_SECRET` y `DATA_ENCRYPTION_KEY` los genera Render; **no regenere `DATA_ENCRYPTION_KEY`** en una base que ya tenga órdenes o los datos cifrados dejarían de poder leerse.
+Producción corre en **Azure Container Apps** (imagen del `Dockerfile` raíz; `npm run start:container` = migrar → sembrar en segundo plano → API; guía en `deploy/azure/`). Railway y Render ya no se usan. `JWT_SECRET` y `DATA_ENCRYPTION_KEY` se configuran como secretos del despliegue; **no regenere `DATA_ENCRYPTION_KEY`** en una base que ya tenga órdenes o los datos cifrados dejarían de poder leerse.
 
 ## Arquitectura y Límites de Dominio
 
@@ -159,14 +183,12 @@ graph TD
 > El núcleo de vuelos y el e-commerce R1 tienen lógica de negocio real (ver "Estado de la implementación"). Todo el contrato de vuelos está activo (posventa, check-in y webhooks incluidos); la pasarela de pago, el antifraude y el correo son **simulados**.
 
 > [!IMPORTANT]
-> **Recordatorio (Fase RDA1):**
-> Nos encontramos en la fase **RDA1**. En esta etapa **aún no hay integración** entre plataformas. 
-> El archivo OpenAPI sirve actualmente solo como una **guía obligatoria** para que todos sigamos los mismos parámetros y estructuras.
-> 
-> **Objetivo Actual:** Cada equipo debe construir su aplicativo para que funcione de manera independiente y **subir su API correspondiente a Render**. La verdadera integración (la comunicación entre las APIs) se realizará en las siguientes fases (RDA2, etc.), una vez que se haya verificado que todas las aplicaciones individuales funcionan correctamente en la nube.
+> **Fase actual (RDA2):**
+> La API de Vuelos ya corre en la nube (Azure Container Apps) y se integra con Booking por el contrato v2 (`/api/v2/vuelos`, OAuth2, webhooks y stock push). Los catálogos de los demás equipos entran por proveedores registrados (`ecommerce/integracion/`). La integración con pagos, clientes y facturación externos sigue sin existir: están simulados.
 
 ## Documentación técnica
 
 - [Modelo de datos (diagrama ER, 24 tablas, reglas de integridad)](docs/MODELO-DE-DATOS.md)
 - [Arquitectura de servicios y eventos (SOA/EDA), catálogo de eventos y webhooks](docs/ARQUITECTURA-EVENTOS.md)
+- [Índice de la carpeta docs](docs/README.md) · [Planes](docs/planes/README.md) · [Etapa RDA2](docs/RDA2-docs/README.md)
 - [Guía de defensa del Swagger](docs/GUIA-DEFENSA-SWAGGER.md) · [SRS](docs/SRS_Plataforma_Ecommerce_LATAM.md) · [Levantamiento de requerimientos](docs/Levantamiento_Requerimientos_LATAM_Nucleo_Vuelos_1.md)

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { RefreshCw, Send } from 'lucide-react';
 import {
@@ -15,7 +15,8 @@ import {
 import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { Input } from '../../components/ui/Input';
+import { SuggestInput } from '../../components/ui/SuggestInput';
+import { uniqueSuggestions } from '../../lib/suggestions';
 import { Select } from '../../components/ui/Select';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
@@ -158,6 +159,10 @@ export const AdminWebhooksPage: React.FC = () => {
 
   const subs = useAdminWebhookSuscripciones(session?.ownerId);
   const entregas = useAdminWebhookEntregas({ ...filters, suscripcionId: suscripcion?.suscripcionId, pagina }, session?.ownerId);
+  const entregaItems = entregas.data?.items;
+  const subItems = subs.data?.items;
+  const tipoSuggestions = useMemo(() => uniqueSuggestions([...(subItems ?? []).flatMap((s) => s.eventos), ...(entregaItems ?? []).map((e) => e.tipo)]), [subItems, entregaItems]);
+  const ownerSuggestions = useMemo(() => uniqueSuggestions([...(subItems ?? []).map((s) => s.owner), ...(entregaItems ?? []).map((e) => e.owner)]), [subItems, entregaItems]);
   const retry = useReintentarEntrega();
 
   const data = entregas.data;
@@ -242,8 +247,8 @@ export const AdminWebhooksPage: React.FC = () => {
                 </option>
               ))}
             </Select>
-            <Input label="Tipo de evento" placeholder="Parte del nombre del evento" maxLength={40} value={draft.tipo} onChange={(e) => set('tipo', e.target.value)} />
-            <Input label="Dueño" placeholder="Id del socio o de la persona" maxLength={100} value={draft.owner} onChange={(e) => set('owner', e.target.value)} />
+            <SuggestInput label="Tipo de evento" placeholder="Parte del nombre del evento" maxLength={40} suggestions={tipoSuggestions} value={draft.tipo} onChange={(e) => set('tipo', e.target.value)} />
+            <SuggestInput label="Dueño" placeholder="Id del socio o de la persona" maxLength={100} suggestions={ownerSuggestions} value={draft.owner} onChange={(e) => set('owner', e.target.value)} />
             <div className="flex items-end gap-2">
               <Button type="submit" variant="primary" className="flex-1">
                 Filtrar

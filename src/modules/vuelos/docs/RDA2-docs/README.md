@@ -14,3 +14,10 @@ Resultado de aprendizaje: *ecosistema de microservicios con APIs REST, API Gatew
 Artefactos fuera de esta carpeta: `contracts/eventos/` (JSON Schema por evento), `contracts/vuelos-eventos-asyncapi.yaml`, `scripts/check-schema-compat.ts`, `.github/workflows/ci.yml`. El diagrama general es `../arquitectura-completa-vuelos.mermaid`.
 
 Las auditorías anteriores están en `../RDA1-docs/`.
+
+## Más a fondo
+
+- Subcarpetas: [auditorias/](auditorias/README.md) (C01-C14) y [RETO-2-CUADERNO/](auditorias/RETO-2-CUADERNO/README.md) (cuaderno del Reto 2).
+- Otros documentos de la etapa: [CONTENEDORES-POR-MICROSERVICIO.md](CONTENEDORES-POR-MICROSERVICIO.md) · [HEURISTICAS-NIELSEN.md](HEURISTICAS-NIELSEN.md) · [Auditorías RDA1](../RDA1-docs/README.md)
+
+← Volver a [docs/README.md](../README.md)

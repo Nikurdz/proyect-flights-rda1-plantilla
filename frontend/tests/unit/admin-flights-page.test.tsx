@@ -29,6 +29,12 @@ const flight = {
   estado: 'SCHEDULED',
 };
 
+const LOCALIDADES = [
+  { iata: 'UIO', ciudad: 'Quito', nombre: 'Mariscal Sucre', pais: 'EC', paisNombre: 'Ecuador' },
+  { iata: 'GYE', ciudad: 'Guayaquil', nombre: 'José Joaquín de Olmedo', pais: 'EC', paisNombre: 'Ecuador' },
+  { iata: 'BOG', ciudad: 'Bogotá', nombre: 'El Dorado', pais: 'CO', paisNombre: 'Colombia' },
+];
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -54,6 +60,7 @@ describe('AdminFlightsPage', () => {
     mocked.mockImplementation((async (url: string) => {
       if (String(url).includes('/reprogramar')) return { reservasAfectadas: 7 };
       if (String(url).includes('/estado')) return { previousStatus: 'SCHEDULED', affectedBookings: 7 };
+      if (String(url).startsWith('localidades')) return LOCALIDADES;
       return { items: [flight], nextCursor: null };
     }) as never);
   });
@@ -119,5 +126,49 @@ describe('AdminFlightsPage', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar estado' }));
     const toast = await screen.findByText(/El nuevo estado ya es visible para los clientes y socios\./);
     expect(toast.textContent).not.toMatch(/Booking/);
+  });
+  describe('new flight form suggestions', () => {
+    async function openCreate() {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Nuevo vuelo' }));
+      return screen.findByRole('dialog', { name: 'Nuevo vuelo' });
+    }
+
+    it('warns (without blocking) when the airline is new, and when the code prefix belongs to another name', async () => {
+      const dialog = await openCreate();
+      const airline = within(dialog).getByRole('combobox', { name: 'Aerolínea' });
+      fireEvent.change(airline, { target: { value: 'Aerolínea Nueva' } });
+      expect(await within(dialog).findByText('No existe; se creará una nueva.')).toBeTruthy();
+
+      fireEvent.change(within(dialog).getByLabelText('Código de vuelo'), { target: { value: 'LA900' } });
+      expect(await within(dialog).findByText('El código LA ya pertenece a LATAM; se conservará ese nombre.')).toBeTruthy();
+      expect(within(dialog).queryByText('No existe; se creará una nueva.')).toBeNull();
+
+      fireEvent.change(airline, { target: { value: 'LATAM' } });
+      expect(within(dialog).queryByText(/se conservará ese nombre/)).toBeNull();
+    });
+
+    it('offers the airlines already loaded', async () => {
+      const dialog = await openCreate();
+      const airline = within(dialog).getByRole('combobox', { name: 'Aerolínea' });
+      fireEvent.change(airline, { target: { value: 'avi' } });
+      expect(within(dialog).getByRole('option', { name: /Avianca/ })).toBeTruthy();
+    });
+
+    it('shows the suggested duration and price once the route is chosen, and «Usar» fills them without overwriting', async () => {
+      const dialog = await openCreate();
+      fireEvent.change(within(dialog).getByRole('combobox', { name: 'Origen' }), { target: { value: 'UIO' } });
+      fireEvent.change(within(dialog).getByRole('combobox', { name: 'Destino' }), { target: { value: 'GYE' } });
+
+      const duration = within(dialog).getByLabelText('Duración (minutos)') as HTMLInputElement;
+      fireEvent.click(await within(dialog).findByRole('button', { name: /Usar la duración sugerida de 50 minutos/ }));
+      await waitFor(() => expect(duration.value).toBe('50'));
+
+      const price = within(dialog).getByLabelText('Tarifa base (USD)') as HTMLInputElement;
+      expect(await within(dialog).findByText(/Sugerido: 86\.00 USD \(rango 86–86\)/)).toBeTruthy();
+      fireEvent.change(price, { target: { value: '99' } });
+      await waitFor(() => expect(within(dialog).queryByRole('button', { name: /Usar la tarifa sugerida/ })).toBeNull());
+      expect(price.value).toBe('99');
+    });
   });
 });

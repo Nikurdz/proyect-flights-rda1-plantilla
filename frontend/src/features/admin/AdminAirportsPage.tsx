@@ -7,6 +7,7 @@ import { ProblemAlert } from '../../components/common/ProblemAlert';
 import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 import { Input } from '../../components/ui/Input';
+import { SuggestInput } from '../../components/ui/SuggestInput';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow } from '../../components/ui/Table';
@@ -18,6 +19,19 @@ import { newAirportSchema, type NewAirportData, type NewAirportForm } from './ad
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 const PAGE_SIZE = 25;
+
+const TIME_ZONES = [
+  { value: 'America/Guayaquil', hint: 'Ecuador continental' },
+  { value: 'Pacific/Galapagos', hint: 'Galápagos' },
+  { value: 'America/Bogota', hint: 'Colombia' },
+  { value: 'America/Lima', hint: 'Perú' },
+  { value: 'America/Santiago', hint: 'Chile' },
+  { value: 'America/Argentina/Buenos_Aires', hint: 'Argentina' },
+  { value: 'America/Sao_Paulo', hint: 'Brasil' },
+  { value: 'America/Panama', hint: 'Panamá' },
+  { value: 'America/New_York', hint: 'Miami' },
+  { value: 'Europe/Madrid', hint: 'España' },
+];
 
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -80,18 +94,13 @@ const CreateAirportDialog: React.FC<{ onClose: () => void; onCreated: (iata: str
             <Input label="País (código)" autoComplete="off" maxLength={2} helperText="2 letras (ISO)." error={errors.pais?.message} {...register('pais')} />
             <Input label="Nombre del país" autoComplete="off" error={errors.paisNombre?.message} {...register('paisNombre')} />
           </div>
-          <Input
+          <SuggestInput
             label="Zona horaria"
-            autoComplete="off"
-            list="zonas-sugeridas"
+            suggestions={TIME_ZONES}
             helperText="Zona IANA. Ecuador continental: America/Guayaquil; Galápagos: Pacific/Galapagos."
             error={errors.zonaHoraria?.message}
             {...register('zonaHoraria')}
           />
-          <datalist id="zonas-sugeridas">
-            <option value="America/Guayaquil" />
-            <option value="Pacific/Galapagos" />
-          </datalist>
           <div className="flex flex-wrap justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
@@ -156,6 +165,15 @@ export const AdminAirportsPage: React.FC = () => {
 
   const { data, isLoading, isFetching, error, refetch } = useAeropuertos({ q: debouncedQ, pais: paisValido, pagina, limite: PAGE_SIZE }, session?.ownerId);
   const items = data?.items ?? [];
+  const searchSuggestions = React.useMemo(
+    () => (data?.items ?? []).flatMap((a) => [{ value: a.iata, hint: a.ciudad }, { value: a.ciudad }]).filter((s, i, all) => all.findIndex((x) => x.value === s.value) === i),
+    [data],
+  );
+  const countrySuggestions = React.useMemo(() => {
+    const byCode = new Map<string, string>([['EC', 'Ecuador']]);
+    for (const a of data?.items ?? []) byCode.set(a.pais, a.paisNombre);
+    return [...byCode].map(([value, hint]) => ({ value, hint }));
+  }, [data]);
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -163,9 +181,10 @@ export const AdminAirportsPage: React.FC = () => {
     <section aria-label="Aeropuertos">
       <AdminPageHeader page="aeropuertos" description="Códigos disponibles para crear vuelos. Un aeropuerto creado no se puede editar ni borrar." />
       <div className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-line bg-surface p-4 sm:grid-cols-[1fr_12rem_auto]">
-        <Input label="Buscar" type="search" placeholder="Código, ciudad o aeropuerto" value={q} onChange={(e) => setQ(e.target.value)} />
-        <Input
+        <SuggestInput label="Buscar" type="search" placeholder="Código, ciudad o aeropuerto" suggestions={searchSuggestions} value={q} onChange={(e) => setQ(e.target.value)} />
+        <SuggestInput
           label="País"
+          suggestions={countrySuggestions}
           placeholder="Ej. EC"
           maxLength={2}
           autoComplete="off"

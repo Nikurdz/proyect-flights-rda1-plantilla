@@ -11,3 +11,9 @@ Informes de auditoría hechos antes de la etapa RDA2. Son históricos: describen
 | `resume/` | Versiones resumidas de los informes anteriores |
 
 Lo nuevo de la etapa RDA2 está en `../RDA2-docs/`.
+
+## Más a fondo
+
+- [Índice de docs](../README.md) · [Planes](../planes/README.md) · [Etapa RDA2](../RDA2-docs/README.md)
+
+← Volver a [docs/README.md](../README.md)

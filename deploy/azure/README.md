@@ -1,4 +1,19 @@
-# Despliegue en Azure Container Apps (cuenta de estudiante, coste mínimo)
+# deploy/azure/ — despliegue en Azure Container Apps (producción, cuenta de estudiante, coste mínimo)
+
+## Qué hay aquí
+
+| Archivo | Qué hace |
+|---|---|
+| `crear.sh` | Crea o actualiza grupo de recursos, entorno y app (`westus`, `MIN_REPLICAS`, imagen `:latest` por defecto) |
+| `desplegar.sh` | Nueva revisión con la imagen `:<sha>` de GHCR (sha de HEAD o el que pases) |
+| `generar-app.js` | Genera la definición de la app desde `.env.azure` (secretos como `secretRef`) |
+| `.env.azure.example` | Plantilla de variables; copia a `.env.azure` (no se sube) |
+
+## Cómo se conecta
+
+Imagen: `Dockerfile` raíz → `.github/workflows/container.yml` → GHCR. Base: Aiven. Frontend: Netlify. Ver [deploy/README](../README.md) y [workflows](../../.github/workflows/README.md). Auditoría: [C05](../../src/modules/vuelos/docs/RDA2-docs/auditorias/C05-AUDITORIA-2026-11-05-azure-container-apps.md).
+
+## Detalle
 
 El backend corre como contenedor en **Azure Container Apps** (plan de consumo, sin Log Analytics). La base de datos sigue en Aiven y el frontend en Netlify.
 
@@ -6,15 +21,15 @@ El backend corre como contenedor en **Azure Container Apps** (plan de consumo, s
 - **Escala a cero** por defecto (`MIN_REPLICAS=0`): coste casi nulo, pero mientras duerme no se envía stock a Booking ni corren la reconciliación y los webhooks, y la primera llamada espera el arranque (migración + seed + Nest, unos 15–30 s). Cada despertar vuelve a enviar todo el stock. Para tenerla siempre encendida: `MIN_REPLICAS=1 ./crear.sh` (≈ 3–10 USD/mes). **Para una sesión de pruebas con Booking úsalo siempre**: dormida no llegan a Booking ni el stock ni los webhooks (check-in, cancelación, estado del vuelo).
 - La imagen se construye en GitHub Actions (`.github/workflows/container.yml`) y se publica en GitHub Container Registry. El despliegue a Azure lo haces tú con `az`, sin secretos de Azure en GitHub.
 
-- **Arranque:** el contenedor ejecuta `npm run start:container`: migra, lanza el seed **en segundo plano** y arranca la API sin esperarlo (con la base lejos, el seed puede tardar minutos y la sonda de arranque reiniciaría el contenedor). Las líneas del seed (`Flights: … (N s)`, `Demo scenarios: …`) salen en el log después de `Nest application successfully started`. Railway sigue con `start:render`.
-- **Regiones:** la suscripción Azure for Students solo permite `westus`, `chilecentral`, `francecentral`, `spaincentral` y `brazilsouth` (por defecto `westus`, la más cercana a la base de Aiven, que está en Nueva Jersey: aun así cada consulta tarda ~200 ms y una búsqueda ~1,4 s, frente a ~0,2 s en Railway. Aceptado; la solución real sería un PostgreSQL en Azure en la misma región).
+- **Arranque:** el contenedor ejecuta `npm run start:container`: migra, lanza el seed **en segundo plano** y arranca la API sin esperarlo (con la base lejos, el seed puede tardar minutos y la sonda de arranque reiniciaría el contenedor). Las líneas del seed (`Flights: … (N s)`, `Demo scenarios: …`) salen en el log después de `Nest application successfully started`.
+- **Regiones:** la suscripción Azure for Students solo permite `westus`, `chilecentral`, `francecentral`, `spaincentral` y `brazilsouth` (por defecto `westus`, la más cercana a la base de Aiven, que está en Nueva Jersey: aun así cada consulta tarda ~200 ms y una búsqueda ~1,4 s. Aceptado; la solución real sería un PostgreSQL en Azure en la misma región).
 
 ## Una sola vez
 
 1. **Crédito:** portal.azure.com → Cost Management → Credits. Crea una alerta de presupuesto de ~5 USD.
 2. **Azure CLI:** instálalo y ejecuta `az login`. Si tu cuenta limita regiones, prueba otra: `LOCATION=centralus ./crear.sh`.
 3. **Imagen pública:** tras el primer push a `vuelos`, en GitHub → tu perfil/organización → Packages → `proyect-flights-rda1-plantilla` → Package settings → *Change visibility* → **Public** (así Azure la descarga sin credenciales). El nombre debe estar en minúsculas.
-4. **Variables:** `cp .env.azure.example .env.azure` y copia los valores desde Railway. `DATA_ENCRYPTION_KEY` debe ser **idéntica** a la de Railway.
+4. **Variables:** `cp .env.azure.example .env.azure` y rellénalo con los valores de tu `.env`. Nunca regeneres `DATA_ENCRYPTION_KEY` si la base ya tiene órdenes.
 5. **Crear:**
    ```bash
    cd deploy/azure
@@ -24,7 +39,7 @@ El backend corre como contenedor en **Azure Container Apps** (plan de consumo, s
 6. **Aiven:** si restringe por IP, permite las IP salientes que imprimió el script.
 7. **Netlify:** pon `VITE_API_URL=https://<fqdn>/api/v1` y vuelve a desplegar el frontend; añade el origen de Netlify en `CORS_ORIGINS`.
 8. **Booking:** avísales de la URL nueva (`https://<fqdn>/api/v2/vuelos` y `.../api/v2/oauth2/token`) y de que la primera llamada tras un reposo tarda unos segundos.
-9. **Railway:** cuando todo responda, apágalo (dos servidores a la vez envían el mismo stock y duplican jobs).
+9. Railway ya no se usa; no dejes un segundo servidor activo (enviaría el mismo stock y duplicaría jobs).
 
 ## Cada versión nueva
 
@@ -55,3 +70,9 @@ En los logs debe salir `Stock push round: … sent`. Tras ~5 min sin tráfico la
 docker build -t vuelos .
 docker run --env-file .env -p 3000:3000 vuelos
 ```
+
+## Más a fondo
+
+- [CONTENEDORES-POR-MICROSERVICIO](../../src/modules/vuelos/docs/RDA2-docs/CONTENEDORES-POR-MICROSERVICIO.md) · [DESPLIEGUE-NORMALIZACION](../../src/modules/vuelos/docs/DESPLIEGUE-NORMALIZACION.md)
+
+← Volver a [deploy/README](../README.md)
