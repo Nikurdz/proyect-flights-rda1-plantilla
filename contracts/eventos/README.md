@@ -1,4 +1,26 @@
-# Contratos de eventos de dominio
+# contracts/eventos/ — contratos de eventos de dominio
+
+## Qué hay aquí
+| Archivo o subcarpeta | Qué hace |
+|---|---|
+| `<tipo>.v1.schema.json` | Payload de cada evento: `booking.*`, `hold.*`, `flight.*`, `pagos.*`, `paquetes.*`, `proveedor.*` y los del e-commerce (`OrdenEmitida`, `PagoAutorizado`, `OfertaCreada`, `Reserva*`…) |
+| `README.md` | Este archivo: reglas de versionado |
+
+## Cómo se conecta
+- Los carga `src/modules/vuelos/common/event-schemas.ts`; `DomainEventBus` los valida al publicar.
+- Compatibilidad: `scripts/check-schema-compat.ts` (CI, ver `.github/workflows/ci.yml`).
+- Vista AsyncAPI: `../vuelos-eventos-asyncapi.yaml`.
+
+## Cuaderno y auditorías
+- Semana 7 · contratos → [RETO-2-CORTO.md](../../src/modules/vuelos/docs/RDA2-docs/auditorias/RETO-2-CUADERNO/RETO-2-CORTO.md)
+- C01 eventos y contratos → [C01](../../src/modules/vuelos/docs/RDA2-docs/auditorias/C01-AUDITORIA-2026-10-26-eventos-contratos-microservicios.md)
+
+## Más a fondo
+- [Contratos de eventos (doc)](../../src/modules/vuelos/docs/RDA2-docs/CONTRATOS-DE-EVENTOS.md) · [Arquitectura de eventos](../../src/modules/vuelos/docs/ARQUITECTURA-EVENTOS.md)
+
+← Volver a [contracts/README](../README.md)
+
+## Detalle de las reglas
 
 Un JSON Schema por tipo de evento: `<tipo>.v<mayor>.schema.json`. Describe el **payload**; el sobre (`id`, `type`, `schemaVersion`, `occurredAt`, `market`, `correlationId`, `aggregateId`) lo fija `DomainEvent` en `src/modules/vuelos/common/domain-event-bus.ts`. La vista de conjunto (exchange, colas, sobre) está en `../vuelos-eventos-asyncapi.yaml`.
 
